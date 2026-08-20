@@ -1,0 +1,25 @@
+{
+  "id": "animated_menu_pokemon",
+  "name": "Kanto in Motion",
+  "version": "1.0.0",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "content",
+  "games": [
+    "gen1"
+  ],
+  "game_version": ">=0.1.98 <2.0.0",
+  "category": "GRAPHICS",
+  "priority": 105,
+  "dependencies": [],
+  "optional_dependencies": [
+    "gen1_modern_ui"
+  ],
+  "conflicts": [],
+  "permissions": [
+    "engine_internals"
+  ],
+  "affects_link": false,
+  "description": "Animated Pokemon for Gen1Recomp menus, Pokedex, evolutions, and title screens. Players import compatible sprite assets locally; public releases contain no Pokemon-derived art.",
+  "github": "HaseoSora/Kanto-in-Motion"
+}
