@@ -13,6 +13,8 @@ return function(mod)
 
   local optionSchema = {
     { key = "enabled", label = "MENU SPRITES", type = "toggle", default = true },
+    { key = "integratedModernUi", label = "INTEGRATED MODERN UI", type = "toggle", default = true,
+      description = "Use Kanto in Motion's bundled Gen1 Modern UI. Turn OFF when another full UI overhaul owns the interface. Requires a restart." },
     { key = "generation", label = "SPRITE GEN", type = "choice",
       default = "gen5", choices = {
         { "GEN 2", "gen2" }, { "GEN 3", "gen3" },
@@ -25,6 +27,7 @@ return function(mod)
         { "NORMAL", "normal" }, { "SLOW", "slow" }, { "SLOWER", "slower" },
       } },
   }
+  mod._kantoInMotionOptionSchema = optionSchema
   mod.options:define(optionSchema)
 
   local collections = {}
@@ -913,6 +916,52 @@ return function(mod)
     return out
   end
 
+  local function activeExternalUiOverhaul()
+    -- gen3_battle_ui documents complete ownership of the same presentation
+    -- surfaces as the bundled Modern UI.  It is listed as an optional
+    -- dependency so, when installed, it loads before Kanto in Motion and can
+    -- be discovered here through the public mod.find API.
+    if type(mod.find) == "function" then
+      local ok, handle = pcall(mod.find, "gen3_battle_ui")
+      if ok and handle then return "gen3_battle_ui" end
+    end
+    return nil
+  end
+
+  local function installIntegratedModernUi()
+    local externalUi = activeExternalUiOverhaul()
+    if externalUi then
+      mod.log:info("%s detected; bundled Gen1 Modern UI suppressed so the external UI can own presentation", externalUi)
+      return
+    end
+    if mod.options:get("integratedModernUi") == false then
+      mod.log:info("integrated Gen1 Modern UI disabled by Kanto in Motion option; animation/title features remain active")
+      return
+    end
+
+    local source, readErr = mod:read("lib/modern_ui_integrated.lua")
+    if not source then
+      mod.log:error("cannot read integrated Modern UI: %s", tostring(readErr))
+      return
+    end
+    local chunk, compileErr = load(source, "@" .. mod.path .. "/lib/modern_ui_integrated.lua")
+    if not chunk then
+      mod.log:error("cannot compile integrated Modern UI: %s", tostring(compileErr))
+      return
+    end
+    local okModule, setup = pcall(chunk)
+    if not okModule or type(setup) ~= "function" then
+      mod.log:error("cannot load integrated Modern UI: %s", tostring(setup))
+      return
+    end
+    local okInstall, installErr = pcall(setup, mod)
+    if not okInstall then
+      mod.log:error("integrated Modern UI failed to install: %s", tostring(installErr))
+    else
+      mod.log:info("integrated customized Gen1 Modern UI 0.9.12 enabled")
+    end
+  end
+
   mod.hooks:wrap("ui.options.rows", function(next, game, rows)
     local out = next(game, rows)
     if type(out) ~= "table" then return out end
@@ -927,4 +976,6 @@ return function(mod)
     end
     return out
   end)
+
+  installIntegratedModernUi()
 end

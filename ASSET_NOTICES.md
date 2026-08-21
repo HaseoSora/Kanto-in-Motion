@@ -19,3 +19,7 @@ The following local paths are treated as generated/user-supplied state and are e
 Kanto in Motion's source code does not grant rights to third-party or Pokémon artwork that a player chooses to import locally.
 
 Pokémon and related characters, names, and artwork are trademarks and copyrights of their respective owners. Kanto in Motion is an unofficial fan-made mod and is not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc., or The Pokémon Company.
+
+## Integrated Modern UI assets
+
+The `assets/pixel_frame1.png`, `assets/pixel_frame2.png`, and `assets/pixel_frame3.png` files come from the customized Gen1 Modern UI build used by this project. Original project credit: ArmstrongThomas — https://github.com/ArmstrongThomas/gen1-modern-ui. See `THIRD_PARTY_NOTICES.md`.
