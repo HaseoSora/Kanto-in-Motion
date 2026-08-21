@@ -4,7 +4,7 @@
 
 It is the public-release continuation of **Animated Menu Pokémon 0.1.26**. The internal mod ID remains `animated_menu_pokemon` so existing settings and compatible Gen1 Modern UI integrations can continue to identify the mod.
 
-> **Asset-free public release:** this repository intentionally contains no Pokémon-derived sprite atlases or title artwork. Players import compatible animated sprite assets into their own local installation with the included `tools/import_assets.py` utility.
+> **Asset-free public release:** this repository intentionally contains no Pokémon-derived sprite atlases. Players import compatible animated sprite assets into their own local installation with the included `tools/import_assets.py` utility.
 
 ## Features
 
