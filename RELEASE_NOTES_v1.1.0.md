@@ -5,8 +5,6 @@ Kanto in Motion v1.1.0 integrates the project's customized Gen1 Modern UI build 
 ## Integrated Modern UI
 
 - Customized **Gen1 Modern UI 0.9.12 – Central Mod Menu + Title Start** is integrated directly into Kanto in Motion.
-- **INTEGRATED MODERN UI = ON** is the default. Turn it OFF and restart when another full UI overhaul should own presentation.
-- If **Gen 3 Inspired UI Overhaul** (`gen3_battle_ui`) is active, Kanto in Motion automatically yields its bundled Modern UI while keeping Kanto in Motion's animation/title features active.
 - A separate `gen1_modern_ui` install should not be enabled alongside this release.
 - Kanto in Motion's animated sprite provider is shared directly with supported Party, Summary, Pokédex, evolution, and related Modern UI surfaces.
 

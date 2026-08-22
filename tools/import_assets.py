@@ -93,12 +93,18 @@ def import_sprite_sets(root: Path, target: Path, kind: str) -> tuple[int, list[s
     for gen in GENERATIONS:
         if kind == "battle_art":
             meta = root / "data" / f"animated_battle_sprites_{gen}.lua"
+            shiny_meta = root / "data" / f"animated_battle_sprites_{gen}_shiny.lua"
         else:
             meta = root / "data" / f"animated_menu_sprites_{gen}.lua"
+            shiny_meta = root / "data" / f"animated_menu_sprites_{gen}_shiny.lua"
         if copy_file(meta, target / "data" / f"animated_menu_sprites_{gen}.lua"):
             copied += 1
         else:
             notes.append(f"missing metadata: {meta.name}")
+        # Shiny atlases can have different frame grids from their normal
+        # counterparts. Copy dedicated shiny metadata when the source has it.
+        if copy_file(shiny_meta, target / "data" / f"animated_menu_sprites_{gen}_shiny.lua"):
+            copied += 1
 
         src_assets = root / "assets" / "battle" / "front-animated" / gen
         dst_assets = target / "assets" / "battle" / "front-animated" / gen
@@ -130,10 +136,11 @@ def clean_generated(target: Path) -> None:
     shutil.rmtree(target / "assets" / "battle" / "front-animated", ignore_errors=True)
     shutil.rmtree(target / "assets" / "title", ignore_errors=True)
     for gen in GENERATIONS:
-        try:
-            (target / "data" / f"animated_menu_sprites_{gen}.lua").unlink()
-        except FileNotFoundError:
-            pass
+        for suffix in ("", "_shiny"):
+            try:
+                (target / "data" / f"animated_menu_sprites_{gen}{suffix}.lua").unlink()
+            except FileNotFoundError:
+                pass
     try:
         (target / "data" / "title_player_red.lua").unlink()
     except FileNotFoundError:

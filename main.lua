@@ -10,6 +10,12 @@ return function(mod)
     gen4 = "data/animated_menu_sprites_gen4.lua",
     gen5 = "data/animated_menu_sprites_gen5.lua",
   }
+  local SHINY_DATA_FILES = {
+    gen2 = "data/animated_menu_sprites_gen2_shiny.lua",
+    gen3 = "data/animated_menu_sprites_gen3_shiny.lua",
+    gen4 = "data/animated_menu_sprites_gen4_shiny.lua",
+    gen5 = "data/animated_menu_sprites_gen5_shiny.lua",
+  }
 
   local optionSchema = {
     { key = "enabled", label = "MENU SPRITES", type = "toggle", default = true },
@@ -31,6 +37,7 @@ return function(mod)
   mod.options:define(optionSchema)
 
   local collections = {}
+  local shinyCollections = {}
   local imageCache = {}
   local frameCache = {}
   local renderCache = {}
@@ -59,6 +66,9 @@ return function(mod)
   for generation, relative in pairs(DATA_FILES) do
     collections[generation] = loadTable(relative, true)
   end
+  for generation, relative in pairs(SHINY_DATA_FILES) do
+    shinyCollections[generation] = loadTable(relative, true)
+  end
   local titlePlayer = loadTable("data/title_player_red.lua", true)
 
   local function selectedGeneration()
@@ -75,6 +85,16 @@ return function(mod)
     species = normalizedSpecies(species)
     generation = generation or selectedGeneration()
     local collection = collections[generation]
+    local record = species and collection and collection[species]
+    local front = type(record) == "table" and record.front or nil
+    if type(front) ~= "table" or type(front.image) ~= "string" then return nil end
+    return front, generation, species
+  end
+
+  local function localShinyFrontRecord(species, generation)
+    species = normalizedSpecies(species)
+    generation = generation or selectedGeneration()
+    local collection = shinyCollections[generation]
     local record = species and collection and collection[species]
     local front = type(record) == "table" and record.front or nil
     if type(front) ~= "table" or type(front.image) ~= "string" then return nil end
@@ -134,16 +154,37 @@ return function(mod)
     local width = math.max(1, math.floor(tonumber(front.width) or 1))
     local height = math.max(1, math.floor(tonumber(front.height) or 1))
     local columns = math.max(1, math.floor(tonumber(front.columns) or 1))
-    local key = table.concat({ generation, species, tostring(width), tostring(height) }, ":")
+    local frames = math.max(1, math.floor(tonumber(front.frames) or 1))
+    local key = table.concat({ generation, species, tostring(front.image or ""),
+      tostring(width), tostring(height), tostring(columns), tostring(frames) }, ":")
     local hit = renderCache[key]
+    if hit == false then return nil end
     if hit then return hit end
     local atlas = atlasImage(front.image)
     if not atlas or not love.graphics or not love.graphics.newCanvas
         or not love.graphics.newQuad then return nil end
+
+    -- Validate every imported atlas, regardless of selected generation or
+    -- color variant, before creating quads. Gen 2/3/5 alternate-color atlases
+    -- are not guaranteed to share the normal sprite's frame grid. If metadata
+    -- and PNG dimensions disagree, fail closed and let the caller fall back to
+    -- the normal animated sprite (or the stock Gen1 title sprite) instead of
+    -- displaying a quartered/cropped frame.
+    local iw, ih = atlas:getDimensions()
+    local expectedW = columns * width
+    local expectedH = math.ceil(frames / columns) * height
+    if iw ~= expectedW or ih ~= expectedH then
+      renderCache[key] = false
+      if mod.log and type(mod.log.warn) == "function" then
+        mod.log:warn("ignoring incompatible animated atlas %s (%dx%d; expected %dx%d)",
+          tostring(front.image), iw, ih, expectedW, expectedH)
+      end
+      return nil
+    end
+
     local okCanvas, canvas = pcall(love.graphics.newCanvas, width, height)
     if not okCanvas or not canvas then return nil end
     if canvas.setFilter then pcall(canvas.setFilter, canvas, "nearest", "nearest") end
-    local iw, ih = atlas:getDimensions()
     hit = {
       atlas = atlas, canvas = canvas, width = width, height = height,
       columns = columns, imageWidth = iw, imageHeight = ih,
@@ -195,6 +236,62 @@ return function(mod)
     local front, actualGeneration, normalized = localFrontRecord(species, generation)
     if not front then return nil end
     return renderFrame(front, actualGeneration, normalized)
+  end
+
+  -- Title-only alternate-color lookup. Battle Art ships separate shiny
+  -- metadata because a shiny atlas is not guaranteed to use the same frame
+  -- dimensions, columns, or frame count as the normal animation. Prefer that
+  -- metadata whenever it was imported. For older local imports that contain
+  -- only shiny PNGs, use the normal record only when the atlas dimensions
+  -- exactly match the normal record's expected grid; otherwise fall back to
+  -- the normal animated sprite instead of slicing the shiny image incorrectly.
+  local shinyFrontCache = {}
+  local function getTitleShinySprite(species, generation)
+    if not mod.options:get("enabled") then return nil end
+    generation = generation or selectedGeneration()
+
+    local shinyFront, actualGeneration, normalized = localShinyFrontRecord(species, generation)
+    if shinyFront then
+      return renderFrame(shinyFront, actualGeneration, normalized)
+    end
+
+    local front
+    front, actualGeneration, normalized = localFrontRecord(species, generation)
+    if not front or type(front.image) ~= "string" then return nil end
+
+    local cacheKey = table.concat({ actualGeneration, normalized }, ":")
+    local cached = shinyFrontCache[cacheKey]
+    if cached == false then return nil end
+    if not cached then
+      local shinyPath, substitutions = front.image:gsub("/([^/]+)$", "/shiny/%1", 1)
+      if substitutions ~= 1 or shinyPath == front.image then
+        shinyFrontCache[cacheKey] = false
+        return nil
+      end
+      local atlas = atlasImage(shinyPath)
+      if not atlas then
+        shinyFrontCache[cacheKey] = false
+        return nil
+      end
+
+      local width = math.max(1, math.floor(tonumber(front.width) or 1))
+      local height = math.max(1, math.floor(tonumber(front.height) or 1))
+      local columns = math.max(1, math.floor(tonumber(front.columns) or 1))
+      local frames = math.max(1, math.floor(tonumber(front.frames) or 1))
+      local expectedW = columns * width
+      local expectedH = math.ceil(frames / columns) * height
+      local iw, ih = atlas:getDimensions()
+      if iw ~= expectedW or ih ~= expectedH then
+        shinyFrontCache[cacheKey] = false
+        return nil
+      end
+
+      cached = {}
+      for k, v in pairs(front) do cached[k] = v end
+      cached.image = shinyPath
+      shinyFrontCache[cacheKey] = cached
+    end
+    return renderFrame(cached, actualGeneration, normalized)
   end
 
   local function getFrontRecord(species, generation)
@@ -563,11 +660,25 @@ return function(mod)
     end
 
     -- Gen1Recomp's stock Red/Blue title uses a small TitleMons list, which can
-    -- make it feel like the same handful of Pokemon keep repeating. Replace
-    -- that with all 151 Kanto species, but keep the choice RANDOM. To avoid the
-    -- appearance of repetition, exclude the current Pokemon and a rolling set
-    -- of recently shown species whenever possible.
-    local TITLE_RANDOM_HISTORY = 24
+    -- make the same handful of Pokemon appear repeatedly. Use all 151 Kanto
+    -- species in a shuffled bag instead: the order is random, but a species
+    -- cannot repeat until the other 150 have been shown. The last species from
+    -- the previous bag is also excluded from the first slot of the next bag.
+    local function refillTitleShuffleBag(self)
+      local count = #self.cycleSpecies
+      local current = self.cycleIndex
+      local bag = {}
+      for i = 1, count do
+        if i ~= current then bag[#bag + 1] = i end
+      end
+      local random = love.math and love.math.random or math.random
+      for i = #bag, 2, -1 do
+        local j = random(1, i)
+        bag[i], bag[j] = bag[j], bag[i]
+      end
+      self._animatedMenuKantoShuffleBag = bag
+      self._animatedMenuKantoShufflePos = 1
+    end
 
     if type(TitleState.pickNewMon) == "function"
         and not TitleState._animatedMenuPokemonFullKantoPick then
@@ -578,31 +689,17 @@ return function(mod)
         local count = #self.cycleSpecies
         if count < 2 then return end
 
-        local random = love.math and love.math.random or math.random
-        local recent = self._animatedMenuTitleRecentMons
-        if type(recent) ~= "table" then recent = {} end
-
-        local blocked = { [self.cycleIndex] = true }
-        for i = 1, #recent do blocked[recent[i]] = true end
-
-        local candidates = {}
-        for i = 1, count do
-          if not blocked[i] then candidates[#candidates + 1] = i end
+        local bag = self._animatedMenuKantoShuffleBag
+        local pos = tonumber(self._animatedMenuKantoShufflePos) or 1
+        if type(bag) ~= "table" or pos > #bag then
+          refillTitleShuffleBag(self)
+          bag = self._animatedMenuKantoShuffleBag
+          pos = self._animatedMenuKantoShufflePos or 1
         end
+        if not bag or not bag[pos] then return end
 
-        if #candidates == 0 then
-          for i = 1, count do
-            if i ~= self.cycleIndex then candidates[#candidates + 1] = i end
-          end
-        end
-        if #candidates == 0 then return end
-
-        local nextIndex = candidates[random(1, #candidates)]
-        self.cycleIndex = nextIndex
-
-        recent[#recent + 1] = nextIndex
-        while #recent > TITLE_RANDOM_HISTORY do table.remove(recent, 1) end
-        self._animatedMenuTitleRecentMons = recent
+        self.cycleIndex = bag[pos]
+        self._animatedMenuKantoShufflePos = pos + 1
       end
     end
 
@@ -633,12 +730,33 @@ return function(mod)
       end
     end
 
+    local TITLE_ALT_COLOR_ODDS = 151
+
     local function titlePokemon(state)
       if not isLiveTitle(state) or state.scrollPhase == "ball" then return nil end
       local species = state.cycleSpecies and state.cycleSpecies[state.cycleIndex]
-      return species and getSprite(species, {
-        kind = "title", generation = selectedGeneration(),
-      }) or nil
+      if not species then return nil end
+
+      -- Roll exactly once for each newly selected title Pokemon. Keeping the
+      -- result on TitleState prevents the variant from changing between draw
+      -- calls while that Pokemon is on screen.
+      if state._animatedMenuTitleVariantIndex ~= state.cycleIndex
+          or state._animatedMenuTitleVariantSpecies ~= species then
+        local random = love.math and love.math.random or math.random
+        state._animatedMenuTitleVariantIndex = state.cycleIndex
+        state._animatedMenuTitleVariantSpecies = species
+        state._animatedMenuTitleAltColor = (random(1, TITLE_ALT_COLOR_ODDS) == 1)
+      end
+
+      local generation = selectedGeneration()
+      if state._animatedMenuTitleAltColor then
+        local shiny = getTitleShinySprite(species, generation)
+        if shiny then return shiny end
+      end
+
+      -- Normal animated sprite is the first fallback. Returning nil if that is
+      -- unavailable intentionally leaves TitleState's stock Gen1 sprite alone.
+      return getSprite(species, { kind = "title", generation = generation })
     end
 
     -- Suppress only the two stock low-resolution title sprites while TitleState

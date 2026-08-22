@@ -86,23 +86,13 @@ The custom animated Red/title-logo extras activate only when those files have al
 
 ## Integrated Gen1 Modern UI
 
-Kanto in Motion v1.1.0 includes the customized **Gen1 Modern UI 0.9.12 – Central Mod Menu + Title Start** build used by this project. A separate `gen1_modern_ui` install is no longer required and should not be enabled alongside this version. The bundled UI can be disabled with **INTEGRATED MODERN UI = OFF** when another full UI overhaul should own presentation.
+Kanto in Motion v1.1.0 includes the customized **Gen1 Modern UI 0.9.12 – Central Mod Menu + Title Start** build used by this project. A separate `gen1_modern_ui` install is no longer required and should not be enabled alongside this version.
 
 The integrated UI consumes Kanto in Motion's animated sprite provider directly, so the selected Gen 2/3/4/5 animation source is shared across Party, Summary/Status, Pokédex, Pokédex entry, evolution, and other supported Modern UI surfaces. The customized battle Items/Pokémon scope, nickname flow, enlarged level-up-stat card, centralized Mod Menu, and title/start Mod Menu changes are retained.
 
 ### Crimson themes
 
 The integrated theme selector also includes **Crimson** and **Crimson Glass**. Crimson keeps the Gen1 Modern layout but replaces the blue chrome with a saturated crimson pixel border/accent and a blackish-red backdrop. Crimson Glass uses the same palette with translucent backdrop and panel layers so the world can remain visible behind the UI.
-
-### Using another full UI overhaul (Gen 3 Inspired UI)
-
-Kanto in Motion can now keep its animation/title features active while yielding its bundled Modern UI to another full presentation overhaul. The **INTEGRATED MODERN UI** option is **ON** by default. Turn it **OFF** and restart Gen1Recomp when you intentionally want another UI mod to own the interface.
-
-For **Gen 3 Inspired UI Overhaul v2.0.0**, the documented mod ID is `gen3_battle_ui`. Kanto in Motion lists that ID as an **optional dependency** so it loads first when present. If `gen3_battle_ui` is active, Kanto in Motion automatically suppresses only its bundled Gen1 Modern UI layer even if **INTEGRATED MODERN UI** is still set to ON. Kanto in Motion's animated sprite provider, evolution artwork substitution, and title-screen animation features remain enabled.
-
-This avoids two complete UI overhauls trying to hide/redraw the same Party, Summary, Pokédex, Bag, battle, dialogue, Start, and Options surfaces. The manual **INTEGRATED MODERN UI = OFF** switch is also available as a fallback for other UI overhauls that Kanto in Motion does not identify automatically. Changing this setting requires restarting Gen1Recomp because UI hooks are installed during mod startup.
-
-The supplied Gen 3 UI v2.0.0 archive contained its README only, not its Lua source/manifest, so this release can validate the documented load/yield behavior but cannot claim hook-by-hook testing against that mod's implementation.
 
 ### Default battle UI settings
 
@@ -198,3 +188,17 @@ Pokémon artwork that a player chooses to import is **not included in this publi
 ## Trademark / affiliation notice
 
 Pokémon and related names/characters are trademarks and copyrights of their respective owners. Kanto in Motion is an unofficial fan-made Gen1Recomp mod and is not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc., or The Pokémon Company.
+
+### Save screen compatibility
+
+Gen1Recomp 0.2.13 changed the Gen 1 SAVE flow so the Start menu leaves an anonymous `PrintSaveScreenText` panel on the UI stack underneath the confirmation prompt. Kanto in Motion v1.1.1 recognizes that panel and presents it through the integrated Modern UI, preventing the native Start menu, save-info panel, dialogue box, and YES/NO box from being independently stretched or split across widescreen displays. The underlying Gen1Recomp save logic and timing remain unchanged; only presentation is replaced.
+
+### Settings layout
+
+Under the centralized **MOD MENU**, choose **KANTO IN MOTION** to access two separate settings pages:
+
+- **KANTO SETTINGS** — menu sprites, integrated Modern UI toggle, sprite generation, animation, title-screen animation, and title-cycle speed.
+- **MODERN UI SETTINGS** — themes, framing, scale, battle UI scope, 3D-battle behavior, navigation, and other Modern UI presentation options.
+
+This separation keeps Kanto in Motion's animation controls visible while retaining the full integrated Modern UI configuration.
+

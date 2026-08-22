@@ -1,11 +1,12 @@
 # Changelog
 
-## 1.1.0
+## 1.1.1
+- Restored Kanto in Motion's own settings in the centralized Mod Menu. `KANTO IN MOTION` now opens separate `KANTO SETTINGS` and `MODERN UI SETTINGS` entries instead of routing directly into only the Modern UI option categories.
+- Direct Mod Manager access now presents Kanto in Motion controls in a dedicated `KANTO IN MOTION` category, while the Modern UI child page remains focused on Modern UI settings.
+- Fixed the Gen1Recomp 0.2.13 SAVE confirmation layout so the integrated Modern UI recognizes the anonymous save-info panel and keeps the Start menu, save summary, prompt, and YES/NO choice in one coherent widescreen-safe composition.
+- The underlying Gen1Recomp save logic and timing are unchanged; this patch only replaces the broken split presentation.
 
-- Added **INTEGRATED MODERN UI** (default **ON**) so Kanto in Motion's bundled Modern UI can be disabled without disabling animated sprites, evolution art, or title-screen features.
-- Added compatibility yielding for **Gen 3 Inspired UI Overhaul** (`gen3_battle_ui`): when that mod is active, Kanto in Motion automatically suppresses its bundled Modern UI layer.
-- Added `gen3_battle_ui` as an optional dependency to guarantee load order for automatic detection without making it required.
-- Documented that changing the integrated-UI switch requires a restart because UI hooks are installed at startup.
+## 1.1.0
 - Integrated the project's customized **Gen1 Modern UI 0.9.12 – Central Mod Menu + Title Start** build directly into Kanto in Motion.
 - Added **Crimson** and **Crimson Glass** themes to the integrated Modern UI.
 - Set the new-install Modern UI battle defaults to **MODERN BATTLE UI = ON**, **BATTLE UI SCOPE = ITEMS + POKEMON**, and **LEAVE 3D BATTLES ALONE = OFF**.

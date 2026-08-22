@@ -22,7 +22,3 @@ None intentionally. The manifest declares `affects_link: false`.
 
 - Kanto in Motion v1.1.0 presents supported Gen 1 menus and information screens through the project's customized Gen1 Modern UI 0.9.11 layer instead of requiring that UI as a separate mod.
 - The engine continues to own gameplay state, callbacks, input, evolution/capture logic, and battle state; the integrated UI primarily changes presentation and menu organization.
-
-## v1.1.0 external UI compatibility
-
-The integrated Gen1 Modern UI can be disabled independently of Kanto in Motion's animation provider. `gen3_battle_ui` is treated as an optional UI owner: when active, Kanto in Motion yields its bundled Modern UI automatically rather than allowing two full presentation layers to compete.

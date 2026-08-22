@@ -3777,7 +3777,9 @@ return function(mod)
   -- option renderer.  This keeps the stock OPTIONS page free of mod-specific
   -- rows without taking ownership of the underlying setting callbacks.
   local CENTRAL_MOD_CATALOG = {
-    { id = "animated_menu_pokemon", label = "KANTO IN MOTION", schema = true },
+    { id = "animated_menu_pokemon", label = "KANTO IN MOTION",
+      screens = { { label = "KANTO SETTINGS", id = "animated_menu_pokemon:settings" } },
+      modernUi = true },
     { id = "BATTLE_ART_VOXEL_FORK", label = "BATTLE ART",
       screens = { { label = "SETTINGS", id = "BATTLE_ART_VOXEL_FORK:settings" } },
       startExtras = { "CACHE" } },
@@ -3887,9 +3889,16 @@ return function(mod)
     end
     if spec.schema then
       items[#items + 1] = {
-        label = "SETTINGS",
+        label = spec.schemaLabel or "SETTINGS",
         keepOpen = true,
         onSelect = function() runtime.openSchemaModOptions(game, spec.id) end,
+      }
+    end
+    if spec.modernUi then
+      items[#items + 1] = {
+        label = "MODERN UI SETTINGS",
+        keepOpen = true,
+        onSelect = function() runtime.openModernOptions(game) end,
       }
     elseif spec.special == "exp_share" then
       local special = runtime.expShareItems(game)
@@ -4431,6 +4440,8 @@ return function(mod)
   -- top: category rows expand/collapse in place, while the original option
   -- descriptors (and their callbacks) remain untouched underneath.
   local OPTION_CATEGORY_ORDER = {
+    { id = "kanto", label = "KANTO IN MOTION",
+      description = "Animation provider, sprite generation, title presentation, and bundled-UI control." },
     { id = "appearance", label = "APPEARANCE",
       description = "Theme, layout, density, transparency, and presentation detail." },
     { id = "navigation", label = "NAVIGATION",
@@ -4441,6 +4452,8 @@ return function(mod)
       description = "Compatibility and reset controls." },
   }
   local OPTION_CATEGORY_BY_KEY = {
+    enabled = "kanto", integratedModernUi = "kanto", generation = "kanto",
+    animate = "kanto", titleScreen = "kanto", titleCycleSpeed = "kanto",
     theme = "appearance", frameStyle = "appearance", frameAsset = "appearance",
     frameScale = "appearance",
     density = "appearance", layoutStyle = "appearance",
@@ -4501,12 +4514,18 @@ return function(mod)
     end
     for _, row in ipairs(source) do
       local id = row and row.id
+      -- MODERN UI SETTINGS is a dedicated child page inside Kanto in Motion.
+      -- Keep Kanto's animation/title controls on their own authored page there;
+      -- when the full mod-manager option page is opened directly, expose both
+      -- sets through separate categories instead of hiding Kanto's controls.
+      local category = OPTION_CATEGORY_BY_KEY[id] or "advanced"
+      local modernOnly = state._gen1ModernOptions == true
+      local hideKantoHere = modernOnly and category == "kanto"
       -- desktopFloating is a v0.5 migration field. It remains persisted and
       -- resettable, but hiding it from the normal list removes one redundant
       -- row from every install.
-      if id ~= "desktopFloating" and id ~= "startMenuShortcut"
+      if not hideKantoHere and id ~= "desktopFloating" and id ~= "startMenuShortcut"
           and id ~= "startMenuModMenus" then
-        local category = OPTION_CATEGORY_BY_KEY[id] or "advanced"
         groups[category].rows[#groups[category].rows + 1] = row
       end
     end
@@ -4521,7 +4540,8 @@ return function(mod)
     state._gen1OptionRowsSource = source
     state._gen1OptionGroups = groups
     state._gen1OptionExpanded = state._gen1OptionExpanded or {
-      appearance = true, navigation = false, presenters = false, advanced = false,
+      kanto = true, appearance = true, navigation = false,
+      presenters = false, advanced = false,
     }
     local function rebuild(preferred)
       local flattened = {}
@@ -4867,6 +4887,31 @@ return function(mod)
       and type(state.row) == "number" and type(state.col) == "number"
   end
 
+  -- Gen1Recomp 0.2.13's SAVE command inserts a small anonymous
+  -- PrintSaveScreenText state between StartMenu and its confirmation TextBox.
+  -- It intentionally has no screenId/class because the cartridge prints that
+  -- panel directly. Treat that exact stack shape as a modeled Modern UI layer
+  -- so the native 160x144 Start menu, save panel, and YES/NO prompt are not
+  -- independently scaled across a widescreen window.
+  runtime.isSavePanelState = function(state, game)
+    if type(state) ~= "table" or state.screenId ~= nil
+        or type(state.delay) ~= "number"
+        or type(state.update) ~= "function"
+        or type(state.draw) ~= "function"
+        or type(state.openPrompt) ~= "function" then
+      return false
+    end
+    local states = game and game.stack and game.stack.states
+    if type(states) ~= "table" then return false end
+    for index = 2, #states do
+      if states[index] == state then
+        local below = states[index - 1]
+        return type(below) == "table" and below.screenId == "StartMenu"
+      end
+    end
+    return false
+  end
+
   runtime.kindFor = function(state, game)
     if not state then return nil end
     if state._gen1UiGallery then return "ui_gallery" end
@@ -4881,6 +4926,7 @@ return function(mod)
     end
     local id = state.screenId
     local class = classOf(state)
+    if runtime.isSavePanelState(state, game) then return "save_panel" end
     -- RBY MMO's profile and leaderboard are plain local classes rather than
     -- engine widgets. Their stable screen ids and public payloads are the
     -- compatibility seam; do not rely on the mod's private class identity.
@@ -4989,6 +5035,10 @@ return function(mod)
     if kind == "link" then return runtime.option("menuUi", true) ~= false end
     if kind == "text" or kind == "choice" or kind == "quantity" then
       return runtime.option("dialogueUi", true) ~= false
+    end
+    if kind == "save_panel" then
+      return runtime.option("menuUi", true) ~= false
+        and runtime.option("dialogueUi", true) ~= false
     end
     if kind == "mod_manager" or kind == "mod_options" then
       return runtime.option("managerUi", true) ~= false
@@ -5654,6 +5704,9 @@ return function(mod)
     if kind == "custom_surface"
         and mod._gen1ModernCompatibility.activeSurfaces[state] then return true end
     if kind == "link" and runtime.isLinkState(state) then return true end
+    if kind == "save_panel" and runtime.isSavePanelState(state, currentGame) then
+      return true
+    end
     if kind == "mod_options" and runtime.isOptionRowsScreen(state) then return true end
     if kind == "bag"
         and mod._gen1ModernCompatibility:isUsefulBagState(state) then
@@ -16305,11 +16358,93 @@ return function(mod)
     return true
   end
 
+  runtime.drawSavePanel = function(game, state, viewport, theme)
+    local save = game and game.save or {}
+    local player = save.player or {}
+    local inventory = save.inventory or {}
+    local badgeDefs = game and game.data and game.data.constants
+      and game.data.constants.badges
+    if type(badgeDefs) ~= "table" or #badgeDefs == 0 then
+      badgeDefs = {
+        { id = "BOULDERBADGE" }, { id = "CASCADEBADGE" },
+        { id = "THUNDERBADGE" }, { id = "RAINBOWBADGE" },
+        { id = "SOULBADGE" }, { id = "MARSHBADGE" },
+        { id = "VOLCANOBADGE" }, { id = "EARTHBADGE" },
+      }
+    end
+    local badges = 0
+    for _, entry in ipairs(badgeDefs) do
+      local item = type(entry) == "table" and (entry.item or entry.id) or nil
+      if item and inventory[item] then badges = badges + 1 end
+    end
+    local owned = 0
+    for _ in pairs(save.pokedex and save.pokedex.owned or {}) do
+      owned = owned + 1
+    end
+    local totalSeconds = math.floor(tonumber(save.playTime) or 0)
+    local timeText = ("%d:%02d"):format(math.floor(totalSeconds / 3600),
+      math.floor(totalSeconds / 60) % 60)
+
+    local x, y, w, h = presenterRect(viewport)
+    local spacing = theme.spacing
+    local titleFont = font(fontCache, theme.typography.title)
+    local bodyFont = font(fontCache, theme.typography.body)
+    local rowH = math.max(runtime.minimumRowHeight(theme),
+      textHeight(bodyFont) + spacing.md)
+    local headerH = textHeight(titleFont) + spacing.md + spacing.sm
+    local panelW = math.min(math.max(300, w * 0.40), 520)
+    local panelH = headerH + rowH * 4 + spacing.lg
+    local panelX = x + spacing.lg
+    local panelY = y + spacing.lg
+    if w < h * 1.15 then
+      panelW = math.min(w - spacing.lg * 2, panelW)
+      panelX = x + (w - panelW) * 0.5
+    end
+    panelY = clamp(panelY, y + spacing.md, y + h - panelH - spacing.md)
+
+    love.graphics.push("all")
+    love.graphics.origin()
+    runtime.drawPanelFrame(theme, panelX, panelY, panelW, panelH,
+      theme.radii.md)
+    local layout = { x = panelX, y = panelY, w = panelW, h = panelH,
+      header = headerH, radius = theme.radii.md }
+    runtime.drawHeader(theme, layout, Strings("SAVE GAME"))
+
+    local rows = {
+      { Strings("PLAYER"), safeText(player.name or "RED") },
+      { Strings("BADGES"), tostring(badges) },
+      { Strings("POKéDEX"), tostring(owned) },
+      { Strings("TIME"), timeText },
+    }
+    love.graphics.setFont(bodyFont)
+    for index, row in ipairs(rows) do
+      local ry = panelY + headerH + (index - 1) * rowH
+      if index % 2 == 1 then
+        setColor(theme.colors.surfaceRaised or theme.colors.surface)
+        love.graphics.rectangle("fill", panelX + spacing.sm, ry,
+          panelW - spacing.sm * 2, rowH, theme.radii.sm)
+      end
+      setColor(theme.colors.textMuted)
+      drawFittedText(row[1], panelX + spacing.lg,
+        ry + (rowH - textHeight(bodyFont)) * 0.5,
+        panelW * 0.48 - spacing.lg, bodyFont)
+      local valueW = bodyFont:getWidth(row[2])
+      setColor(theme.colors.text)
+      drawText(row[2], panelX + panelW - spacing.lg - valueW,
+        ry + (rowH - textHeight(bodyFont)) * 0.5)
+    end
+    love.graphics.pop()
+  end
+
   runtime.drawModern = function(game, state, kind, viewport, theme, asModal, underKind,
       underState, overKind, overState)
     if not runtime.presenterEnabled(kind, state) then return end
     if kind == "ui_gallery" then
       runtime.drawUiGallery(game, state, viewport, theme)
+      return
+    end
+    if kind == "save_panel" then
+      runtime.drawSavePanel(game, state, viewport, theme)
       return
     end
     if kind == "text" or kind == "choice" or kind == "quantity"
