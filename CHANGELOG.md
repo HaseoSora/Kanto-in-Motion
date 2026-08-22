@@ -1,10 +1,21 @@
 # Changelog
 
+## 1.1.2
+
+- Added independent resolved-sprite animation bridging for compatible third-party UI overhauls so Party/Summary and Pokédex front art can remain animated with Integrated Modern UI disabled.
+- Added a portrait-provider integration path for Colosseum Inspired UI Overhaul compatibility builds.
+- Added automatic Colosseum UI detection/yielding and documented that Integrated Modern UI should be disabled when using third-party full UI overhauls.
+- Fixed Modern UI dialogue progression retaining and recomposing an already-consumed native TextBox line after manual CONT/page advances.
+
 ## 1.1.1
+
+- Fixed the central Mod Menu `TYPED MOVE COLORS -> SETTINGS` entry so builds that use manifest option schemas open correctly instead of doing nothing. Authored Typed Move Colors settings screens are still preferred when present.
 - Restored Kanto in Motion's own settings in the centralized Mod Menu. `KANTO IN MOTION` now opens separate `KANTO SETTINGS` and `MODERN UI SETTINGS` entries instead of routing directly into only the Modern UI option categories.
 - Direct Mod Manager access now presents Kanto in Motion controls in a dedicated `KANTO IN MOTION` category, while the Modern UI child page remains focused on Modern UI settings.
 - Fixed the Gen1Recomp 0.2.13 SAVE confirmation layout so the integrated Modern UI recognizes the anonymous save-info panel and keeps the Start menu, save summary, prompt, and YES/NO choice in one coherent widescreen-safe composition.
 - The underlying Gen1Recomp save logic and timing are unchanged; this patch only replaces the broken split presentation.
+- Reworked title-screen species selection into a shuffled 151-Pokémon rotation so every Kanto species is shown before the pool repeats.
+- Improved Gen 2 / Gen 3 / Gen 4 / Gen 5 animation metadata and atlas-layout validation so incompatible frame layouts fall back safely instead of being sliced incorrectly.
 
 ## 1.1.0
 - Integrated the project's customized **Gen1 Modern UI 0.9.12 – Central Mod Menu + Title Start** build directly into Kanto in Motion.

@@ -88,6 +88,8 @@ The custom animated Red/title-logo extras activate only when those files have al
 
 Kanto in Motion v1.1.0 includes the customized **Gen1 Modern UI 0.9.12 – Central Mod Menu + Title Start** build used by this project. A separate `gen1_modern_ui` install is no longer required and should not be enabled alongside this version.
 
+> **Using a third-party UI overhaul?** Set **INTEGRATED MODERN UI = OFF** in **KANTO SETTINGS** and restart the game before using another full interface replacement. Kanto in Motion's animation provider and title-screen features remain active with the integrated UI disabled. Recognized overhauls such as **Colosseum Inspired UI Overhaul** and the Gen 3 UI overhaul are also detected automatically so Kanto in Motion can yield UI ownership. Compatible third-party screens that use Gen1Recomp's resolved Pokémon sprite pipeline can still receive Kanto in Motion's animated Party/Summary and Pokédex art.
+
 The integrated UI consumes Kanto in Motion's animated sprite provider directly, so the selected Gen 2/3/4/5 animation source is shared across Party, Summary/Status, Pokédex, Pokédex entry, evolution, and other supported Modern UI surfaces. The customized battle Items/Pokémon scope, nickname flow, enlarged level-up-stat card, centralized Mod Menu, and title/start Mod Menu changes are retained.
 
 ### Crimson themes

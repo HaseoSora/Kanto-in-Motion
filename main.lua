@@ -188,7 +188,7 @@ return function(mod)
     hit = {
       atlas = atlas, canvas = canvas, width = width, height = height,
       columns = columns, imageWidth = iw, imageHeight = ih,
-      quads = {}, lastFrame = 0,
+      quads = {}, stableFrames = {}, lastFrame = 0,
     }
     renderCache[key] = hit
     return hit
@@ -208,10 +208,12 @@ return function(mod)
     return quad
   end
 
-  local function renderFrame(front, generation, species)
+  local function renderFrame(front, generation, species, forcedFrame)
     local entry = cacheEntry(front, generation, species)
     if not entry then return nil end
-    local frame = currentFrame(front)
+    local frame = tonumber(forcedFrame) or currentFrame(front)
+    local frameCount = math.max(1, math.floor(tonumber(front.frames) or 1))
+    frame = math.max(1, math.min(math.floor(frame), frameCount))
     if entry.lastFrame == frame then return entry.canvas end
     local quad = quadFor(entry, frame)
     if not quad then return nil end
@@ -228,6 +230,39 @@ return function(mod)
     love.graphics.pop()
     entry.lastFrame = frame
     return entry.canvas
+  end
+
+  -- Render a frame into a frame-specific Canvas. Unlike renderFrame(), this
+  -- object never changes after creation. Third-party UI overhauls commonly
+  -- cache resolved images and/or preprocess alpha bounds by image identity; a
+  -- stable object per animation frame lets those caches coexist with animation
+  -- instead of freezing on the first frame or reusing stale prepared pixels.
+  local function renderStableFrame(front, generation, species, forcedFrame)
+    local entry = cacheEntry(front, generation, species)
+    if not entry then return nil end
+    local frame = tonumber(forcedFrame) or currentFrame(front)
+    local frameCount = math.max(1, math.floor(tonumber(front.frames) or 1))
+    frame = math.max(1, math.min(math.floor(frame), frameCount))
+    local cached = entry.stableFrames and entry.stableFrames[frame]
+    if cached then return cached end
+    local quad = quadFor(entry, frame)
+    if not quad then return nil end
+    local okCanvas, canvas = pcall(love.graphics.newCanvas, entry.width, entry.height)
+    if not okCanvas or not canvas then return nil end
+    if canvas.setFilter then pcall(canvas.setFilter, canvas, "nearest", "nearest") end
+    local previousCanvas = love.graphics.getCanvas and love.graphics.getCanvas() or nil
+    love.graphics.push("all")
+    love.graphics.setCanvas(canvas)
+    love.graphics.origin()
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setShader()
+    love.graphics.draw(entry.atlas, quad, 0, 0)
+    if previousCanvas then love.graphics.setCanvas(previousCanvas) else love.graphics.setCanvas() end
+    love.graphics.pop()
+    entry.stableFrames = entry.stableFrames or {}
+    entry.stableFrames[frame] = canvas
+    return canvas
   end
 
   local function getSprite(species, opts)
@@ -321,6 +356,161 @@ return function(mod)
     getSprite = getSprite,
     getFrontRecord = getFrontRecord,
   }
+
+  -- Standard resolved-sprite bridge for stock and third-party UI overhauls.
+  -- Some complete UI replacements do not consume mod.exports directly; they
+  -- correctly ask Gen1Recomp's pokemon.sprite seam for the selected front art
+  -- and then load that path through src.render.Assets. Return a private virtual
+  -- frame path for non-battle presentation surfaces and teach Assets how to
+  -- resolve that path to Kanto in Motion's live frame Canvas. This keeps the
+  -- animation provider independent from the bundled Modern UI without taking
+  -- ownership of battle sprites, camera, or attack presentation.
+  local FRAME_BRIDGE_PREFIX = "__kanto_in_motion_frame__/"
+  local FRAME_BRIDGE_KINDS = {
+    summary = true, status = true, party = true, pc = true,
+    dex = true, pokedex = true, evolution = true, starter = true,
+    hof = true, trade = true, flow = true, photo = true,
+    unown = true, contest = true,
+  }
+
+  local function bridgeFront(species, generation, mon)
+    generation = generation or selectedGeneration()
+    if mon and mon.shiny then
+      local shiny, actualGeneration, normalized = localShinyFrontRecord(species, generation)
+      if shiny then return shiny, actualGeneration, normalized, true end
+    end
+    local front, actualGeneration, normalized = localFrontRecord(species, generation)
+    if front then return front, actualGeneration, normalized, false end
+    return nil
+  end
+
+  local function bridgePath(species, generation, mon)
+    local front, actualGeneration, normalized, shiny = bridgeFront(species, generation, mon)
+    if not front then return nil end
+    local frame = currentFrame(front)
+    return FRAME_BRIDGE_PREFIX .. actualGeneration .. "/"
+      .. (shiny and "shiny" or "normal") .. "/" .. normalized .. "/"
+      .. tostring(frame) .. ".png"
+  end
+
+  local function decodeBridgePath(path)
+    if type(path) ~= "string" or path:sub(1, #FRAME_BRIDGE_PREFIX) ~= FRAME_BRIDGE_PREFIX then
+      return nil
+    end
+    local tail = path:sub(#FRAME_BRIDGE_PREFIX + 1)
+    local generation, variant, species, frame = tail:match("^(gen[2-5])/([a-z]+)/([A-Z0-9_]+)/(%d+)%.png$")
+    if not generation or (variant ~= "normal" and variant ~= "shiny") then return nil end
+    local front
+    if variant == "shiny" then
+      front = localShinyFrontRecord(species, generation)
+    else
+      front = localFrontRecord(species, generation)
+    end
+    if not front then return nil end
+    return front, generation, species, tonumber(frame)
+  end
+
+  local okAssets, Assets = pcall(require, "src.render.Assets")
+  if okAssets and type(Assets) == "table" then
+    -- Keep one engine-level wrapper across dev hot reloads; only the resolver
+    -- closure is refreshed so stale Kanto in Motion state cannot accumulate.
+    if not Assets.__kantoInMotionFrameBridge then
+      Assets.__kantoInMotionFrameBridge = {
+        image = Assets.image, imageData = Assets.imageData, exists = Assets.exists,
+      }
+      Assets.image = function(path)
+        local resolver = Assets.__kantoInMotionFrameResolver
+        if resolver then
+          local image = resolver(path, false)
+          if image then return image end
+        end
+        return Assets.__kantoInMotionFrameBridge.image(path)
+      end
+      Assets.imageData = function(path)
+        local resolver = Assets.__kantoInMotionFrameResolver
+        if resolver then
+          local image = resolver(path, true)
+          if image then return image end
+        end
+        return Assets.__kantoInMotionFrameBridge.imageData(path)
+      end
+      Assets.exists = function(path)
+        local resolver = Assets.__kantoInMotionFrameResolver
+        if resolver and resolver(path, "exists") then return true end
+        return Assets.__kantoInMotionFrameBridge.exists(path)
+      end
+    end
+
+    Assets.__kantoInMotionFrameResolver = function(path, mode)
+      local front, generation, species, frame = decodeBridgePath(path)
+      if not front then return nil end
+      if mode == "exists" then return true end
+      local image = renderStableFrame(front, generation, species, frame)
+      if not image then return nil end
+      if mode == true then
+        if type(image.newImageData) == "function" then
+          local ok, data = pcall(image.newImageData, image)
+          if ok then return data end
+        end
+        return nil
+      end
+      return image
+    end
+  end
+
+  if mod.hooks and type(mod.hooks.wrap) == "function" then
+    mod.hooks:wrap("pokemon.sprite", function(next, path, ctx)
+      local resolved = next(path, ctx)
+      if mod.options:get("enabled") == false or type(ctx) ~= "table"
+          or ctx.side ~= "front" or not FRAME_BRIDGE_KINDS[tostring(ctx.kind or ""):lower()] then
+        return resolved
+      end
+      local virtual = bridgePath(ctx.species, selectedGeneration(), ctx.mon)
+      if not virtual then return resolved end
+      ctx.trueColor = true
+      return virtual
+    end, 650)
+  end
+
+
+  -- Colosseum Inspired UI can expose a small portrait-provider contract.
+  -- Prefer that contract when present because Colosseum deliberately owns its
+  -- final portrait composition and may resolve Battle Art before the engine
+  -- pokemon.sprite seam. Older/unpatched Colosseum builds still benefit from
+  -- the standard bridge above whenever they use the normal resolved-sprite
+  -- pipeline.
+  local function installColosseumAnimationAdapter()
+    local handle = mod.find and mod.find("colosseum_ui_overhaul") or nil
+    local contract = handle and type(handle.exports) == "table"
+      and handle.exports.portraitProvider or nil
+    if not (type(contract) == "table"
+        and tonumber(contract.apiVersion or 0) >= 1
+        and type(contract.setProvider) == "function") then
+      return false
+    end
+
+    local function provider(_, mon, kind)
+      if mod.options:get("enabled") == false or type(mon) ~= "table" or not mon.species then
+        return nil
+      end
+      kind = tostring(kind or ""):lower()
+      if not FRAME_BRIDGE_KINDS[kind] then return nil end
+      local front, generation, species = bridgeFront(mon.species, selectedGeneration(), mon)
+      if not front then return nil end
+      local image = renderStableFrame(front, generation, species, currentFrame(front))
+      if not image then return nil end
+      return image, { trueColor = true, kantoInMotion = true }
+    end
+
+    local ok, accepted = pcall(contract.setProvider, provider)
+    if not ok or accepted == false then return false end
+    if mod.log and type(mod.log.info) == "function" then
+      mod.log:info("Colosseum UI animated portrait provider connected")
+    end
+    return true
+  end
+
+  pcall(installColosseumAnimationAdapter)
 
 
   -- Vanilla Gen1Recomp Summary and Pokedex entry pages cache their image once
@@ -1035,13 +1225,15 @@ return function(mod)
   end
 
   local function activeExternalUiOverhaul()
-    -- gen3_battle_ui documents complete ownership of the same presentation
-    -- surfaces as the bundled Modern UI.  It is listed as an optional
-    -- dependency so, when installed, it loads before Kanto in Motion and can
-    -- be discovered here through the public mod.find API.
+    -- Full third-party UI overhauls own the same presentation surfaces as the
+    -- bundled Modern UI. They are optional dependencies so recognized builds
+    -- load first and Kanto in Motion can yield presentation while keeping its
+    -- independent animation provider active.
     if type(mod.find) == "function" then
-      local ok, handle = pcall(mod.find, "gen3_battle_ui")
-      if ok and handle then return "gen3_battle_ui" end
+      for _, id in ipairs({ "gen3_battle_ui", "colosseum_ui_overhaul" }) do
+        local ok, handle = pcall(mod.find, id)
+        if ok and handle then return id end
+      end
     end
     return nil
   end

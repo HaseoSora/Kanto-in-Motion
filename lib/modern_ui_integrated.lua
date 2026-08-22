@@ -3475,6 +3475,37 @@ return function(mod)
   local choiceClass = mod.ui and mod.ui.ChoiceBox
   local quantityClass = mod.ui and mod.ui.QuantityBox
   local textBoxClass = mod.ui and mod.ui.TextBox
+
+  -- The native TextBox intentionally keeps the previous row in `shown` while
+  -- a CONT/manual scroll advances the incoming line. A large modern dialogue
+  -- card does not perform that Game Boy row-scroll animation, so remembering
+  -- the consumed boundary prevents the already-read row (or part of it) from
+  -- being recomposed into the next card. Native input, paging and callbacks
+  -- remain authoritative; this wrapper only records before/after indices.
+  if textBoxClass and type(textBoxClass.update) == "function"
+      and not textBoxClass.__gen1ModernDialogueProgressUpdate then
+    local originalDialogueUpdate = textBoxClass.update
+    textBoxClass.__gen1ModernDialogueProgressUpdate = originalDialogueUpdate
+    textBoxClass.update = function(self, dt, ...)
+      local beforePage = tonumber(self.pageIndex) or 1
+      local beforeLine = tonumber(self.lineIndex) or 1
+      local beforeWaiting = self.waiting and true or false
+      local result = originalDialogueUpdate(self, dt, ...)
+      local afterPage = tonumber(self.pageIndex) or beforePage
+      local afterLine = tonumber(self.lineIndex) or beforeLine
+      if beforeWaiting and not self.waiting
+          and (afterPage ~= beforePage or afterLine ~= beforeLine) then
+        self.__gen1ModernPresentationPage = afterPage
+        self.__gen1ModernPresentationStartLine = math.max(1, afterLine)
+      elseif self.__gen1ModernPresentationPage
+          and tonumber(self.__gen1ModernPresentationPage) ~= afterPage then
+        self.__gen1ModernPresentationPage = afterPage
+        self.__gen1ModernPresentationStartLine = 1
+      end
+      return result
+    end
+  end
+
   runtime.optionalClass = function(path)
     local ok, class = pcall(require, path)
     return ok and class or false
@@ -3792,7 +3823,7 @@ return function(mod)
     { id = "kanto_rework_battle_anims", label = "KANTO REWORK",
       screens = { { label = "SETTINGS", id = "kanto_rework_battle_anims:settings" } } },
     { id = "typed_move_colors", label = "TYPED MOVE COLORS",
-      screens = { { label = "SETTINGS", id = "typed_move_colors:settings" } } },
+      screens = { { label = "SETTINGS", id = "typed_move_colors:settings", schemaFallback = true } } },
     { id = "quality_of_life", label = "QUALITY OF LIFE",
       screens = { { label = "SETTINGS", id = "QualityOfLife" } } },
     { id = "exp_share", label = "EXP SHARE", special = "exp_share" },
@@ -3884,7 +3915,18 @@ return function(mod)
       items[#items + 1] = {
         label = screen.label or "SETTINGS",
         keepOpen = true,
-        onSelect = function() runtime.openScreenSafe(game, screen.id) end,
+        onSelect = function()
+          -- Prefer a source mod's authored screen when it is actually
+          -- registered.  Some Typed Move Colors builds expose their controls
+          -- only through manifest option_schema instead; older central-menu
+          -- code swallowed the unknown-screen error with pcall(), leaving the
+          -- SETTINGS row looking dead.  Fall back to ManagerState's schema
+          -- renderer so either style remains usable.
+          local opened = runtime.openScreenSafe(game, screen.id)
+          if not opened and screen.schemaFallback then
+            runtime.openSchemaModOptions(game, spec.id)
+          end
+        end,
       }
     end
     if spec.schema then
@@ -7889,8 +7931,12 @@ return function(mod)
         end
       end
     end
-    local first = expandPage and 1
-      or math.max(1, current - shownCount + 1)
+    local presentationStart = 1
+    if tonumber(state.__gen1ModernPresentationPage) == tonumber(state.pageIndex or 1) then
+      presentationStart = math.max(1, tonumber(state.__gen1ModernPresentationStartLine) or 1)
+    end
+    local first = expandPage and presentationStart
+      or math.max(presentationStart, current - shownCount + 1)
     local lines = {}
     for index = first, current do
       local line = safeText(page[index])
@@ -7919,8 +7965,12 @@ return function(mod)
         end
       end
     end
-    local first = expandPage and 1
-      or math.max(1, current - shownCount + 1)
+    local presentationStart = 1
+    if tonumber(state.__gen1ModernPresentationPage) == tonumber(state.pageIndex or 1) then
+      presentationStart = math.max(1, tonumber(state.__gen1ModernPresentationStartLine) or 1)
+    end
+    local first = expandPage and presentationStart
+      or math.max(presentationStart, current - shownCount + 1)
     local last = expandPage and #page or current
     local lines = {}
     for index = first, last do

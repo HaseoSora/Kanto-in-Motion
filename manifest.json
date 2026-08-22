@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -13,7 +13,8 @@
   "priority": 105,
   "dependencies": [],
   "optional_dependencies": [
-    "gen3_battle_ui"
+    "gen3_battle_ui",
+    "colosseum_ui_overhaul"
   ],
   "conflicts": [
     "gen1_modern_ui",
