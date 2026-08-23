@@ -2,6 +2,10 @@
 
 Kanto in Motion v1.1.3 expands the integrated Modern UI with a redesigned Trainer Card, fixes remaining background/overlay issues, and adds first-party presentation compatibility for the official Useful Bag mod.
 
+## Title screen
+
+- Each newly selected title-screen Pokémon now has a **30% chance** to use its shiny artwork when compatible shiny assets are installed.
+
 ## Trainer Card update
 
 - The player portrait in the upper-right now uses the new 64×64 player artwork.

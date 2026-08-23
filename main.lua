@@ -920,7 +920,7 @@ return function(mod)
       end
     end
 
-    local TITLE_ALT_COLOR_ODDS = 151
+    local TITLE_ALT_COLOR_PERCENT = 30
 
     local function titlePokemon(state)
       if not isLiveTitle(state) or state.scrollPhase == "ball" then return nil end
@@ -935,7 +935,7 @@ return function(mod)
         local random = love.math and love.math.random or math.random
         state._animatedMenuTitleVariantIndex = state.cycleIndex
         state._animatedMenuTitleVariantSpecies = species
-        state._animatedMenuTitleAltColor = (random(1, TITLE_ALT_COLOR_ODDS) == 1)
+        state._animatedMenuTitleAltColor = (random(1, 100) <= TITLE_ALT_COLOR_PERCENT)
       end
 
       local generation = selectedGeneration()

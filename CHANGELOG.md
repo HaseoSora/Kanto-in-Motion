@@ -2,6 +2,8 @@
 
 ## 1.1.3
 
+- Set the title-screen shiny appearance chance to 30% per newly selected Pokémon so shiny title artwork is visible often enough during short title-screen visits.
+
 - Added the new Trainer Card presentation: custom player portrait, Gym Leader art for unearned badge slots, and looping animated earned-badge icons.
 - Added the revised Giovanni silhouette used for the hidden eighth Gym Leader slot so it remains readable with the Crimson theme while preserving the secret-leader presentation.
 - Added explicit credit to **xpixelpriorx** for the animated badge artwork.

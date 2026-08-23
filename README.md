@@ -18,6 +18,7 @@ It is the public-release continuation of **Animated Menu Pokémon 0.1.26**. The 
 - Title-screen pool expanded to **all 151 Kanto Pokémon**.
 - Random title selection avoids the **24 most recently displayed species** whenever possible.
 - Adjustable title cycle speed: **NORMAL**, **SLOW**, or **SLOWER**.
+- Each newly selected title-screen Pokémon has a **30% chance** to use its shiny artwork when compatible shiny assets are available.
 - Optional locally imported animated **Red trainer** title presentation: forward → reverse → 5-second pause → repeat.
 - Optional locally imported custom **Gen1Recomp++** title logo while retaining the stock **Red Version** subtitle.
 - Balanced title rendering designed to retain pixel-art detail on high-resolution displays.
