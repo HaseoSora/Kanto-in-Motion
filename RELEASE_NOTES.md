@@ -1,3 +1,28 @@
+# Kanto in Motion v1.1.3
+
+Kanto in Motion v1.1.3 expands the integrated Modern UI with a redesigned Trainer Card, fixes remaining background/overlay issues, and adds first-party presentation compatibility for the official Useful Bag mod.
+
+## Trainer Card update
+
+- The player portrait in the upper-right now uses the new 64×64 player artwork.
+- Unearned badge slots show the matching Gym Leader in Kanto order: Brock, Misty, Lt. Surge, Erika, Koga, Sabrina, Blaine, and the hidden Giovanni silhouette.
+- Earned slots replace the Gym Leader with a looping animated badge: Boulder, Cascade, Thunder, Rainbow, Soul, Marsh, Volcano, and Earth.
+- Animated Trainer Card badges continue animating independently of the normal Pokémon sprite-animation setting.
+- Animated badge artwork is credited to **xpixelpriorx**: https://www.deviantart.com/xpixelpriorx
+
+## Modern UI fixes
+
+- Fixed the SAVE summary card so it always has a complete background instead of exposing the world through the panel body.
+- Added opaque transition backdrops for the title CONTINUE summary and Battle Art precache/cache-loading screens where native UI could otherwise show through.
+
+## Useful Bag compatibility
+
+- The official/unmodified Useful Bag can now be used directly with Kanto in Motion.
+- When Kanto in Motion's Modern UI Bag presenter is active, Useful Bag's duplicate standalone fullscreen renderer yields automatically.
+- Useful Bag still owns its pockets, sorting, capacity, item-use/toss callbacks, and input behavior. Only duplicate visual presentation is suppressed.
+
+All v1.1.2 features remain included.
+
 # Kanto in Motion v1.1.2
 
 Kanto in Motion v1.1.2 improves compatibility with third-party UI overhauls and fixes dialogue presentation in the integrated Modern UI.
@@ -9,27 +34,16 @@ Kanto in Motion v1.1.2 improves compatibility with third-party UI overhauls and 
 - Fixed the integrated Modern UI occasionally repeating part of the previous NPC dialogue line after advancing text.
 - Added README guidance recommending **INTEGRATED MODERN UI = OFF** when using third-party UI overhauls.
 
-Kanto in Motion v1.1.1
+# Kanto in Motion v1.1.1
 
-Kanto in Motion v1.1.1 is a focused compatibility patch for the integrated Modern UI introduced in v1.1.0.
+Kanto in Motion v1.1.1 fixes several UI and title-screen issues found after the v1.1.0 Modern UI integration.
 
-SAVE screen fix
+## Changes
 
-Fixed the Gen1Recomp 0.2.13 SAVE confirmation flow reverting to the classic Gen 1 UI and splitting its menu, save summary, dialogue, and YES/NO windows across widescreen displays.
-
-The integrated Modern UI now recognizes Gen1Recomp's anonymous PrintSaveScreenText panel and presents the SAVE flow as one coherent Modern UI composition.
-
-START → SAVE → confirmation → YES/NO → saving/saved messages now remain visually consistent with the integrated Modern UI.
-
-The actual save logic, save data, confirmation behavior, and timing are unchanged; this patch only fixes presentation.
-
-Settings navigation fix
-
-Restored Kanto in Motion's animation/title settings in the centralized Mod Menu.
-
-KANTO IN MOTION now provides separate KANTO SETTINGS and MODERN UI SETTINGS entries.
-
-Opening MODERN UI SETTINGS no longer makes Kanto in Motion's own controls appear to be missing.
+- Fixed the SAVE presentation on Gen1Recomp 0.2.13.
+- Restored separate Kanto in Motion and Modern UI settings pages.
+- Improved title-screen Pokémon randomization so all 151 Kanto species cycle in randomized order before repeats.
+- Improved Gen 2-5 animated-sprite metadata/layout safety to prevent incorrectly sliced sprites.
 
 All v1.1.0 features remain included.
 

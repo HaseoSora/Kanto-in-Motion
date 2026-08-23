@@ -80,6 +80,7 @@ local RESPONSIVE_KIND_PRESET = {
   gen3_box = "XL", naming = "XL", town_map = "XL",
   dex_radar = "XL", rby_mmo_profile = "XL", rby_mmo_rank = "XL",
   rby_mmo_char_pick = "XL", quarantine_report = "M",
+  title_continue = "M", voxel_precache = "M", voxel_cache_load = "M",
 }
 
 -- Built-in themes are intentionally data-only. They are merged once during
@@ -2491,6 +2492,14 @@ return function(mod)
       return tostring(state.offset)
     elseif kind == "choice" then
       return tostring(state.pending)
+    elseif kind == "title_continue" then
+      return tostring(state.save)
+    elseif kind == "voxel_precache" then
+      return table.concat({ safeText(state.phase), tostring(state.index),
+        tostring(state.built), tostring(state.skipped), tostring(state.failed) }, ":")
+    elseif kind == "voxel_cache_load" then
+      return table.concat({ tostring(state.index), tostring(state.loaded),
+        tostring(state.failed) }, ":")
     elseif kind == "bag" then
       local bag = type(state.modernBag) == "table" and state.modernBag or nil
       local pocket = bag and (bag.pocket or bag.tab or bag.index)
@@ -2693,6 +2702,7 @@ return function(mod)
     local existing = animatedImages[image]
     if existing and existing.frames == frames and existing.axis == axis and
         existing.duration == duration and
+        existing.alwaysAnimate == (options.alwaysAnimate == true) and
         existing.staticFrame == (options.staticFrame ~= nil and
           clamp(math.floor(tonumber(options.staticFrame) or 0), 0, frames - 1) or nil) then
       return image
@@ -2720,6 +2730,10 @@ return function(mod)
       -- so modern rows do not scale the entire sheet into a one-pixel strip.
       staticFrame = options.staticFrame ~= nil and
         clamp(math.floor(tonumber(options.staticFrame) or 0), 0, frames - 1) or nil,
+      -- Some UI-only art (for example Trainer Card badges) is authored as
+      -- animation in its own right and should not inherit the Pokémon sprite
+      -- animation preference.
+      alwaysAnimate = options.alwaysAnimate == true,
     }
     return image
   end
@@ -2744,7 +2758,7 @@ return function(mod)
         local now = love.timer and love.timer.getTime and love.timer.getTime() or 0
         local frame = animation.staticFrame
         if frame == nil then
-          frame = spriteAnimationOn
+          frame = (animation.alwaysAnimate or spriteAnimationOn)
             and math.floor(now / animation.duration) % animation.frames or 0
         end
         love.graphics.draw(image, animation.quads[frame + 1], x, y,
@@ -3458,6 +3472,24 @@ return function(mod)
     if runtime.worldVisibleLayout(backdropViewport) then return false end
     local x, y, w, h = fullViewportRect(backdropViewport)
     setBackdrop(theme)
+    love.graphics.rectangle("fill", x, y, w, h)
+    return true
+  end
+
+  -- Title CONTINUE and Battle Art precache/cache-loading screens are
+  -- standalone transitions, not floating overlays over a useful game scene.
+  -- Always give them a fully opaque theme-colored backdrop so the source
+  -- Gen 1 menu/progress UI cannot show through behind the modern card.
+  -- Glass themes keep their hue here but intentionally become opaque for
+  -- these transition screens; readability is more important than world
+  -- visibility while the game is loading or waiting for Continue input.
+  runtime.drawStandaloneBackdrop = function(theme, viewport)
+    local backdropViewport = pointerDrawContext
+      and pointerDrawContext.baseViewport or viewport
+    local x, y, w, h = fullViewportRect(backdropViewport)
+    local color = theme and theme.colors and theme.colors.backdrop
+      or DEFAULT_THEME.colors.backdrop
+    setColor({ color[1] or 0, color[2] or 0, color[3] or 0, 1 })
     love.graphics.rectangle("fill", x, y, w, h)
     return true
   end
@@ -4929,6 +4961,55 @@ return function(mod)
       and type(state.row) == "number" and type(state.col) == "number"
   end
 
+  -- TitleState's CONTINUE information card is a private local class in the
+  -- engine, so there is no public screenId to match.  Its stable data shape is
+  -- nevertheless specific: a TitleState owner, a loaded save snapshot, and
+  -- the published titleUiBox used by the title palette path.  Recognizing the
+  -- data instead of importing the private class keeps this compatible across
+  -- engine updates while letting Modern UI replace the last classic title
+  -- menu panel (PLAYER / BADGES / POKEDEX / TIME).
+  runtime.isTitleContinueInfo = function(state, game)
+    if type(state) ~= "table" or state.screenId ~= nil
+        or type(state.title) ~= "table" or type(state.save) ~= "table"
+        or type(state.titleUiBox) ~= "table"
+        or type(state.update) ~= "function" or type(state.draw) ~= "function" then
+      return false
+    end
+    if not runtime.isTitleState(state.title) then return false end
+    local save = state.save
+    return type(save.player) == "table" and type(save.pokedex) == "table"
+      and state.game == (game or state.title.game)
+  end
+
+  -- Battle Art's persistent voxel utilities intentionally expose ordinary
+  -- state tables rather than a Modern UI contract.  Detect only their stable
+  -- public/runtime data shapes so Kanto in Motion can skin the utility without
+  -- importing Battle Art internals or creating a hard dependency.
+  runtime.isVoxelPrecacheState = function(state)
+    if type(state) ~= "table" or state.screenId ~= nil
+        or type(state.titleUiBox) ~= "table"
+        or type(state.phase) ~= "string" or type(state.jobs) ~= "table"
+        or type(state.stats) ~= "table"
+        or type(state.update) ~= "function" or type(state.draw) ~= "function" then
+      return false
+    end
+    return state.maps ~= nil and state.full ~= nil and state.body ~= nil
+      and state.index ~= nil and state.built ~= nil and state.skipped ~= nil
+      and state.failed ~= nil
+  end
+
+  runtime.isVoxelCacheLoadState = function(state)
+    if type(state) ~= "table" or state.screenId ~= nil
+        or type(state.titleUiBox) ~= "table" or state.phase ~= nil
+        or type(state.names) ~= "table" or type(state.total) ~= "number"
+        or type(state.index) ~= "number" or type(state.loaded) ~= "number"
+        or type(state.failed) ~= "number"
+        or type(state.update) ~= "function" or type(state.draw) ~= "function" then
+      return false
+    end
+    return state.onReady == nil or type(state.onReady) == "function"
+  end
+
   -- Gen1Recomp 0.2.13's SAVE command inserts a small anonymous
   -- PrintSaveScreenText state between StartMenu and its confirmation TextBox.
   -- It intentionally has no screenId/class because the cartridge prints that
@@ -4968,6 +5049,9 @@ return function(mod)
     end
     local id = state.screenId
     local class = classOf(state)
+    if runtime.isTitleContinueInfo(state, game) then return "title_continue" end
+    if runtime.isVoxelPrecacheState(state) then return "voxel_precache" end
+    if runtime.isVoxelCacheLoadState(state) then return "voxel_cache_load" end
     if runtime.isSavePanelState(state, game) then return "save_panel" end
     -- RBY MMO's profile and leaderboard are plain local classes rather than
     -- engine widgets. Their stable screen ids and public payloads are the
@@ -5081,6 +5165,10 @@ return function(mod)
     if kind == "save_panel" then
       return runtime.option("menuUi", true) ~= false
         and runtime.option("dialogueUi", true) ~= false
+    end
+    if kind == "title_continue" or kind == "voxel_precache"
+        or kind == "voxel_cache_load" then
+      return runtime.option("menuUi", true) ~= false
     end
     if kind == "mod_manager" or kind == "mod_options" then
       return runtime.option("managerUi", true) ~= false
@@ -5749,6 +5837,12 @@ return function(mod)
     if kind == "save_panel" and runtime.isSavePanelState(state, currentGame) then
       return true
     end
+    if kind == "title_continue"
+        and runtime.isTitleContinueInfo(state, currentGame) then return true end
+    if kind == "voxel_precache"
+        and runtime.isVoxelPrecacheState(state) then return true end
+    if kind == "voxel_cache_load"
+        and runtime.isVoxelCacheLoadState(state) then return true end
     if kind == "mod_options" and runtime.isOptionRowsScreen(state) then return true end
     if kind == "bag"
         and mod._gen1ModernCompatibility:isUsefulBagState(state) then
@@ -9165,7 +9259,11 @@ return function(mod)
     setColor(colors.surfaceRaised)
     love.graphics.rectangle("fill", portraitX, portraitY, portraitSize, portraitSize,
       theme.radii.sm)
-    local portrait = runtime.prepareImage(state.pic)
+    -- Kanto in Motion Trainer Card test: use the supplied 64x64 player
+    -- portrait in the top-right profile slot, with the native card portrait
+    -- retained as a fallback if the local asset is unavailable.
+    local portrait = runtime.modAssetImage("assets/trainer_card/leaders/player.png")
+      or runtime.prepareImage(state.pic)
     if portrait then
       runtime.drawImageFit(portrait, portraitX + spacing.sm, portraitY + spacing.sm,
         portraitSize - spacing.sm * 2, portraitSize - spacing.sm * 2)
@@ -9233,6 +9331,30 @@ return function(mod)
     local cellW = (panelW - spacing.lg * 2 - gap * (cols - 1)) / cols
     local cellH = math.max(1, (gridH - gap * (gridRows - 1)) / gridRows)
 
+    -- The eight slots deliberately pair each unearned Gym Leader portrait
+    -- with the animated badge that replaces it after that badge is obtained.
+    -- Order: Brock, Misty, Lt. Surge, Erika / Koga, Sabrina, Blaine, Giovanni.
+    local trainerCardLeaderAssets = {
+      "assets/trainer_card/leaders/01_brock.png",
+      "assets/trainer_card/leaders/02_misty.png",
+      "assets/trainer_card/leaders/03_lt_surge.png",
+      "assets/trainer_card/leaders/04_erika.png",
+      "assets/trainer_card/leaders/05_koga.png",
+      "assets/trainer_card/leaders/06_sabrina.png",
+      "assets/trainer_card/leaders/07_blaine.png",
+      "assets/trainer_card/leaders/08_giovanni.png",
+    }
+    local trainerCardBadgeAssets = {
+      { path = "assets/trainer_card/badges/01_bolder.png", frames = 27 },
+      { path = "assets/trainer_card/badges/02_cascade.png", frames = 25 },
+      { path = "assets/trainer_card/badges/03_thunder.png", frames = 28 },
+      { path = "assets/trainer_card/badges/04_rainbow.png", frames = 28 },
+      { path = "assets/trainer_card/badges/05_soul.png", frames = 26 },
+      { path = "assets/trainer_card/badges/06_marsh.png", frames = 29 },
+      { path = "assets/trainer_card/badges/07_volcano.png", frames = 30 },
+      { path = "assets/trainer_card/badges/08_earth.png", frames = 19 },
+    }
+
     for index, badge in ipairs(badges) do
       local col, row = (index - 1) % cols, math.floor((index - 1) / cols)
       local cx = px + spacing.lg + col * (cellW + gap)
@@ -9244,7 +9366,23 @@ return function(mod)
       love.graphics.rectangle("line", cx + 0.5, cy + 0.5,
         cellW - 1, cellH - 1, theme.radii.sm)
 
-      local icon = runtime.imageFor(badge.icon or badge.image)
+      local customArt
+      if owned then
+        local spec = trainerCardBadgeAssets[index]
+        if spec then
+          customArt = runtime.modAssetImage(spec.path)
+          if customArt then
+            customArt = runtime.markAnimated(customArt, {
+              animated = true, frames = spec.frames, axis = "vertical",
+              duration = 0.10, alwaysAnimate = true,
+            })
+          end
+        end
+      else
+        customArt = runtime.modAssetImage(trainerCardLeaderAssets[index])
+      end
+
+      local icon = customArt or runtime.imageFor(badge.icon or badge.image)
       local artSize = math.max(20, math.min(cellH - spacing.sm * 2, cellW * 0.34))
       if icon then
         runtime.drawImageFit(icon, cx + spacing.sm, cy + (cellH - artSize) / 2,
@@ -16454,8 +16592,16 @@ return function(mod)
 
     love.graphics.push("all")
     love.graphics.origin()
-    runtime.drawPanelFrame(theme, panelX, panelY, panelW, panelH,
+    -- SAVE is a compact replacement for a cartridge-drawn panel. Some frame
+    -- styles are ornament-only, so explicitly own the card surface instead of
+    -- depending on the frame renderer to provide its background.
+    local saveSurface = theme.colors.surface or { 0, 0, 0, 1 }
+    setColor({ saveSurface[1] or 0, saveSurface[2] or 0,
+      saveSurface[3] or 0, 1 })
+    love.graphics.rectangle("fill", panelX, panelY, panelW, panelH,
       theme.radii.md)
+    runtime.drawPanelFrame(theme, panelX, panelY, panelW, panelH,
+      theme.radii.md, false)
     local layout = { x = panelX, y = panelY, w = panelW, h = panelH,
       header = headerH, radius = theme.radii.md }
     runtime.drawHeader(theme, layout, Strings("SAVE GAME"))
@@ -16486,6 +16632,252 @@ return function(mod)
     love.graphics.pop()
   end
 
+  runtime.modernSizeText = function(bytes)
+    bytes = tonumber(bytes) or 0
+    if bytes >= 1024 * 1024 * 1024 then
+      return ("%.2f GiB"):format(bytes / (1024 * 1024 * 1024))
+    end
+    return ("%.1f MiB"):format(bytes / (1024 * 1024))
+  end
+
+  runtime.saveSummary = function(game, save)
+    save = save or {}
+    local player = save.player or {}
+    local badges = 0
+    local ok, value = pcall(function()
+      return require("src.inventory.Badges").count(game and game.data, save)
+    end)
+    if ok and tonumber(value) then badges = tonumber(value) else
+      local inventory = save.inventory or {}
+      local badgeDefs = game and game.data and game.data.constants
+        and game.data.constants.badges or {}
+      for _, entry in ipairs(type(badgeDefs) == "table" and badgeDefs or {}) do
+        local item = type(entry) == "table" and (entry.item or entry.id) or nil
+        if item and inventory[item] then badges = badges + 1 end
+      end
+    end
+    local owned = 0
+    for _ in pairs(save.pokedex and save.pokedex.owned or {}) do owned = owned + 1 end
+    local totalSeconds = math.floor(tonumber(save.playTime) or 0)
+    return {
+      player = safeText(player.name or "RED"), badges = badges, owned = owned,
+      time = ("%d:%02d"):format(math.floor(totalSeconds / 3600),
+        math.floor(totalSeconds / 60) % 60),
+    }
+  end
+
+  runtime.drawTitleContinue = function(game, state, viewport, theme)
+    local summary = runtime.saveSummary(game, state and state.save)
+    local x, y, w, h = presenterRect(viewport)
+    local spacing = theme.spacing
+    local titleFont = font(fontCache, theme.typography.title)
+    local bodyFont = font(fontCache, theme.typography.body)
+    local captionFont = font(fontCache, theme.typography.caption)
+    local headerH = runtime.titleHeaderHeight(theme, titleFont)
+    local rowH = math.max(runtime.minimumRowHeight(theme),
+      textHeight(bodyFont) + spacing.md)
+    local footerH = textHeight(captionFont) + spacing.md * 2
+    local panelW = math.min(math.max(360, w * 0.52), 620)
+    local panelH = headerH + rowH * 4 + footerH + spacing.sm
+    panelW = math.min(panelW, w - spacing.lg * 2)
+    panelH = math.min(panelH, h - spacing.lg * 2)
+    local px = x + (w - panelW) * 0.5
+    local py = y + (h - panelH) * 0.5
+
+    love.graphics.push("all")
+    love.graphics.origin()
+    runtime.drawStandaloneBackdrop(theme, viewport)
+    runtime.drawPanelFrame(theme, px, py, panelW, panelH, theme.radii.lg)
+    local layout = { x = px, y = py, w = panelW, h = panelH,
+      header = headerH, footer = footerH, radius = theme.radii.lg }
+    runtime.drawHeader(theme, layout, Strings("CONTINUE"))
+    local rows = {
+      { Strings("PLAYER"), summary.player },
+      { Strings("BADGES"), tostring(summary.badges) },
+      { Strings("POKéDEX"), tostring(summary.owned) },
+      { Strings("TIME"), summary.time },
+    }
+    love.graphics.setFont(bodyFont)
+    for index, row in ipairs(rows) do
+      local ry = py + headerH + (index - 1) * rowH
+      if index % 2 == 1 then
+        setColor(theme.colors.surfaceRaised or theme.colors.surface)
+        love.graphics.rectangle("fill", px + spacing.sm, ry,
+          panelW - spacing.sm * 2, rowH, theme.radii.sm)
+      end
+      setColor(theme.colors.textMuted)
+      drawFittedText(row[1], px + spacing.lg,
+        ry + (rowH - textHeight(bodyFont)) * 0.5,
+        panelW * 0.50 - spacing.lg, bodyFont)
+      local valueW = bodyFont:getWidth(row[2])
+      setColor(theme.colors.text)
+      drawText(row[2], px + panelW - spacing.lg - valueW,
+        ry + (rowH - textHeight(bodyFont)) * 0.5)
+    end
+    love.graphics.setFont(captionFont)
+    setColor(theme.colors.textMuted)
+    runtime.drawHintIfUseful(theme, Strings("A  continue    B  back"),
+      px + spacing.lg, py + panelH - footerH + spacing.sm,
+      panelW - spacing.lg * 2)
+    love.graphics.pop()
+  end
+
+  runtime.drawVoxelProgress = function(game, state, viewport, theme, loadingOnly)
+    local x, y, w, h = presenterRect(viewport)
+    local spacing = theme.spacing
+    local titleFont = font(fontCache, theme.typography.title)
+    local bodyFont = font(fontCache, theme.typography.body)
+    local captionFont = font(fontCache, theme.typography.caption)
+    local headerH = runtime.titleHeaderHeight(theme, titleFont)
+    local panelW = math.min(math.max(420, w * 0.66), 760)
+    local panelH = math.min(math.max(330, h * 0.62), 540)
+    panelW = math.min(panelW, w - spacing.lg * 2)
+    panelH = math.min(panelH, h - spacing.lg * 2)
+    local px = x + (w - panelW) * 0.5
+    local py = y + (h - panelH) * 0.5
+    local contentX = px + spacing.lg
+    local contentW = panelW - spacing.lg * 2
+
+    love.graphics.push("all")
+    love.graphics.origin()
+    runtime.drawStandaloneBackdrop(theme, viewport)
+    runtime.drawPanelFrame(theme, px, py, panelW, panelH, theme.radii.lg)
+    local layout = { x = px, y = py, w = panelW, h = panelH,
+      header = headerH, radius = theme.radii.lg }
+    runtime.drawHeader(theme, layout,
+      Strings(loadingOnly and "LOADING VOXELS" or "GENERATE PRECACHE"))
+
+    local cy = py + headerH + spacing.lg
+    love.graphics.setFont(bodyFont)
+    if loadingOnly then
+      local count = math.max(0, #(state.names or {}))
+      local done = clamp((tonumber(state.index) or 1) - 1, 0, count)
+      local progress = count > 0 and done / count or 1
+      setColor(theme.colors.text)
+      drawFittedText(("FILE %d / %d"):format(done, count), contentX, cy,
+        contentW, bodyFont)
+      cy = cy + textHeight(bodyFont) + spacing.lg
+      local barH = math.max(10, spacing.sm)
+      setColor(theme.colors.surfaceRaised or theme.colors.surface)
+      love.graphics.rectangle("fill", contentX, cy, contentW, barH,
+        theme.radii.sm)
+      setColor(theme.colors.accent or theme.colors.selection)
+      love.graphics.rectangle("fill", contentX, cy, contentW * progress, barH,
+        theme.radii.sm)
+      cy = cy + barH + spacing.lg
+      local rows = {
+        { "RAM", runtime.modernSizeText(state.loaded) },
+        { "TOTAL", runtime.modernSizeText(state.total) },
+        { "DISK FALLBACK", tostring(state.failed or 0) },
+      }
+      for _, row in ipairs(rows) do
+        setColor(theme.colors.textMuted); drawText(row[1], contentX, cy)
+        local vw = bodyFont:getWidth(row[2]); setColor(theme.colors.text)
+        drawText(row[2], contentX + contentW - vw, cy)
+        cy = cy + textHeight(bodyFont) + spacing.md
+      end
+      love.graphics.setFont(captionFont)
+      setColor(theme.colors.textMuted)
+      runtime.drawHintIfUseful(theme, Strings("PLEASE WAIT"), contentX,
+        py + panelH - textHeight(captionFont) - spacing.lg, contentW)
+      love.graphics.pop()
+      return
+    end
+
+    local phase = safeText(state.phase)
+    if phase == "confirm" then
+      local rows = {
+        { "MAPS", tostring(state.maps or 0) },
+        { "FULL MAPS", tostring(state.full or 0) },
+        { "CONNECTED BODY", tostring(state.body or 0) },
+        { "CURRENT CACHE", runtime.modernSizeText(state.stats and state.stats.bytes) },
+      }
+      for _, row in ipairs(rows) do
+        setColor(theme.colors.textMuted); drawText(row[1], contentX, cy)
+        local vw = bodyFont:getWidth(row[2]); setColor(theme.colors.text)
+        drawText(row[2], contentX + contentW - vw, cy)
+        cy = cy + textHeight(bodyFont) + spacing.md
+      end
+      cy = cy + spacing.sm
+      setColor(theme.colors.text)
+      drawFittedText("Terrain, water, grass, flowers and authored figures",
+        contentX, cy, contentW, bodyFont)
+    elseif phase == "running" then
+      local count = math.max(0, #(state.jobs or {}))
+      local done = clamp((tonumber(state.index) or 1) - 1, 0, count)
+      local progress = count > 0 and done / count or 1
+      local job = state.active or state.jobs and state.jobs[state.index]
+      setColor(theme.colors.text)
+      drawFittedText(("JOB %d / %d"):format(math.min(done + 1, count), count),
+        contentX, cy, contentW, bodyFont)
+      cy = cy + textHeight(bodyFont) + spacing.md
+      setColor(theme.colors.textMuted)
+      drawFittedText(job and safeText(job.id) or "FINISHING", contentX, cy,
+        contentW, bodyFont)
+      cy = cy + textHeight(bodyFont) + spacing.lg
+      local barH = math.max(10, spacing.sm)
+      setColor(theme.colors.surfaceRaised or theme.colors.surface)
+      love.graphics.rectangle("fill", contentX, cy, contentW, barH,
+        theme.radii.sm)
+      setColor(theme.colors.accent or theme.colors.selection)
+      love.graphics.rectangle("fill", contentX, cy, contentW * progress, barH,
+        theme.radii.sm)
+      cy = cy + barH + spacing.lg
+      local stats = state.stats or {}
+      local rows = {
+        { "BUILT", tostring(state.built or 0) },
+        { "EXISTING", tostring(state.skipped or 0) },
+        { "FAILED", tostring(state.failed or 0) },
+        { "FILES", tostring(stats.files or 0) },
+        { "DISK", runtime.modernSizeText(stats.bytes) },
+      }
+      for _, row in ipairs(rows) do
+        setColor(theme.colors.textMuted); drawText(row[1], contentX, cy)
+        local vw = bodyFont:getWidth(row[2]); setColor(theme.colors.text)
+        drawText(row[2], contentX + contentW - vw, cy)
+        cy = cy + textHeight(bodyFont) + spacing.sm
+      end
+    elseif phase == "unsupported" then
+      setColor(theme.colors.text)
+      drawFittedText("PRECACHE STORAGE IS NOT WRITABLE", contentX, cy,
+        contentW, bodyFont)
+      cy = cy + textHeight(bodyFont) + spacing.lg
+      setColor(theme.colors.textMuted)
+      drawFittedText("Check storage permissions for this Gen1Recomp build.",
+        contentX, cy, contentW, bodyFont)
+    else
+      local stats = state.stats or {}
+      local result = phase == "complete" and "COMPLETE"
+        or phase == "incomplete" and "INCOMPLETE" or "CANCELLED"
+      setColor(theme.colors.text)
+      drawFittedText(result, contentX, cy, contentW, titleFont)
+      cy = cy + textHeight(titleFont) + spacing.lg
+      local rows = {
+        { "MAPS", tostring(stats.maps or 0) },
+        { "FILES", tostring(stats.files or 0) },
+        { "FULL", tostring(stats.full or 0) },
+        { "BODY", tostring(stats.body or 0) },
+        { "AUX", tostring(stats.aux or 0) },
+        { "DISK", runtime.modernSizeText(stats.bytes) },
+        { "FAILED", tostring(state.failed or 0) },
+      }
+      for _, row in ipairs(rows) do
+        setColor(theme.colors.textMuted); drawText(row[1], contentX, cy)
+        local vw = bodyFont:getWidth(row[2]); setColor(theme.colors.text)
+        drawText(row[2], contentX + contentW - vw, cy)
+        cy = cy + textHeight(bodyFont) + spacing.sm
+      end
+    end
+    love.graphics.setFont(captionFont)
+    setColor(theme.colors.textMuted)
+    local hint = phase == "confirm" and "A / START  begin    B  back"
+      or phase == "running" and "B  cancel"
+      or "A / B  back"
+    runtime.drawHintIfUseful(theme, Strings(hint), contentX,
+      py + panelH - textHeight(captionFont) - spacing.lg, contentW)
+    love.graphics.pop()
+  end
+
   runtime.drawModern = function(game, state, kind, viewport, theme, asModal, underKind,
       underState, overKind, overState)
     if not runtime.presenterEnabled(kind, state) then return end
@@ -16495,6 +16887,18 @@ return function(mod)
     end
     if kind == "save_panel" then
       runtime.drawSavePanel(game, state, viewport, theme)
+      return
+    end
+    if kind == "title_continue" then
+      runtime.drawTitleContinue(game, state, viewport, theme)
+      return
+    end
+    if kind == "voxel_precache" then
+      runtime.drawVoxelProgress(game, state, viewport, theme, false)
+      return
+    end
+    if kind == "voxel_cache_load" then
+      runtime.drawVoxelProgress(game, state, viewport, theme, true)
       return
     end
     if kind == "text" or kind == "choice" or kind == "quantity"
@@ -16670,6 +17074,7 @@ return function(mod)
   runtime.isModalLayer = function(kind)
     return kind == "menu" or kind == "list" or kind == "choice"
       or kind == "quantity" or kind == "text" or kind == "pic_box"
+      or kind == "title_continue"
   end
 
   -- A/B are available globally through the mouse buttons, but a few screens
@@ -17820,7 +18225,47 @@ return function(mod)
   -- ownership of keyboard/controller behavior and callbacks.
   mod.hooks:wrap("render.hud", function(next, game, viewport)
     currentGame = game
-    next(game, viewport)
+
+    -- Useful Bag 2.4.3+ owns a standalone fullscreen HUD presenter in addition
+    -- to the decorated BagMenu state that Kanto in Motion already understands.
+    -- Its presenter runs inside `next()` and otherwise paints a second bag
+    -- underneath Modern UI. Keep Useful Bag's state/input/pocket logic intact,
+    -- but make that one nested HUD pass see the state below the bag. Its own
+    -- `game.stack:top() == session.active` guard then yields presentation to
+    -- Kanto in Motion without requiring a patched Useful Bag release.
+    local stack = game and game.stack
+    local usefulBagTop = stack and type(stack.top) == "function"
+      and stack:top() or nil
+    local maskUsefulBagHud = usefulBagTop
+      and usefulBagTop.__usefulBagKind == "bag"
+      and mod._gen1ModernCompatibility:isUsefulBagState(usefulBagTop)
+      and runtime.option("hideOriginalUi", true) ~= false
+      and runtime.option("menuUi", true) ~= false
+      and runtime.presenterEnabled("bag", usefulBagTop)
+      and runtime.presenterReady(game, usefulBagTop, "bag")
+
+    if maskUsefulBagHud and type(stack.states) == "table" then
+      local states = stack.states
+      local underState
+      for index = #states, 1, -1 do
+        if states[index] == usefulBagTop then
+          underState = states[index - 1]
+          break
+        end
+      end
+      local originalTop = stack.top
+      stack.top = function(self, ...)
+        local value = originalTop(self, ...)
+        if value == usefulBagTop then return underState end
+        return value
+      end
+      local ok, err = pcall(next, game, viewport)
+      stack.top = originalTop
+      if not ok then error(err, 0) end
+    else
+      next(game, viewport)
+    end
+
     if not (love and love.graphics) then return end
     spriteAnimationOn = runtime.option("spriteAnimation", true) ~= false
     local layers, complete = runtime.presentationStack(game)

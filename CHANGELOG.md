@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.3
+
+- Added the new Trainer Card presentation: custom player portrait, Gym Leader art for unearned badge slots, and looping animated earned-badge icons.
+- Added the revised Giovanni silhouette used for the hidden eighth Gym Leader slot so it remains readable with the Crimson theme while preserving the secret-leader presentation.
+- Added explicit credit to **xpixelpriorx** for the animated badge artwork.
+- Fixed the in-game SAVE summary panel so its Modern UI card always has a complete theme-colored background.
+- Added Modern UI background cleanup for the title CONTINUE summary and Battle Art precache/cache-loading transition screens so native UI does not show through.
+- Added built-in compatibility with official/unmodified **Useful Bag** releases: Kanto in Motion suppresses Useful Bag's duplicate standalone bag presenter while preserving Useful Bag's pockets, sorting, capacity, controls, callbacks, and inventory behavior.
+- Added Useful Bag as an optional dependency so presentation-hook ordering is deterministic when both mods are installed.
+
 ## 1.1.2
 
 - Added independent resolved-sprite animation bridging for compatible third-party UI overhauls so Party/Summary and Pokédex front art can remain animated with Integrated Modern UI disabled.

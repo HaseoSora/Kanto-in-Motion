@@ -14,3 +14,12 @@ At the time this package was prepared, the upstream repository did not visibly a
 ## Pokémon-derived artwork
 
 The public Kanto in Motion package contains no Pokémon-derived sprite atlases or custom Pokémon title artwork. Players import those locally with `tools/import_assets.py`.
+
+
+## Trainer Card animated badge artwork
+
+The animated badge artwork included for Kanto in Motion v1.1.3's Trainer Card presentation is credited to **xpixelpriorx**.
+
+Creator page: https://www.deviantart.com/xpixelpriorx
+
+Kanto in Motion does not claim ownership of this third-party artwork.

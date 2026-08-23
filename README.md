@@ -4,7 +4,7 @@
 
 It is the public-release continuation of **Animated Menu Pokémon 0.1.26**. The internal mod ID remains `animated_menu_pokemon` so existing settings and compatible Gen1 Modern UI integrations can continue to identify the mod.
 
-> **Asset-free public release:** this repository intentionally contains no Pokémon-derived sprite atlases or title artwork. Players import compatible animated sprite assets into their own local installation with the included `tools/import_assets.py` utility.
+> **Local battle/title sprite workflow:** this repository intentionally contains no imported Gen 2-5 Pokémon battle-sprite atlases or custom title artwork. Players import those compatible assets into their own local installation with the included `tools/import_assets.py` utility. Kanto in Motion v1.1.3 does include the small Trainer Card presentation assets used by its new Gym Leader / badge display; see the credits and `ASSET_NOTICES.md`.
 
 ## Features
 
@@ -22,6 +22,8 @@ It is the public-release continuation of **Animated Menu Pokémon 0.1.26**. The 
 - Optional locally imported custom **Gen1Recomp++** title logo while retaining the stock **Red Version** subtitle.
 - Balanced title rendering designed to retain pixel-art detail on high-resolution displays.
 - Missing imported artwork falls back safely to Gen1Recomp's normal Gen 1 sprite instead of breaking the screen.
+- Trainer Card refresh: custom player portrait, Gym Leader silhouettes/portraits for unearned slots, and animated earned-badge icons.
+- Built-in compatibility with the official **Useful Bag** mod so its inventory behavior remains active while Kanto in Motion's Modern UI owns the visual Bag presentation instead of showing two menus at once.
 
 ## Standalone asset setup
 
@@ -123,6 +125,14 @@ https://github.com/ArmstrongThomas/gen1-modern-ui
 
 See `THIRD_PARTY_NOTICES.md` for additional attribution and redistribution notes.
 
+### Trainer Card animated badge credit
+
+The animated Trainer Card badge artwork included with Kanto in Motion v1.1.3 is credited to **xpixelpriorx**. Their DeviantArt page is:
+
+https://www.deviantart.com/xpixelpriorx
+
+These badge animations are used for the earned-badge presentation on the Trainer Card.
+
 ## Compatibility
 
 - Gen1Recomp mod API: **2**
@@ -130,6 +140,7 @@ See `THIRD_PARTY_NOTICES.md` for additional attribution and redistribution notes
 - Declared engine range: **>= 0.1.98 and < 2.0.0**
 - Gen1 Modern UI: **integrated customized 0.9.12 build**; do not enable the standalone Modern UI mod at the same time
 - Battle Art: **not required at runtime**
+- Useful Bag: **official/unmodified releases supported**; when Integrated Modern UI is active, Kanto in Motion yields Useful Bag's duplicate standalone bag renderer while preserving its pockets, sorting, capacity, inputs, and item callbacks.
 - Link-relevant gameplay data: unchanged (`affects_link: false`)
 
 Because the mod uses `engine_internals` to integrate with existing UI states, large Gen1Recomp UI refactors can require a compatibility update even when the manifest range still accepts the engine.
@@ -156,7 +167,7 @@ This repository is prepared around the Gen1Recomp publishing rules:
 - `manifest.json` includes a semver version, description, game/profile metadata, link declaration, and `github: "HaseoSora/Kanto-in-Motion"`.
 - `DIFFERENCES.md` documents deliberate vanilla divergences.
 - `.github/workflows/release.yml` is generated from Gen1Recomp's `modkit` release workflow.
-- Public source/release archives contain no locally imported Pokémon sprite/title payloads.
+- Public source/release archives contain no locally imported Gen 2-5 battle-sprite atlases or custom title payloads. The v1.1.3 Trainer Card presentation assets are intentional release assets and are documented in `ASSET_NOTICES.md`.
 - `tools/check_public_package.py` can be run before publishing to catch accidentally included local payloads.
 
 Recommended pre-release checks from a Gen1Recomp source tree:
@@ -185,7 +196,7 @@ https://github.com/bryanthaboi/gen1recomp/wiki/Guide-Publishing
 
 **Kanto in Motion was developed and packaged with substantial assistance from OpenAI ChatGPT.** AI assistance was used for code generation and modification, debugging, documentation, and release preparation. The project maintainer directs the project, chooses which changes to keep, and performs the in-game testing used to determine what is released.
 
-Pokémon artwork that a player chooses to import is **not included in this public repository or release**, and this disclosure does not claim ownership of third-party artwork.
+Locally imported Gen 2-5 battle/title artwork is **not included in this public repository or release**. Kanto in Motion v1.1.3 intentionally includes its small Trainer Card presentation set, including animated badge artwork credited to **xpixelpriorx**; this disclosure does not claim ownership of third-party artwork.
 
 ## Trademark / affiliation notice
 
