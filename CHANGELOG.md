@@ -1,8 +1,14 @@
 # Changelog
 
-## 1.1.3
+## 1.1.4
 
-- Set the title-screen shiny appearance chance to 30% per newly selected Pokémon so shiny title artwork is visible often enough during short title-screen visits.
+- Fixed stock Gen1 Pokédex animated portraits when **INTEGRATED MODERN UI = OFF** and retained safe fallback to the native Gen1 sprite when animated art is unavailable.
+- Fixed stock Gen1 Pokémon STATUS/Summary so the selected Gen 2/3/4/5 animated portrait is shown instead of falling back to the native Gen1 portrait.
+- Constrained oversized animated portraits to the stock **56×56** Pokédex/STATUS portrait area without enlarging smaller sprites, preventing large species such as Charizard from overflowing the classic UI.
+- Fixed the optional **START MENU PARTY VIEW** companion card so its full panel background is drawn instead of leaving party rows floating over the overworld.
+- Added a compatibility fallback for legacy/unknown mods: mod-authored OPTIONS and Start-menu rows are preserved when Kanto in Motion cannot confidently represent that mod inside the centralized **MOD MENU**.
+
+## 1.1.3
 
 - Added the new Trainer Card presentation: custom player portrait, Gym Leader art for unearned badge slots, and looping animated earned-badge icons.
 - Added the revised Giovanni silhouette used for the hidden eighth Gym Leader slot so it remains readable with the Crimson theme while preserving the secret-leader presentation.

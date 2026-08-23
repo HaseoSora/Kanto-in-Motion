@@ -18,7 +18,7 @@ The public Kanto in Motion package contains no Pokémon-derived sprite atlases o
 
 ## Trainer Card animated badge artwork
 
-The animated badge artwork included for Kanto in Motion v1.1.3's Trainer Card presentation is credited to **xpixelpriorx**.
+The animated badge artwork included for Kanto in Motion v1.1.4's Trainer Card presentation is credited to **xpixelpriorx**.
 
 Creator page: https://www.deviantart.com/xpixelpriorx
 

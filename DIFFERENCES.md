@@ -10,6 +10,7 @@ Kanto in Motion is a presentation mod. It does not intentionally change battle m
 - The Red/Blue title-screen Pokémon pool may use animated Gen 2-5 artwork and expands the rotating species pool to all 151 Kanto Pokémon.
 - Title Pokémon randomization avoids the 24 most recently shown species whenever possible.
 - Title cycle timing can be changed between NORMAL, SLOW, and SLOWER.
+- On stock Gen1 Pokédex and STATUS/Summary screens, oversized animated portraits are fitted within the classic 56×56 portrait area rather than overflowing the UI.
 - When locally supplied, Red's title sprite can animate forward and backward with a five-second pause between loops.
 - When locally supplied, the title screen can use the custom Gen1Recomp++ Pokémon logo while retaining the Red Version subtitle.
 - Missing locally imported artwork intentionally falls back to Gen1Recomp's vanilla art rather than changing gameplay.

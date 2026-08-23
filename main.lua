@@ -67,7 +67,16 @@ return function(mod)
     collections[generation] = loadTable(relative, true)
   end
   for generation, relative in pairs(SHINY_DATA_FILES) do
-    shinyCollections[generation] = loadTable(relative, true)
+    local collection = loadTable(relative, true)
+    -- Also accept Battle Art's original metadata filenames when users copy
+    -- the shiny metadata directly into Kanto in Motion instead of running
+    -- tools/import_assets.py. The importer renames these to animated_menu_*,
+    -- but the records themselves are compatible with the menu/title renderer.
+    if next(collection) == nil then
+      local battleRelative = relative:gsub("animated_menu_sprites_", "animated_battle_sprites_", 1)
+      collection = loadTable(battleRelative, true)
+    end
+    shinyCollections[generation] = collection
   end
   local titlePlayer = loadTable("data/title_player_red.lua", true)
 
@@ -357,6 +366,47 @@ return function(mod)
     getFrontRecord = getFrontRecord,
   }
 
+  -- The stock Gen 1 Summary and Pokedex layouts reserve roughly a 7x7-tile
+  -- portrait box. Imported Gen 2-5 animation frames are tightly cropped and
+  -- some (Charizard is a common example) are substantially larger than that.
+  -- Downscale only frames that exceed the native box; smaller sprites retain
+  -- their authored pixel size. The scratch Canvas is redrawn every call so a
+  -- live animated source Canvas stays animated instead of freezing.
+  local stockPortraitCache = setmetatable({}, { __mode = "k" })
+  local function fitStockPortrait(image, maxW, maxH)
+    if not image or type(image.getDimensions) ~= "function" then return image end
+    maxW, maxH = tonumber(maxW) or 56, tonumber(maxH) or 56
+    local w, h = image:getDimensions()
+    if not w or not h or w <= 0 or h <= 0 then return image end
+    if w <= maxW and h <= maxH then return image end
+    if not (love.graphics and love.graphics.newCanvas) then return image end
+
+    local slot = stockPortraitCache[image]
+    if not slot or slot.w ~= maxW or slot.h ~= maxH then
+      local okCanvas, canvas = pcall(love.graphics.newCanvas, maxW, maxH)
+      if not okCanvas or not canvas then return image end
+      if canvas.setFilter then pcall(canvas.setFilter, canvas, "nearest", "nearest") end
+      slot = { canvas = canvas, w = maxW, h = maxH }
+      stockPortraitCache[image] = slot
+    end
+
+    local scale = math.min(maxW / w, maxH / h, 1)
+    local dw, dh = w * scale, h * scale
+    local dx, dy = (maxW - dw) * 0.5, maxH - dh
+    local previousCanvas = love.graphics.getCanvas and love.graphics.getCanvas() or nil
+    love.graphics.push("all")
+    love.graphics.setCanvas(slot.canvas)
+    love.graphics.origin()
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setShader()
+    love.graphics.setColor(1, 1, 1, 1)
+    if image.setFilter then pcall(image.setFilter, image, "nearest", "nearest") end
+    love.graphics.draw(image, dx, dy, 0, scale, scale)
+    if previousCanvas then love.graphics.setCanvas(previousCanvas) else love.graphics.setCanvas() end
+    love.graphics.pop()
+    return slot.canvas
+  end
+
   -- Standard resolved-sprite bridge for stock and third-party UI overhauls.
   -- Some complete UI replacements do not consume mod.exports directly; they
   -- correctly ask Gen1Recomp's pokemon.sprite seam for the selected front art
@@ -458,13 +508,39 @@ return function(mod)
     end
   end
 
+  local STOCK_DIRECT_IMAGE_KINDS = {
+    summary = true, status = true, dex = true, pokedex = true,
+  }
+
+  local function knownExternalUiPresent()
+    if type(mod.find) ~= "function" then return false end
+    for _, id in ipairs({ "gen3_battle_ui", "colosseum_ui_overhaul" }) do
+      local ok, handle = pcall(mod.find, id)
+      if ok and handle then return true end
+    end
+    return false
+  end
+
   if mod.hooks and type(mod.hooks.wrap) == "function" then
     mod.hooks:wrap("pokemon.sprite", function(next, path, ctx)
       local resolved = next(path, ctx)
+      local kind = type(ctx) == "table" and tostring(ctx.kind or ""):lower() or ""
       if mod.options:get("enabled") == false or type(ctx) ~= "table"
-          or ctx.side ~= "front" or not FRAME_BRIDGE_KINDS[tostring(ctx.kind or ""):lower()] then
+          or ctx.side ~= "front" or not FRAME_BRIDGE_KINDS[kind] then
         return resolved
       end
+
+      -- Stock Gen1Recomp's SummaryMenu and DexEntryMenu call
+      -- love.graphics.newImage() directly on the path returned by
+      -- pokemon.sprite.  Kanto in Motion's virtual frame paths are resolved by
+      -- src.render.Assets and therefore cannot be opened by newImage().  When
+      -- the stock UI owns these screens, leave their constructor path vanilla;
+      -- patchVanillaScreens() below injects the live animated Canvas at draw
+      -- time.  Known external UI overhauls use Assets and keep the bridge.
+      if STOCK_DIRECT_IMAGE_KINDS[kind] and not knownExternalUiPresent() then
+        return resolved
+      end
+
       local virtual = bridgePath(ctx.species, selectedGeneration(), ctx.mon)
       if not virtual then return resolved end
       ctx.trueColor = true
@@ -519,40 +595,122 @@ return function(mod)
   -- directly, so this path is only visible when the stock UI owns the screen.
   local function patchVanillaScreens()
     local okSummary, SummaryMenu = pcall(require, "src.ui.SummaryMenu")
-    if okSummary and type(SummaryMenu) == "table" and type(SummaryMenu.draw) == "function"
-        and not SummaryMenu._animatedMenuPokemonDraw then
-      local original = SummaryMenu.draw
-      SummaryMenu._animatedMenuPokemonDraw = original
-      SummaryMenu.draw = function(self, ...)
-        local mon = self and self.mon
-        local animated = mon and getSprite(mon.species, { kind = "summary", mon = mon })
-        if not animated then return original(self, ...) end
-        local oldSprite, oldTrue = self.sprite, self.spriteTrueColor
-        self.sprite, self.spriteTrueColor = animated, true
-        local okDraw, drawErr = pcall(original, self, ...)
-        self.sprite, self.spriteTrueColor = oldSprite, oldTrue
-        if not okDraw then error(drawErr, 0) end
+    if okSummary and type(SummaryMenu) == "table" then
+      -- Seed the stock status screen with an animated frame when it opens.
+      -- This also prevents a blank portrait if another renderer calls the
+      -- object before its first normal draw pass.
+      if type(SummaryMenu.new) == "function" and not SummaryMenu._animatedMenuPokemonNew then
+        local originalNew = SummaryMenu.new
+        SummaryMenu._animatedMenuPokemonNew = originalNew
+        SummaryMenu.new = function(game, mon, ...)
+          local self = originalNew(game, mon, ...)
+          local animated = mon and getSprite(mon.species, { kind = "summary", mon = mon })
+          animated = animated and fitStockPortrait(animated, 56, 56) or nil
+          if self and animated then
+            self.sprite, self.spriteTrueColor = animated, true
+          end
+          return self
+        end
+      end
+
+      if type(SummaryMenu.draw) == "function" and not SummaryMenu._animatedMenuPokemonDraw then
+        local original = SummaryMenu.draw
+        SummaryMenu._animatedMenuPokemonDraw = original
+        SummaryMenu.draw = function(self, ...)
+          local mon = self and self.mon
+          local animated = mon and getSprite(mon.species, { kind = "summary", mon = mon })
+          animated = animated and fitStockPortrait(animated, 56, 56) or nil
+          if not animated then return original(self, ...) end
+          local oldSprite, oldTrue = self.sprite, self.spriteTrueColor
+          self.sprite, self.spriteTrueColor = animated, true
+          local okDraw, drawErr = pcall(original, self, ...)
+          self.sprite, self.spriteTrueColor = oldSprite, oldTrue
+          if not okDraw then error(drawErr, 0) end
+        end
       end
     end
 
     local okDex, DexEntryMenu = pcall(require, "src.ui.DexEntryMenu")
-    if okDex and type(DexEntryMenu) == "table" and type(DexEntryMenu.draw) == "function"
-        and not DexEntryMenu._animatedMenuPokemonDraw then
-      local original = DexEntryMenu.draw
-      DexEntryMenu._animatedMenuPokemonDraw = original
-      DexEntryMenu.draw = function(self, ...)
-        local species = self and self.def and self.def.id
-        local animated = species and getSprite(species, { kind = "dex" })
-        if not animated then return original(self, ...) end
-        local oldSprite, oldTrue = self.sprite, self.spriteTrueColor
-        self.sprite, self.spriteTrueColor = animated, true
-        local okDraw, drawErr = pcall(original, self, ...)
-        self.sprite, self.spriteTrueColor = oldSprite, oldTrue
-        if not okDraw then error(drawErr, 0) end
+    if okDex and type(DexEntryMenu) == "table" then
+      if type(DexEntryMenu.new) == "function" and not DexEntryMenu._animatedMenuPokemonNew then
+        local originalNew = DexEntryMenu.new
+        DexEntryMenu._animatedMenuPokemonNew = originalNew
+        DexEntryMenu.new = function(game, speciesOrOpts, ...)
+          local self = originalNew(game, speciesOrOpts, ...)
+          local species = self and self.def and self.def.id
+          local animated = species and getSprite(species, { kind = "dex" })
+          animated = animated and fitStockPortrait(animated, 56, 56) or nil
+          if self and animated then
+            self.sprite, self.spriteTrueColor = animated, true
+          end
+          return self
+        end
+      end
+
+      -- Patch the shared static renderer rather than only DexEntryMenu:draw().
+      -- The stock Pokedex and printer paths both use this function, so the
+      -- animated portrait remains available anywhere the vanilla entry page is
+      -- rendered while Modern UI is disabled.
+      if type(DexEntryMenu.render) == "function" and not DexEntryMenu._animatedMenuPokemonRender then
+        local originalRender = DexEntryMenu.render
+        DexEntryMenu._animatedMenuPokemonRender = originalRender
+        DexEntryMenu.render = function(game, def, sprite, forceOwned, trueColor, page, ...)
+          local species = def and def.id
+          local animated = species and getSprite(species, { kind = "dex" })
+          animated = animated and fitStockPortrait(animated, 56, 56) or nil
+          if animated then
+            sprite, trueColor = animated, true
+          end
+          return originalRender(game, def, sprite, forceOwned, trueColor, page, ...)
+        end
       end
     end
   end
   patchVanillaScreens()
+
+  -- A standalone Animated Menu Pokemon build and older Kanto in Motion builds
+  -- used the same generic SummaryMenu marker name. If one of those wrappers
+  -- was installed first, the normal injection above can be skipped even though
+  -- this mod owns the active sprite provider. Add a Kanto-specific final pass
+  -- for the stock Gen 1 status page. It redraws only the portrait box after the
+  -- native screen has finished, so the rest of the Gen 1 UI remains untouched.
+  local function installStockSummaryPortraitPass()
+    local okSummary, SummaryMenu = pcall(require, "src.ui.SummaryMenu")
+    if not (okSummary and type(SummaryMenu) == "table"
+        and type(SummaryMenu.draw) == "function") then return end
+    if SummaryMenu._kantoInMotionStockPortraitDraw then return end
+
+    local baseDraw = SummaryMenu.draw
+    SummaryMenu._kantoInMotionStockPortraitDraw = baseDraw
+    SummaryMenu.draw = function(self, ...)
+      local okDraw, drawErr = pcall(baseDraw, self, ...)
+      if not okDraw then error(drawErr, 0) end
+
+      if mod.options:get("integratedModernUi") ~= false
+          or mod.options:get("enabled") == false
+          or knownExternalUiPresent() then
+        return
+      end
+
+      local mon = self and self.mon
+      local animated = mon and getSprite(mon.species, { kind = "summary", mon = mon })
+      animated = animated and fitStockPortrait(animated, 56, 56) or nil
+      if not animated then return end
+
+      local pw, ph = animated:getDimensions()
+      local py = math.max(0, 56 - ph)
+      love.graphics.push("all")
+      love.graphics.setShader()
+      -- Erase the native portrait (and any oversized portrait from an older
+      -- wrapper) without touching the name column that begins at x=72.
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.rectangle("fill", 0, 0, 72, 56)
+      love.graphics.draw(animated, 8 + pw, py, 0, -1, 1)
+      require("src.render.PaletteFX").markTrueColor(8, py, pw, ph)
+      love.graphics.pop()
+    end
+  end
+  installStockSummaryPortraitPass()
 
   -- Gen1Recomp's evolution movie caches the old and new front images once at
   -- EvolutionState.new(), then alternates those two images while the sequence
@@ -920,7 +1078,7 @@ return function(mod)
       end
     end
 
-    local TITLE_ALT_COLOR_PERCENT = 30
+    local TITLE_ALT_COLOR_PERCENT = 27
 
     local function titlePokemon(state)
       if not isLiveTitle(state) or state.scrollPhase == "ball" then return nil end
@@ -935,7 +1093,16 @@ return function(mod)
         local random = love.math and love.math.random or math.random
         state._animatedMenuTitleVariantIndex = state.cycleIndex
         state._animatedMenuTitleVariantSpecies = species
-        state._animatedMenuTitleAltColor = (random(1, 100) <= TITLE_ALT_COLOR_PERCENT)
+
+        -- Always present the first Pokemon of a fresh title-screen session in
+        -- its normal colors. Starting with the second Pokemon, roll the normal
+        -- title shiny chance once per newly selected species.
+        if not state._animatedMenuTitleFirstPokemonShown then
+          state._animatedMenuTitleFirstPokemonShown = true
+          state._animatedMenuTitleAltColor = false
+        else
+          state._animatedMenuTitleAltColor = (random(1, 100) <= TITLE_ALT_COLOR_PERCENT)
+        end
       end
 
       local generation = selectedGeneration()

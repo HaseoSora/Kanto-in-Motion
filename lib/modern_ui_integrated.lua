@@ -3866,6 +3866,41 @@ return function(mod)
   }
 
 
+  -- Identify descriptors that are already represented by the centralized
+  -- MOD MENU.  Unknown/legacy mod rows must *not* be swallowed: older mods
+  -- often expose their only settings through ui.options.rows (or a direct
+  -- Start-menu row) and have no registered screen/schema that the central hub
+  -- can open.  We deliberately use conservative matching so uncertain rows
+  -- remain visible rather than disappearing.
+  runtime.centralManagedDescriptor = function(item, surface)
+    if type(item) ~= "table" then return false end
+    local rawId = safeText(item.id or item.key or item.optionId
+      or item.option_id or item.modId or item.mod_id):lower()
+    local compactId = rawId:gsub("[^%w]", "")
+    local label = safeText(item.label):upper():gsub("%s+", " ")
+
+    for _, spec in ipairs(CENTRAL_MOD_CATALOG) do
+      local specId = safeText(spec.id):lower()
+      local compactSpec = specId:gsub("[^%w]", "")
+      if rawId ~= "" and (rawId:find(specId, 1, true)
+          or (compactSpec ~= "" and compactId:find(compactSpec, 1, true))) then
+        return true
+      end
+      local specLabel = safeText(spec.label):upper():gsub("%s+", " ")
+      if label ~= "" and specLabel ~= "" and label == specLabel then
+        return true
+      end
+      if surface == "start" then
+        for _, extra in ipairs(spec.startExtras or {}) do
+          if label == safeText(extra):upper():gsub("%s+", " ") then
+            return true
+          end
+        end
+      end
+    end
+    return false
+  end
+
   -- Corrected single-call status resolver used by the central menu.
   runtime.modStatusMap = function(game)
     local status
@@ -4063,10 +4098,12 @@ return function(mod)
     end
   end
 
-  -- Keep the stock OPTIONS page engine-only.  We snapshot the incoming row
-  -- objects before calling downstream hooks, then retain only those same
-  -- engine-owned descriptors from the result.  Source mods still register and
-  -- own every callback; their controls are reached through MOD MENU instead.
+  -- Keep OPTIONS tidy for mods that are already represented by MOD MENU, but
+  -- preserve fallback rows from unknown/legacy mods.  Previous builds removed
+  -- every row added downstream, which made a mod completely inaccessible when
+  -- it did not have a catalog entry, registered settings screen, or schema.
+  -- The source mod still owns the descriptor/callback; we only decide whether
+  -- that authored row remains visible.
   mod.hooks:wrap("ui.options.rows", function(next, game, rows)
     local original = {}
     for _, row in ipairs(rows or {}) do original[row] = true end
@@ -4074,7 +4111,10 @@ return function(mod)
     if type(out) ~= "table" then return out end
     local clean = {}
     for _, row in ipairs(out) do
-      if original[row] then clean[#clean + 1] = row end
+      if original[row]
+          or not runtime.centralManagedDescriptor(row, "options") then
+        clean[#clean + 1] = row
+      end
     end
     return clean
   end, 1000)
@@ -4089,7 +4129,16 @@ return function(mod)
     if type(out) ~= "table" then return out end
     local clean, extras = {}, {}
     for _, item in ipairs(out) do
-      if original[item] then clean[#clean + 1] = item else extras[#extras + 1] = item end
+      if original[item] then
+        clean[#clean + 1] = item
+      elseif runtime.centralManagedDescriptor(item, "start") then
+        -- Known utility/settings rows are represented under MOD MENU.
+        extras[#extras + 1] = item
+      else
+        -- Unknown/legacy Start-menu additions keep their source-authored row
+        -- instead of disappearing just because Kanto in Motion is installed.
+        clean[#clean + 1] = item
+      end
     end
     runtime.capturedStartExtras = extras
     local row = {
@@ -9538,6 +9587,17 @@ return function(mod)
     local layout = { x = panelX, y = panelY, w = panelW, h = panelH,
       radius = theme.radii.md }
 
+    -- The optional Start-menu Party quick view is a standalone companion card,
+    -- so it needs the same explicit panel body treatment as other floating
+    -- presenters.  Some theme frames only draw their ornament/header; without
+    -- a filled base the row tiles appear to float directly on the world.
+    local panelSurface = colors.surface or { 0, 0, 0, 1 }
+    setColor({ panelSurface[1] or 0, panelSurface[2] or 0,
+      panelSurface[3] or 0, 1 })
+    love.graphics.rectangle("fill", panelX, panelY, panelW, panelH,
+      theme.radii.md)
+    runtime.drawPanelFrame(theme, panelX, panelY, panelW, panelH,
+      theme.radii.md, false)
     runtime.drawHeader(theme, layout, Strings("PARTY"))
     local valueFont = bodyFont
     love.graphics.setFont(bodyFont)

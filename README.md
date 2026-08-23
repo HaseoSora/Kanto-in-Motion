@@ -4,7 +4,7 @@
 
 It is the public-release continuation of **Animated Menu Pokémon 0.1.26**. The internal mod ID remains `animated_menu_pokemon` so existing settings and compatible Gen1 Modern UI integrations can continue to identify the mod.
 
-> **Local battle/title sprite workflow:** this repository intentionally contains no imported Gen 2-5 Pokémon battle-sprite atlases or custom title artwork. Players import those compatible assets into their own local installation with the included `tools/import_assets.py` utility. Kanto in Motion v1.1.3 does include the small Trainer Card presentation assets used by its new Gym Leader / badge display; see the credits and `ASSET_NOTICES.md`.
+> **Local battle/title sprite workflow:** this repository intentionally contains no imported Gen 2-5 Pokémon battle-sprite atlases or custom title artwork. Players import those compatible assets into their own local installation with the included `tools/import_assets.py` utility. Kanto in Motion v1.1.4 does include the small Trainer Card presentation assets used by its new Gym Leader / badge display; see the credits and `ASSET_NOTICES.md`.
 
 ## Features
 
@@ -18,13 +18,14 @@ It is the public-release continuation of **Animated Menu Pokémon 0.1.26**. The 
 - Title-screen pool expanded to **all 151 Kanto Pokémon**.
 - Random title selection avoids the **24 most recently displayed species** whenever possible.
 - Adjustable title cycle speed: **NORMAL**, **SLOW**, or **SLOWER**.
-- Each newly selected title-screen Pokémon has a **30% chance** to use its shiny artwork when compatible shiny assets are available.
 - Optional locally imported animated **Red trainer** title presentation: forward → reverse → 5-second pause → repeat.
 - Optional locally imported custom **Gen1Recomp++** title logo while retaining the stock **Red Version** subtitle.
 - Balanced title rendering designed to retain pixel-art detail on high-resolution displays.
 - Missing imported artwork falls back safely to Gen1Recomp's normal Gen 1 sprite instead of breaking the screen.
 - Trainer Card refresh: custom player portrait, Gym Leader silhouettes/portraits for unearned slots, and animated earned-badge icons.
 - Built-in compatibility with the official **Useful Bag** mod so its inventory behavior remains active while Kanto in Motion's Modern UI owns the visual Bag presentation instead of showing two menus at once.
+- Stock Gen1 Pokédex and Pokémon STATUS/Summary screens keep Kanto in Motion's animated portraits when **INTEGRATED MODERN UI = OFF**, with oversized portraits fitted into the classic 56×56 area.
+- Legacy/unknown mods keep their authored OPTIONS or Start-menu settings rows when they cannot be represented safely inside Kanto in Motion's centralized **MOD MENU**.
 
 ## Standalone asset setup
 
@@ -32,7 +33,7 @@ Kanto in Motion has **no runtime Battle Art dependency**. Once compatible sprite
 
 The public repository cannot include the Pokémon-derived sprite artwork, so use the included importer with a compatible source folder or ZIP that you already possess. The importer currently recognizes:
 
-- packages using the common Battle Art animated-front layout (`animated_battle_sprites_gen2.lua` through `gen5` plus `assets/battle/front-animated/`), and
+- packages using the common Battle Art animated-front layout (`animated_battle_sprites_gen2.lua` through `gen5`, plus `assets/battle/front-animated/`), and
 - older full Animated Menu Pokémon / Kanto in Motion packages using `animated_menu_sprites_gen*.lua`.
 
 Example with a ZIP:
@@ -128,7 +129,7 @@ See `THIRD_PARTY_NOTICES.md` for additional attribution and redistribution notes
 
 ### Trainer Card animated badge credit
 
-The animated Trainer Card badge artwork included with Kanto in Motion v1.1.3 is credited to **xpixelpriorx**. Their DeviantArt page is:
+The animated Trainer Card badge artwork included with Kanto in Motion v1.1.4 is credited to **xpixelpriorx**. Their DeviantArt page is:
 
 https://www.deviantart.com/xpixelpriorx
 
@@ -168,7 +169,7 @@ This repository is prepared around the Gen1Recomp publishing rules:
 - `manifest.json` includes a semver version, description, game/profile metadata, link declaration, and `github: "HaseoSora/Kanto-in-Motion"`.
 - `DIFFERENCES.md` documents deliberate vanilla divergences.
 - `.github/workflows/release.yml` is generated from Gen1Recomp's `modkit` release workflow.
-- Public source/release archives contain no locally imported Gen 2-5 battle-sprite atlases or custom title payloads. The v1.1.3 Trainer Card presentation assets are intentional release assets and are documented in `ASSET_NOTICES.md`.
+- Public source/release archives contain no locally imported Gen 2-5 battle-sprite atlases or custom title payloads. The v1.1.4 Trainer Card presentation assets are intentional release assets and are documented in `ASSET_NOTICES.md`.
 - `tools/check_public_package.py` can be run before publishing to catch accidentally included local payloads.
 
 Recommended pre-release checks from a Gen1Recomp source tree:
@@ -197,7 +198,7 @@ https://github.com/bryanthaboi/gen1recomp/wiki/Guide-Publishing
 
 **Kanto in Motion was developed and packaged with substantial assistance from OpenAI ChatGPT.** AI assistance was used for code generation and modification, debugging, documentation, and release preparation. The project maintainer directs the project, chooses which changes to keep, and performs the in-game testing used to determine what is released.
 
-Locally imported Gen 2-5 battle/title artwork is **not included in this public repository or release**. Kanto in Motion v1.1.3 intentionally includes its small Trainer Card presentation set, including animated badge artwork credited to **xpixelpriorx**; this disclosure does not claim ownership of third-party artwork.
+Locally imported Gen 2-5 battle/title artwork is **not included in this public repository or release**. Kanto in Motion v1.1.4 intentionally includes its small Trainer Card presentation set, including animated badge artwork credited to **xpixelpriorx**; this disclosure does not claim ownership of third-party artwork.
 
 ## Trademark / affiliation notice
 
