@@ -5908,6 +5908,15 @@ return function(mod)
       return true
     end
     if kind == "box_root" and isBoxRoot(state) then return true end
+    -- Gen1 ShopMenu deliberately replaces Menu:draw so it can draw the clerk
+    -- greeting and money box underneath BUY/SELL/QUIT. That override is still
+    -- completely represented by the Modern UI model: its live `items`,
+    -- `index`, and `footer` fields remain the source of truth, while the BUY
+    -- child is an ordinary dialogue ListMenu classified as shop_list below.
+    -- Treat the audited ShopMenu override as modeled so the stack proof does
+    -- not fall back to the classic UI when a mart list is opened.
+    if kind == "menu" and state and state.screenId == "ShopMenu"
+        and inherits(classOf(state), menuClass) then return true end
     if kind == "menu" and state._gen1ModernTitleMenu == true
         and rawget(state, "draw") == state._gen1ModernTitleDraw then return true end
     return false

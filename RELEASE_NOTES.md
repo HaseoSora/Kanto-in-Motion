@@ -1,33 +1,55 @@
-# Kanto in Motion v1.1.4
+# Kanto in Motion v1.2.0
 
-Kanto in Motion v1.1.4 focuses on classic Gen1 UI sprite compatibility, Start-menu presentation, and safer compatibility with mods that do not integrate with the centralized Mod Menu.
+Kanto in Motion v1.2.0 is the first release that targets both Gen 1 and Gen 2 in Gen1Recomp.
 
-## Classic Gen1 UI sprite fixes
+## Gen 2 support
 
-- Fixed animated Pokédex portraits when **INTEGRATED MODERN UI = OFF**.
-- Fixed Pokémon STATUS/Summary so the selected Gen 2/3/4/5 animated sprite is shown instead of the native Gen1 portrait.
-- Oversized animated portraits are now fitted into the stock **56×56** portrait area. Large species such as Charizard no longer overflow the classic Pokédex/STATUS layout.
-- Smaller sprites are not enlarged.
-- Native Gen1 art remains the safe fallback when compatible animated artwork is unavailable.
+- Added `gen2` targeting for Gen1Recomp 0.2.24.
+- Added Gold / Silver / Crystal generation-aware startup behavior.
+- Kanto in Motion's bundled Modern UI is automatically suppressed on Gen 2 so it does not fight the separate Gen 2 UI implementation.
+- Kanto in Motion's animated Pokémon provider remains active on Gen 2.
+- Added compatibility with the **original, unmodified Gen2 Clean UI 0.4.1**.
+- Added live animated portrait bridging for stock Gen2 Clean UI without requiring a patched Clean UI package.
+- Animated Gen 2 Status/Summary presentation is confirmed working in real testing.
+- Compatibility hooks are included for Party, Pokédex, and Evolution portrait surfaces; those remain subject to screen-by-screen in-game validation.
 
-## Start Menu Party View
+## Gen 1 Modern UI preference
 
-- Fixed the optional **START MENU PARTY VIEW** panel so it draws a complete theme background behind the party list instead of leaving the rows floating over the overworld.
+- `INTEGRATED MODERN UI` is a **Gen 1-only** preference.
+- It defaults ON for new installs.
+- If the user turns it OFF in Gen 1, that preference is remembered on later Gen 1 launches.
+- Launching Gen 2 does not overwrite the saved Gen 1 preference.
+- Returning to Gen 1 restores the saved Gen 1 choice.
 
-## Mod Menu compatibility fallback
+## Gen 1 Poké Mart fix
 
-- Kanto in Motion no longer removes every mod-added OPTIONS or Start-menu row unconditionally.
-- Mods already recognized and represented by the centralized **MOD MENU** continue to use the centralized presentation.
-- Legacy or unknown mods that cannot be represented safely in MOD MENU keep their own authored OPTIONS or Start-menu rows, preventing settings from becoming inaccessible.
+- Fixed Poké Mart BUY/SELL presentation falling back to the original Gen 1 UI.
+- Gen1Recomp's custom `ShopMenu` draw override is now recognized as a supported Modern UI screen path.
+- The fix is presentation-only and does not change shop logic, inventory, prices, or callbacks.
 
-## Retained from v1.1.3
+## Retained features
 
-- Redesigned Trainer Card with Gym Leader art and animated earned badges.
-- Giovanni silhouette update.
-- SAVE summary/background fixes.
-- Official/unmodified Useful Bag presentation compatibility.
-- Animated Trainer Card badge artwork credit to **xpixelpriorx**: https://www.deviantart.com/xpixelpriorx
+- Gen 2 / Gen 3 / Gen 4 / Gen 5 animated Pokémon front sprites.
+- Gen 5 default sprite source.
+- Animated Summary/Status, Pokédex, evolution, and supported menu portraits.
+- Red/Blue all-151 title Pokémon rotation.
+- Optional animated Red/title artwork.
+- Customized integrated Gen1 Modern UI 0.9.12.
+- Trainer Card presentation with animated earned badges.
+- Useful Bag compatibility on the Gen 1 integrated-UI path.
+- Safe fallback when optional/imported artwork is missing.
 
-## Local animated-art workflow
+## Release archives
 
-Public Kanto in Motion packages remain asset-light. Gen 2-5 animated Pokémon atlases and title artwork are imported locally with `tools/import_assets.py`. The importer supports compatible Battle Art animated metadata/artwork, and Kanto in Motion falls back safely to Gen1Recomp's native artwork when local assets are absent.
+- **Kanto-in-Motion-v1.2.0-Full-Assets.zip** — includes the animated Pokémon/title payloads present in this release build.
+- **Kanto-in-Motion-v1.2.0-No-Pokemon-Assets.zip** — excludes imported Pokémon/title payloads and keeps the local `tools/import_assets.py` workflow.
+
+Install only one package.
+
+## Credits
+
+Animated Trainer Card badge artwork: **xpixelpriorx**  
+https://www.deviantart.com/xpixelpriorx
+
+Gen1 Modern UI foundation: **ArmstrongThomas**  
+https://github.com/ArmstrongThomas/gen1-modern-ui

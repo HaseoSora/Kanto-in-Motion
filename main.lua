@@ -3,6 +3,13 @@
 -- Public releases intentionally ship without Pokemon-derived sprite assets.
 -- Animated assets are imported locally by the player with tools/import_assets.py.
 return function(mod)
+  local GameVersion = require("src.core.GameVersion")
+  local IS_GEN2 = GameVersion.generation() == 2
+  if not IS_GEN2 then
+    local okProbe, BattleStateProbe = pcall(require, "src.battle.BattleState")
+    IS_GEN2 = okProbe and type(BattleStateProbe) == "table"
+      and rawget(BattleStateProbe, "newWild") == nil
+  end
   local MOD_ID = "animated_menu_pokemon"
   local DATA_FILES = {
     gen2 = "data/animated_menu_sprites_gen2.lua",
@@ -19,8 +26,6 @@ return function(mod)
 
   local optionSchema = {
     { key = "enabled", label = "MENU SPRITES", type = "toggle", default = true },
-    { key = "integratedModernUi", label = "INTEGRATED MODERN UI", type = "toggle", default = true,
-      description = "Use Kanto in Motion's bundled Gen1 Modern UI. Turn OFF when another full UI overhaul owns the interface. Requires a restart." },
     { key = "generation", label = "SPRITE GEN", type = "choice",
       default = "gen5", choices = {
         { "GEN 2", "gen2" }, { "GEN 3", "gen3" },
@@ -33,8 +38,28 @@ return function(mod)
         { "NORMAL", "normal" }, { "SLOW", "slow" }, { "SLOWER", "slower" },
       } },
   }
+
+  -- This preference belongs to Gen1 only. It defaults ON for new users, but
+  -- once a player turns it OFF the saved mod option is honored on later Gen1
+  -- launches. Gen2 never defines this row and never consults its saved value.
+  if not IS_GEN2 then
+    table.insert(optionSchema, 2, {
+      key = "integratedModernUi", label = "INTEGRATED MODERN UI",
+      type = "toggle", default = true,
+      description = "Gen1 only. Defaults ON and remembers your choice across launches. Gen2 always uses its own UI owner.",
+    })
+  end
+
   mod._kantoInMotionOptionSchema = optionSchema
   mod.options:define(optionSchema)
+
+  -- Modern UI ownership is generation-aware:
+  --   Gen 1 -> saved Gen1 preference (default ON)
+  --   Gen 2 -> always OFF (Clean UI or the native Gen2 UI owns it)
+  local function integratedModernUiEnabled()
+    if IS_GEN2 then return false end
+    return mod.options:get("integratedModernUi") ~= false
+  end
 
   local collections = {}
   local shinyCollections = {}
@@ -460,6 +485,261 @@ return function(mod)
     return front, generation, species, tonumber(frame)
   end
 
+
+  -- Forward declaration: the stock Clean UI bridge below calls this
+  -- before its implementation appears later in the file. Without this local
+  -- declaration Lua resolves those calls as a global and the pcall-wrapped
+  -- bridge install silently fails.
+  local gen2CleanUiHandle
+
+  -- Stock Gen2 Clean UI 0.4.1 compatibility without modifying that mod.
+  --
+  -- Clean UI intentionally accepts only assets/generated/*.png portrait paths
+  -- and caches the loaded drawable by path.  Kanto in Motion therefore gives
+  -- the live Gen2 Pokemon definitions a TEMPORARY generated-looking path only
+  -- while Clean UI prepares its frame. A very narrow love.graphics.newImage
+  -- bridge resolves only our reserved path prefix to a mutable Canvas. Clean
+  -- UI caches that Canvas normally; Kanto in Motion updates its pixels each
+  -- frame as the selected animation advances. The original Pokemon definitions
+  -- are restored immediately after Clean UI finishes preparing, so battles,
+  -- scripts and other UI mods never inherit the temporary path.
+  local CLEAN_UI_LIVE_PREFIX = "assets/generated/kanto_in_motion_live/"
+  local cleanUiProxies = {}
+  local cleanUiVariantBySpecies = {}
+
+  local function cleanUiLivePath(species, generation)
+    species = normalizedSpecies(species)
+    generation = generation or selectedGeneration()
+    if not species or not localFrontRecord(species, generation) then return nil end
+    return CLEAN_UI_LIVE_PREFIX .. generation .. "/" .. species .. ".png"
+  end
+
+  local function decodeCleanUiLivePath(path)
+    if type(path) ~= "string" then return nil end
+
+    -- Stock Gen2 Clean UI does not pass the generated descriptor path straight
+    -- to love.graphics.newImage(). Its mod.assets:image() first expands that
+    -- descriptor underneath Clean UI's own mod directory, so on Windows the
+    -- renderer reaches us with something like:
+    --
+    --   .../gen2_clean_ui/assets/generated/kanto_in_motion_live/gen5/PIKACHU.png
+    --
+    -- The modified Clean UI test build intercepted the descriptor *before*
+    -- that expansion, which is why animation worked there while stock Clean
+    -- UI remained static. Match our reserved namespace anywhere in the final
+    -- normalized path rather than requiring it at character one.
+    local normalized = path:gsub("\\", "/")
+    local at = normalized:find(CLEAN_UI_LIVE_PREFIX, 1, true)
+    if not at then return nil end
+    local tail = normalized:sub(at + #CLEAN_UI_LIVE_PREFIX)
+    local generation, species = tail:match("^(gen[2-5])/([A-Z0-9_]+)%.png$")
+    if not generation or not species then return nil end
+    local normal = localFrontRecord(species, generation)
+    if not normal then return nil end
+    return generation, species
+  end
+
+  local function frontForCleanUi(generation, species)
+    local wantShiny = cleanUiVariantBySpecies[species] == true
+    if wantShiny then
+      local shiny = localShinyFrontRecord(species, generation)
+      if shiny then return shiny, true end
+    end
+    return localFrontRecord(species, generation), false
+  end
+
+  local function proxySize(generation, species)
+    local normal = localFrontRecord(species, generation)
+    local shiny = localShinyFrontRecord(species, generation)
+    local w, h = 1, 1
+    for _, front in ipairs({ normal, shiny }) do
+      if type(front) == "table" then
+        w = math.max(w, math.floor(tonumber(front.width) or 1))
+        h = math.max(h, math.floor(tonumber(front.height) or 1))
+      end
+    end
+    return w, h
+  end
+
+  local function drawCleanUiProxy(proxy)
+    if not (proxy and love.graphics and love.graphics.setCanvas) then return nil end
+    local front = frontForCleanUi(proxy.generation, proxy.species)
+    if type(front) ~= "table" then return proxy.canvas end
+    local source = renderFrame(front, proxy.generation, proxy.species)
+    if not source then return proxy.canvas end
+    local sw, sh = source:getDimensions()
+    local dx = math.floor((proxy.width - sw) / 2)
+    local dy = proxy.height - sh
+    local previous = love.graphics.getCanvas and love.graphics.getCanvas() or nil
+    love.graphics.push("all")
+    love.graphics.setCanvas(proxy.canvas)
+    love.graphics.origin()
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setShader()
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(source, dx, dy)
+    if previous then love.graphics.setCanvas(previous) else love.graphics.setCanvas() end
+    love.graphics.pop()
+    return proxy.canvas
+  end
+
+  local function cleanUiProxy(path)
+    local generation, species = decodeCleanUiLivePath(path)
+    if not generation then return nil end
+    local hit = cleanUiProxies[path]
+    if not hit then
+      if not (love.graphics and love.graphics.newCanvas) then return nil end
+      local w, h = proxySize(generation, species)
+      local ok, canvas = pcall(love.graphics.newCanvas, w, h)
+      if not ok or not canvas then return nil end
+      if canvas.setFilter then pcall(canvas.setFilter, canvas, "nearest", "nearest") end
+      hit = { canvas=canvas, width=w, height=h,
+        generation=generation, species=species }
+      cleanUiProxies[path] = hit
+      if mod.log and type(mod.log.info) == "function"
+          and not mod._kantoInMotionCleanUiProxyConfirmed then
+        mod._kantoInMotionCleanUiProxyConfirmed = true
+        mod.log:info("stock Gen2 Clean UI requested Kanto in Motion live portrait; animation proxy active")
+      end
+    end
+    return drawCleanUiProxy(hit)
+  end
+
+  local function refreshCleanUiProxies()
+    for _, proxy in pairs(cleanUiProxies) do drawCleanUiProxy(proxy) end
+  end
+
+  local function markVisibleShiny(game)
+    cleanUiVariantBySpecies = {}
+    local stack = game and game.stack
+    local top = stack and type(stack.top) == "function" and stack:top() or nil
+    if type(top) ~= "table" then return end
+    local function mark(mon)
+      if type(mon) == "table" and mon.species then
+        cleanUiVariantBySpecies[normalizedSpecies(mon.species)] = mon.shiny == true
+      end
+    end
+    mark(rawget(top, "mon"))
+    local party = rawget(top, "party")
+    local index = tonumber(rawget(top, "index"))
+    if type(party) == "table" and index then mark(rawget(party, index)) end
+  end
+
+  local function installStockGen2CleanUiBridge()
+    if not IS_GEN2 or not gen2CleanUiHandle()
+        or not (love and love.graphics and type(love.graphics.newImage) == "function") then
+      return false
+    end
+
+    -- The graphics table itself is engine-owned and shared. Keep exactly one
+    -- narrow wrapper across hot reloads; only its resolver closure is replaced.
+    local g = love.graphics
+    local bridge = rawget(g, "__kantoInMotionCleanUiImageBridge")
+    if type(bridge) ~= "table" then
+      bridge = { original = g.newImage }
+      rawset(g, "__kantoInMotionCleanUiImageBridge", bridge)
+      g.newImage = function(path, ...)
+        local resolver = bridge.resolver
+        if resolver then
+          local ok, image = pcall(resolver, path)
+          if ok and image then return image end
+        end
+        return bridge.original(path, ...)
+      end
+    end
+    bridge.resolver = cleanUiProxy
+
+    local function withCleanUiPokemonDefinitions(game, nextFn, ...)
+      if mod.options:get("enabled") == false or not gen2CleanUiHandle() then
+        return nextFn(...)
+      end
+
+      markVisibleShiny(game)
+      refreshCleanUiProxies()
+
+      local generation = selectedGeneration()
+      local pokemon = game and game.data and game.data.pokemon
+      if type(pokemon) ~= "table" then return nextFn(...) end
+
+      local restore = {}
+      for species, def in pairs(pokemon) do
+        if type(def) == "table" then
+          local path = cleanUiLivePath(species, generation)
+          if path then
+            restore[#restore + 1] = {
+              def=def, spriteFront=rawget(def, "spriteFront"),
+              trueColor=rawget(def, "trueColor"),
+            }
+            rawset(def, "spriteFront", path)
+            rawset(def, "trueColor", true)
+          end
+        end
+      end
+
+      if #restore > 0 and mod.log and type(mod.log.info) == "function"
+          and not mod._kantoInMotionCleanUiDefinitionsConfirmed then
+        mod._kantoInMotionCleanUiDefinitionsConfirmed = true
+        mod.log:info("stock Gen2 Clean UI prepare sees Kanto in Motion animated sprite descriptors")
+      end
+
+      local result = { pcall(nextFn, ...) }
+      for i = #restore, 1, -1 do
+        local row = restore[i]
+        rawset(row.def, "spriteFront", row.spriteFront)
+        rawset(row.def, "trueColor", row.trueColor)
+      end
+      local ok = table.remove(result, 1)
+      if not ok then error(result[1], 0) end
+      return unpack(result)
+    end
+
+    if mod.hooks and type(mod.hooks.wrap) == "function" then
+      -- Newer/Gen1-style hosts prepare here.
+      if not mod._kantoInMotionCleanUiPrepareHook then
+        mod._kantoInMotionCleanUiPrepareHook = mod.hooks:wrap(
+          "render.ui.prepare",
+          function(nextFn, game, viewport)
+            return withCleanUiPokemonDefinitions(game, nextFn, game, viewport)
+          end, 95000)
+      end
+
+      -- Gen1Recomp 0.2.24's Gen2 Clean UI can prepare from its
+      -- screen.render_visible fallback instead. KIM must be the outer wrapper
+      -- (95000 > Clean UI's 90000) so the temporary definitions remain active
+      -- while Clean UI snapshots and renders the model.
+      if not mod._kantoInMotionCleanUiVisibleHook then
+        mod._kantoInMotionCleanUiVisibleHook = mod.hooks:wrap(
+          "screen.render_visible",
+          function(nextFn, state)
+            local game = type(state) == "table" and rawget(state, "game") or nil
+            if not game then return nextFn(state) end
+            return withCleanUiPokemonDefinitions(game, nextFn, state)
+          end, 95000)
+      end
+
+      -- Clean UI intentionally caches source images by descriptor path. The
+      -- cached object is our mutable Canvas, so refresh its pixels every frame
+      -- immediately before Clean UI's lower-priority render.hud wrapper
+      -- composites its already-built candidate.
+      if not mod._kantoInMotionCleanUiHudHook then
+        mod._kantoInMotionCleanUiHudHook = mod.hooks:wrap(
+          "render.hud",
+          function(nextFn, game, viewport)
+            if mod.options:get("enabled") ~= false and gen2CleanUiHandle() then
+              markVisibleShiny(game)
+              refreshCleanUiProxies()
+            end
+            return nextFn(game, viewport)
+          end, 95000)
+      end
+    end
+
+    if mod.log and type(mod.log.info) == "function" then
+      mod.log:info("stock Gen2 Clean UI animated portrait bridge enabled")
+    end
+    return true
+  end
+
   local okAssets, Assets = pcall(require, "src.render.Assets")
   if okAssets and type(Assets) == "table" then
     -- Keep one engine-level wrapper across dev hot reloads; only the resolver
@@ -512,7 +792,15 @@ return function(mod)
     summary = true, status = true, dex = true, pokedex = true,
   }
 
+  gen2CleanUiHandle = function()
+    if not IS_GEN2 or type(mod.find) ~= "function" then return nil end
+    local ok, handle = pcall(mod.find, "gen2_clean_ui")
+    if ok and type(handle) == "table" then return handle end
+    return nil
+  end
+
   local function knownExternalUiPresent()
+    if gen2CleanUiHandle() then return true end
     if type(mod.find) ~= "function" then return false end
     for _, id in ipairs({ "gen3_battle_ui", "colosseum_ui_overhaul" }) do
       local ok, handle = pcall(mod.find, id)
@@ -594,7 +882,8 @@ return function(mod)
   -- immediately before the native draw. Gen1 Modern UI consumes getSprite()
   -- directly, so this path is only visible when the stock UI owns the screen.
   local function patchVanillaScreens()
-    local okSummary, SummaryMenu = pcall(require, "src.ui.SummaryMenu")
+    if IS_GEN2 then return end
+    local okSummary, SummaryMenu = pcall(require, IS_GEN2 and "src.ui.gen2.SummaryMenu" or "src.ui.SummaryMenu")
     if okSummary and type(SummaryMenu) == "table" then
       -- Seed the stock status screen with an animated frame when it opens.
       -- This also prevents a blank portrait if another renderer calls the
@@ -630,7 +919,8 @@ return function(mod)
       end
     end
 
-    local okDex, DexEntryMenu = pcall(require, "src.ui.DexEntryMenu")
+    local okDex, DexEntryMenu = false, nil
+    if not IS_GEN2 then okDex, DexEntryMenu = pcall(require, "src.ui.DexEntryMenu") end
     if okDex and type(DexEntryMenu) == "table" then
       if type(DexEntryMenu.new) == "function" and not DexEntryMenu._animatedMenuPokemonNew then
         local originalNew = DexEntryMenu.new
@@ -668,6 +958,115 @@ return function(mod)
   end
   patchVanillaScreens()
 
+  -- Gold/Crystal have parallel menu classes rather than the Gen 1 Summary /
+  -- DexEntry / EvolutionState classes.  Patch the actual Gen 2 picture
+  -- methods directly so the selected Kanto in Motion atlas remains live.
+  local function patchGen2Screens()
+    if not IS_GEN2 then return end
+    if gen2CleanUiHandle() then
+      pcall(installStockGen2CleanUiBridge)
+      return
+    end
+
+    local function modernUiEnabled()
+      return integratedModernUiEnabled()
+    end
+
+    local function fillPortraitBox(x, y, w, h)
+      local G = love.graphics
+      if modernUiEnabled() then
+        G.setColor(0.095, 0.022, 0.036, 1)
+      else
+        G.setColor(1, 1, 1, 1)
+      end
+      G.rectangle("fill", x, y, w, h)
+      G.setColor(1, 1, 1, 1)
+    end
+
+    local function drawCenteredPortrait(image, x, y, w, h)
+      image = fitStockPortrait(image, w, h)
+      if not image then return false end
+      local iw, ih = image:getDimensions()
+      fillPortraitBox(x, y, w, h)
+      love.graphics.setShader()
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.draw(image, x + math.floor((w - iw) / 2),
+        y + math.max(0, h - ih))
+      return true
+    end
+
+    -- Stats screen: Gen2 SummaryMenu.new takes an opts table; hooking drawPic
+    -- avoids constructor/signature assumptions and updates every animation frame.
+    local okSummary, SummaryMenu = pcall(require, "src.ui.gen2.SummaryMenu")
+    if okSummary and type(SummaryMenu) == "table"
+        and type(SummaryMenu.drawPic) == "function"
+        and not SummaryMenu._kantoInMotionGen2DrawPic then
+      local nativeDrawPic = SummaryMenu.drawPic
+      SummaryMenu._kantoInMotionGen2DrawPic = nativeDrawPic
+      SummaryMenu.drawPic = function(self, ...)
+        if mod.options:get("enabled") ~= false then
+          local mon = self and self.mon
+          if mon and mon.isEgg ~= true and mon.species then
+            local animated = getSprite(mon.species,
+              { kind = "summary", mon = mon })
+            animated = animated and fitStockPortrait(animated, 56, 56) or nil
+            if animated then
+              -- nil colours = true-colour art; no Gen 2 CGB palette remap.
+              return self:drawPicBlock(animated, nil)
+            end
+          end
+        end
+        return nativeDrawPic(self, ...)
+      end
+    end
+
+    -- #DEX main/entry picture. Gen 2 places the frontpic in a 7x7 tile block
+    -- at the coordinates passed to drawPic(). Preserve the question mark for
+    -- unseen species and replace only real seen Pokemon.
+    local okDex, PokedexMenu = pcall(require, "src.ui.gen2.PokedexMenu")
+    if okDex and type(PokedexMenu) == "table"
+        and type(PokedexMenu.drawPic) == "function"
+        and not PokedexMenu._kantoInMotionGen2DrawPic then
+      local nativeDrawPic = PokedexMenu.drawPic
+      PokedexMenu._kantoInMotionGen2DrawPic = nativeDrawPic
+      PokedexMenu.drawPic = function(self, row, tx, ty, ownColors, ...)
+        if mod.options:get("enabled") ~= false and row and row.seen
+            and row.species then
+          local animated = getSprite(row.species, { kind = "dex" })
+          if animated and drawCenteredPortrait(animated, (tx or 0) * 8,
+              (ty or 0) * 8, 56, 56) then
+            return
+          end
+        end
+        return nativeDrawPic(self, row, tx, ty, ownColors, ...)
+      end
+    end
+
+    -- Evolution movie. Keep the native blackout/silhouette frames because
+    -- they are a real part of Crystal/Gold's evolution effect; use Kanto in
+    -- Motion art for the normal old/new reveal frames.
+    local okEvolution, EvolutionAnim = pcall(require, "src.ui.gen2.EvolutionAnim")
+    if okEvolution and type(EvolutionAnim) == "table"
+        and type(EvolutionAnim.drawPic) == "function"
+        and not EvolutionAnim._kantoInMotionGen2DrawPic then
+      local nativeDrawPic = EvolutionAnim.drawPic
+      EvolutionAnim._kantoInMotionGen2DrawPic = nativeDrawPic
+      EvolutionAnim.drawPic = function(self, ...)
+        if mod.options:get("enabled") ~= false and self and not self.blackout then
+          local species = self.showNew and self.newSpecies or self.oldSpecies
+          local animated = species and getSprite(species,
+            { kind = "evolution", mon = self.mon })
+          if animated and drawCenteredPortrait(animated, 7 * 8, 2 * 8,
+              56, 56) then
+            return
+          end
+        end
+        return nativeDrawPic(self, ...)
+      end
+    end
+  end
+  patchGen2Screens()
+
   -- A standalone Animated Menu Pokemon build and older Kanto in Motion builds
   -- used the same generic SummaryMenu marker name. If one of those wrappers
   -- was installed first, the normal injection above can be skipped even though
@@ -675,7 +1074,7 @@ return function(mod)
   -- for the stock Gen 1 status page. It redraws only the portrait box after the
   -- native screen has finished, so the rest of the Gen 1 UI remains untouched.
   local function installStockSummaryPortraitPass()
-    local okSummary, SummaryMenu = pcall(require, "src.ui.SummaryMenu")
+    local okSummary, SummaryMenu = pcall(require, IS_GEN2 and "src.ui.gen2.SummaryMenu" or "src.ui.SummaryMenu")
     if not (okSummary and type(SummaryMenu) == "table"
         and type(SummaryMenu.draw) == "function") then return end
     if SummaryMenu._kantoInMotionStockPortraitDraw then return end
@@ -686,7 +1085,7 @@ return function(mod)
       local okDraw, drawErr = pcall(baseDraw, self, ...)
       if not okDraw then error(drawErr, 0) end
 
-      if mod.options:get("integratedModernUi") ~= false
+      if integratedModernUiEnabled()
           or mod.options:get("enabled") == false
           or knownExternalUiPresent() then
         return
@@ -710,7 +1109,7 @@ return function(mod)
       love.graphics.pop()
     end
   end
-  installStockSummaryPortraitPass()
+  if not IS_GEN2 then installStockSummaryPortraitPass() end
 
   -- Gen1Recomp's evolution movie caches the old and new front images once at
   -- EvolutionState.new(), then alternates those two images while the sequence
@@ -718,7 +1117,8 @@ return function(mod)
   -- so the engine keeps its original timing, cancellation, cry, palette and
   -- evolution logic while our selected animated collection supplies the art.
   local function patchEvolutionScreen()
-    local okEvolution, EvolutionState = pcall(require, "src.ui.EvolutionState")
+    local okEvolution, EvolutionState = false, nil
+    if not IS_GEN2 then okEvolution, EvolutionState = pcall(require, "src.ui.EvolutionState") end
     if not (okEvolution and type(EvolutionState) == "table") then return end
 
     if type(EvolutionState.new) == "function"
@@ -789,7 +1189,7 @@ return function(mod)
   -- begins its one-shot when the interactive title loop starts, then holds the
   -- final frame until the TitleState is destroyed.
   local function patchTitleScreen()
-    local okTitle, TitleState = pcall(require, "src.ui.TitleState")
+    local okTitle, TitleState = pcall(require, IS_GEN2 and "src.ui.gen2.TitleState" or "src.ui.TitleState")
     if not (okTitle and type(TitleState) == "table") then return end
 
     local titlePlayerAtlas, titlePlayerQuads
@@ -1079,6 +1479,7 @@ return function(mod)
     end
 
     local TITLE_ALT_COLOR_PERCENT = 27
+    local TITLE_ALT_COLOR_REPEAT_PERCENT = 5
 
     local function titlePokemon(state)
       if not isLiveTitle(state) or state.scrollPhase == "ball" then return nil end
@@ -1101,15 +1502,29 @@ return function(mod)
           state._animatedMenuTitleFirstPokemonShown = true
           state._animatedMenuTitleAltColor = false
         else
-          state._animatedMenuTitleAltColor = (random(1, 100) <= TITLE_ALT_COLOR_PERCENT)
+          -- Keep the normal 27% chance, but heavily reduce the chance of a
+          -- second shiny immediately following one that was actually shown.
+          -- This still permits rare back-to-back shinies without allowing long
+          -- streaks to occur nearly as often as independent 27% rolls do.
+          local chance = state._animatedMenuTitlePreviousWasAltColor
+            and TITLE_ALT_COLOR_REPEAT_PERCENT or TITLE_ALT_COLOR_PERCENT
+          state._animatedMenuTitleAltColor = (random(1, 100) <= chance)
         end
       end
 
       local generation = selectedGeneration()
       if state._animatedMenuTitleAltColor then
         local shiny = getTitleShinySprite(species, generation)
-        if shiny then return shiny end
+        if shiny then
+          state._animatedMenuTitlePreviousWasAltColor = true
+          return shiny
+        end
       end
+
+      -- Track what was actually displayed rather than only the random roll, so
+      -- a missing alternate-color asset cannot accidentally suppress the next
+      -- Pokemon's normal chance.
+      state._animatedMenuTitlePreviousWasAltColor = false
 
       -- Normal animated sprite is the first fallback. Returning nil if that is
       -- unavailable intentionally leaves TitleState's stock Gen1 sprite alone.
@@ -1276,7 +1691,7 @@ return function(mod)
       love.graphics.pop()
     end)
   end
-  patchTitleScreen()
+  if not IS_GEN2 then patchTitleScreen() end
 
   local function setOption(game, key, value)
     local options = game and game.save and game.save.options
@@ -1406,16 +1821,28 @@ return function(mod)
   end
 
   local function installIntegratedModernUi()
+    if IS_GEN2 then
+      if gen2CleanUiHandle() then
+        local okBridge, bridgeResult = pcall(installStockGen2CleanUiBridge)
+        if not okBridge or bridgeResult ~= true then
+          mod.log:warn("Gen2 Clean UI detected but animated portrait bridge did not install: %s",
+            tostring(okBridge and bridgeResult or bridgeResult))
+        end
+        mod.log:info("Gen2 detected: bundled Modern UI automatically OFF; Gen2 Clean UI owns presentation while Kanto in Motion animations remain active")
+      else
+        mod.log:info("Gen2 detected: bundled Modern UI automatically OFF; native Gen2 UI remains presentation owner")
+      end
+      return
+    end
     local externalUi = activeExternalUiOverhaul()
     if externalUi then
       mod.log:info("%s detected; bundled Gen1 Modern UI suppressed so the external UI can own presentation", externalUi)
       return
     end
-    if mod.options:get("integratedModernUi") == false then
-      mod.log:info("integrated Gen1 Modern UI disabled by Kanto in Motion option; animation/title features remain active")
+    if not integratedModernUiEnabled() then
+      mod.log:info("Gen1 detected: integrated Modern UI remains OFF by saved Gen1 preference")
       return
     end
-
     local source, readErr = mod:read("lib/modern_ui_integrated.lua")
     if not source then
       mod.log:error("cannot read integrated Modern UI: %s", tostring(readErr))
@@ -1435,7 +1862,7 @@ return function(mod)
     if not okInstall then
       mod.log:error("integrated Modern UI failed to install: %s", tostring(installErr))
     else
-      mod.log:info("integrated customized Gen1 Modern UI 0.9.12 enabled")
+      mod.log:info("Gen1 detected: integrated customized Modern UI 0.9.12 enabled by saved/default Gen1 preference")
     end
   end
 
@@ -1455,4 +1882,11 @@ return function(mod)
   end)
 
   installIntegratedModernUi()
+  if IS_GEN2 and gen2CleanUiHandle() then
+    local okBridge, bridgeResult = pcall(installStockGen2CleanUiBridge)
+    if not okBridge and mod.log and type(mod.log.warn) == "function" then
+      mod.log:warn("late Gen2 Clean UI portrait bridge install failed: %s",
+        tostring(bridgeResult))
+    end
+  end
 end

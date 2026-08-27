@@ -1,21 +1,23 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
   "games": [
-    "gen1"
+    "gen1",
+    "gen2"
   ],
-  "game_version": ">=0.1.98 <2.0.0",
+  "game_version": ">=0.2.24 <0.3.0",
   "category": "UI",
   "priority": 105,
   "dependencies": [],
   "optional_dependencies": [
     "gen3_battle_ui",
     "colosseum_ui_overhaul",
-    "useful_bag"
+    "useful_bag",
+    "gen2_clean_ui"
   ],
   "conflicts": [
     "gen1_modern_ui",
@@ -26,6 +28,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion combines animated Pokemon presentation with an optional integrated customized Gen1 Modern UI 0.9.12 interface, including Crimson themes, animated Trainer Card badges, Useful Bag presentation compatibility, and automatic Gen 3 UI-overhaul yielding. Pokemon battle/title sprite art is imported locally.",
+  "description": "Animated Pokemon presentation for Gen1 and Gen2. Gen1 includes the customized Modern UI with a saved Gen1-only preference; Gen2 automatically yields UI ownership to the native interface or stock Gen2 Clean UI while retaining animated Pokemon support. Includes the Gen1 Poke Mart Modern UI fix.",
   "github": "HaseoSora/Kanto-in-Motion"
 }

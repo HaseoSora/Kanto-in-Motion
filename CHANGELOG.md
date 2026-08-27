@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.0
+
+- Added Gen 2 game targeting for Gold, Silver, and Crystal on the Gen1Recomp 0.2.24 architecture.
+- Added generation-aware UI ownership: Gen 1 uses the saved Gen 1 Modern UI preference while Gen 2 automatically suppresses Kanto in Motion's bundled Modern UI.
+- Restored the Gen 1 `INTEGRATED MODERN UI` toggle as a saved Gen 1-only preference; new installs default ON, and a manual OFF persists across later Gen 1 launches.
+- Added compatibility with the original/unmodified Gen2 Clean UI 0.4.1.
+- Added stock Gen2 Clean UI live animated portrait bridging without requiring Clean UI to be patched.
+- Confirmed animated Gen 2 Status/Summary portraits in real Gold/Crystal testing.
+- Added Gen 2 portrait compatibility hooks for Party, Pokédex, and Evolution presentation.
+- Fixed Gen 1 Poké Mart BUY/SELL screens falling back to the original Gen 1 UI by recognizing Gen1Recomp's custom ShopMenu draw path.
+- Preserved the v1.1.4 Trainer Card, animated badge, Useful Bag, stock Gen1 animated portrait, and centralized Mod Menu work.
+- Added two release package variants: Full Assets and No Pokémon Assets.
+
 ## 1.1.4
 
 - Fixed stock Gen1 Pokédex animated portraits when **INTEGRATED MODERN UI = OFF** and retained safe fallback to the native Gen1 sprite when animated art is unavailable.
