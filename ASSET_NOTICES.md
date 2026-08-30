@@ -1,36 +1,46 @@
-# Asset Notices
+# Asset notices
 
-Kanto in Motion v1.2.0 is packaged in two variants.
+Kanto in Motion v1.3.0 is packaged in two variants.
 
 ## No Pokémon Assets package
 
-`Kanto-in-Motion-v1.2.0-No-Pokemon-Assets.zip` excludes locally imported Pokémon battle/title payloads.
+`Kanto-in-Motion-v1.3.0-No-Pokemon-Assets.zip` excludes locally imported/generated Pokémon front/back/title artwork and the generated sprite metadata that directly depends on those payloads.
 
-Excluded generated/user-supplied paths include:
+Excluded from that package:
 
 - `assets/battle/front-animated/`
+- `assets/battle/back-animated/`
 - `assets/title/`
-- `data/animated_menu_sprites_gen2.lua` through `gen5`
-- `data/animated_battle_sprites_gen2_shiny.lua` through `gen5_shiny`
+- `data/animated_menu_sprites_gen2.lua` through `data/animated_menu_sprites_gen5.lua`
+- `data/animated_battle_sprites_gen2_shiny.lua` through `data/animated_battle_sprites_gen5_shiny.lua`
+- `data/animated_battle_backs_gen3.lua`
 - `data/title_player_red.lua`
 
-Players can populate compatible local assets with `tools/import_assets.py`.
+The no-assets package keeps KIM's source code, Modern UI assets, integrated KRS battle backgrounds, integrated move-animation effects/audio, trainer presentation assets, shiny encounter cue, metadata that is not itself Pokémon artwork, and the local import workflow.
+
+Players can populate compatible local animated assets with `tools/import_assets.py` or their established local sprite-import workflow.
 
 ## Full Assets package
 
-`Kanto-in-Motion-v1.2.0-Full-Assets.zip` contains the animated Pokémon/title payloads present in the maintainer's working release build.
+`Kanto-in-Motion-v1.3.0-Full-Assets.zip` contains the animated Pokémon/title payloads present in the maintainer's working release build.
 
-Redistribution of third-party or Pokémon-derived artwork is separate from the Kanto in Motion source-code permissions. Anyone redistributing the Full Assets package is responsible for ensuring they have the necessary rights or permission for the included artwork.
+Redistribution of third-party or Pokémon-derived artwork is separate from Kanto in Motion's own source-code permissions. Anyone redistributing the Full Assets package is responsible for ensuring they have the necessary rights or permission for included artwork.
 
-## Trainer Card presentation assets
+## KRS battle backgrounds
 
-Both variants intentionally include the small assets under `assets/trainer_card/` used by the integrated Gen1 Modern UI Trainer Card.
+`assets/battle/backgrounds/krs/` contains the integrated Kanto Rework Suite battle-background set used by **ARENA FILL = KRS**.
 
-The animated badge artwork is credited to **xpixelpriorx**:
+Credit: **Faendra**  
+https://github.com/Faendra/kanto-rework-suite
 
-https://www.deviantart.com/xpixelpriorx
+## Battle trainer selector assets
 
-Kanto in Motion does not claim ownership of this third-party artwork.
+`assets/battle/player-trainers/` contains static PLAYER TRAINER choices. `assets/battle/player-trainers-animated/` contains the supplied five-frame Battle Art player-trainer atlases, and `assets/battle/player-trainers-frames/` contains generated first-frame helpers used when global ANIMATION is OFF.
+
+Credit for the Battle Art integration lineage: **absol89**  
+https://github.com/absol89/DramaticShapeVoxelMod
+
+Kanto in Motion does not claim ownership of those trainer images.
 
 ## Integrated Modern UI assets
 
@@ -39,7 +49,22 @@ Kanto in Motion does not claim ownership of this third-party artwork.
 Original project credit: **ArmstrongThomas**  
 https://github.com/ArmstrongThomas/gen1-modern-ui
 
-See `THIRD_PARTY_NOTICES.md`.
+## Trainer Card presentation assets
+
+The animated earned-badge artwork under the Trainer Card presentation is credited to **xpixelpriorx**:
+
+https://www.deviantart.com/xpixelpriorx
+
+Kanto in Motion does not claim ownership of this artwork.
+
+## Shiny encounter presentation assets
+
+v1.3.0 includes:
+
+- `assets/effects/shiny_sparkle.png`
+- `assets/sfx/shiny.wav`
+
+These supplied assets are used only for the one-shot shiny encounter sparkle/audio cue. Kanto in Motion does not claim ownership of them.
 
 ## Trademark / affiliation notice
 

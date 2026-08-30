@@ -1,120 +1,155 @@
-# Kanto in Motion
+# Kanto in Motion v1.3.0
 
-**Kanto in Motion** adds animated Pokémon presentation to Gen1Recomp and now supports both **Gen 1** and **Gen 2** games.
+**Kanto in Motion** is an animated Pokémon presentation and battle overhaul for Gen1Recomp. It supports **Pokémon Red / Blue / Yellow** and retains the Gen 2 presentation support introduced in v1.2.0 for **Gold / Silver / Crystal**.
 
-The internal mod ID remains `animated_menu_pokemon`, preserving compatibility with existing Kanto in Motion / Animated Menu Pokémon settings and integrations.
+The internal mod ID remains `animated_menu_pokemon`, so existing Kanto in Motion settings can carry forward when upgrading.
 
-## v1.2.0 highlights
+## v1.3.0 highlights
 
-- **Gen 1:** Red, Blue, and Yellow support is retained.
-- **Gen 2:** Gold, Silver, and Crystal are now supported on Gen1Recomp 0.2.24.
-- Gen 1 keeps Kanto in Motion's integrated customized **Gen1 Modern UI 0.9.12**.
-- The Gen 1 Modern UI preference defaults **ON**, but if a player turns it **OFF**, that choice is remembered on future Gen 1 launches.
-- On Gen 2, Kanto in Motion's bundled Modern UI is automatically suppressed. The normal Gen 2 UI or an installed **stock Gen2 Clean UI 0.4.1** remains the UI owner.
-- Stock Gen2 Clean UI does **not** need to be modified for Kanto in Motion.
-- Kanto in Motion can feed live animated Pokémon portraits into stock Gen2 Clean UI. Animated **Status/Summary** has been confirmed in real Gen 2 testing; compatibility hooks are also included for Party, Pokédex, and Evolution presentation.
-- The Gen 1 Poké Mart BUY/SELL flow is recognized by the integrated Modern UI instead of falling back to the original Gen 1 shop presentation.
+v1.3.0 is a major battle/presentation update over v1.2.0. The internal v8.6.x test builds that led to this release are consolidated here as one public version.
+
+- Added Kanto in Motion's standalone **Gen 1 Battle System**: fullscreen 2D battle presentation without requiring Battle Art's voxel renderer.
+- Added **KRS battle backgrounds** with authored player/enemy stance positions, plus the previous GEN6 and flat fallback arena choices.
+- Integrated **Kanto Rework Battle Animations** for all 165 Gen 1 moves, with an option to fall back to native Gen1Recomp animations.
+- Integrated **Pokéball Colorfix** behavior for Gen 1 battle presentation.
+- Added animated Gen 2/3/4/5 opponent fronts and animated Gen 3/5 player backs, including shiny routing.
+- Added a configurable **PLAYER TRAINER** selector with animated Battle Art-style trainer intros where available.
+- Added persistent **SHINY ODDS** choices from native 1/8192 through ALWAYS. Shiny DVs remain attached to the Pokémon so captured shinies stay shiny.
+- Added a one-cycle **shiny sparkle + audio cue** for shiny battlers on both the enemy and player sides.
+- Growl and Roar now use the cry of the Pokémon that actually used the move while integrated move animations are active.
+- Fixed Poké Ball throw, opening, shake, and landing presentation against KIM's fullscreen enemy positions, including mobile portrait/landscape.
+- Modern UI and vanilla UI can now swap ownership **live without restarting** on desktop and mobile.
+- Added mobile portrait battle layout fixes, live **BATTLE TEXT SIZE**, and KIM-side Quality of Life EXP-bar alignment without modifying Quality of Life.
+- Added KIM-side **Typed Move Colors** compatibility so move effectiveness symbols appear inside the integrated Modern move menu without modifying Typed Move Colors.
+- Added KIM-side **Overworld Wild Spawns / Wilds** shiny compatibility so visible shiny overworld Pokémon use that mod's own shiny sprites and keep the same shiny identity when battled or caught.
+- Retains all v1.2.0 Gen 2, Trainer Card, animated badge, Useful Bag, Poké Mart, and animated menu/status/pokedex work.
 
 ## Animated Pokémon features
 
 - Animated **Gen 2, Gen 3, Gen 4, or Gen 5** front-sprite support.
-- **Gen 5** selected by default.
-- Animated Pokémon on supported Summary/Status, Pokédex, Party, and evolution presentation surfaces.
-- Red/Blue title-screen Pokémon can use the selected animated sprite generation.
-- Red/Blue title pool includes all **151 Kanto Pokémon**.
-- Random title selection avoids the **24 most recently displayed species** whenever possible.
+- **Gen 5** is selected by default.
+- Animated Pokémon on supported Summary/Status, Pokédex, Party, evolution, title, and Gen 1 battle surfaces.
+- Red/Blue title pool includes all **151 Kanto Pokémon** and avoids recently displayed species when possible.
 - Adjustable title cycle speed: **NORMAL**, **SLOW**, or **SLOWER**.
-- Optional animated Red title presentation: forward → reverse → 5-second pause → repeat.
-- Missing imported artwork falls back safely instead of breaking the screen.
+- Optional animated Red title trainer: forward → reverse → pause → repeat.
+- Missing artwork fails open to a supported fallback instead of breaking the screen.
 
 ## Gen 1 UI behavior
 
-Kanto in Motion includes the customized **Gen1 Modern UI 0.9.12** build used by this project.
+Kanto in Motion includes the customized **Gen1 Modern UI** build used by this project.
 
-On Gen 1 only, **INTEGRATED MODERN UI** is available in Kanto in Motion settings:
+**INTEGRATED MODERN UI** is available on Gen 1:
 
-- New/default install: **ON**
-- If manually changed to **OFF**, the setting remains OFF on later Gen 1 launches.
-- Launching a Gen 2 game does not overwrite the saved Gen 1 preference.
-- Returning to Gen 1 restores the player's saved Gen 1 choice.
+- New/default install: **ON**.
+- The saved preference is remembered across launches.
+- Switching ON or OFF now takes effect live on both desktop and mobile; a game restart is not required for the ownership handoff.
+- OFF yields the relevant presentation surfaces back to vanilla Gen1Recomp.
 
 The integrated UI covers supported responsive menus, Party, Summary, Pokédex, Bag, PC, Trainer Card, dialogue, battle Items/Pokémon flow, nickname flow, level-up stats, and the centralized Mod Menu.
 
-### Gen 1 Poké Mart fix
-
-v1.2.0 recognizes Gen1Recomp's custom `ShopMenu` draw path so the Poké Mart BUY/SELL flow can remain in Modern UI instead of unexpectedly exposing the original Gen 1 UI.
-
 ## Gen 2 UI behavior
 
-On Gen 2, Kanto in Motion's bundled Modern UI is always **OFF**. This is intentional because Gen 2 uses a separate UI/state implementation.
+On Gen 2, Kanto in Motion's bundled Modern UI remains intentionally **OFF**. Gen 2 uses its own UI/state implementation.
 
-Kanto in Motion continues to provide animated Pokémon presentation while yielding interface ownership to:
+Kanto in Motion supplies animated Pokémon presentation while yielding interface ownership to:
 
 - Gen1Recomp's native Gen 2 UI, or
 - the original/unmodified **Gen2 Clean UI 0.4.1** when installed.
 
-The Gen2 Clean UI compatibility is implemented entirely from the Kanto in Motion side; users do **not** need a modified Clean UI package.
+Animated Status/Summary has been confirmed in real Gen 2 testing. Party, Pokédex, and Evolution compatibility bridges are also included.
 
-Animated Status/Summary is confirmed working in Gold/Crystal testing. Party, Pokédex, and Evolution bridges are included but should still be treated as screen-by-screen compatibility until each flow has been exercised in-game.
+## Kanto in Motion settings
 
-## Options
+Open **KANTO IN MOTION** from the mod settings screen. Gen 1 also exposes a **BATTLE → OPEN** submenu.
 
-Settings are available under **OPTIONS → KANTO IN MOTION** or through a compatible centralized Mod Menu.
+### Main settings
 
-| Setting | Choices | Default | Notes |
+| Setting | Choices | Default | What it does |
 | --- | --- | --- | --- |
-| Menu Sprites | ON / OFF | ON | Both generations |
-| Integrated Modern UI | ON / OFF | ON | **Gen 1 only**; saved preference |
-| Sprite Gen | GEN 2 / GEN 3 / GEN 4 / GEN 5 | GEN 5 | Both generations |
-| Animation | ON / OFF | ON | Both generations |
-| Title Screen | ON / OFF | ON | Gen 1 title support |
-| Title Cycle Speed | NORMAL / SLOW / SLOWER | SLOW | Gen 1 title support |
+| MENU SPRITES | ON / OFF | ON | Enables KIM's animated Pokémon presentation on supported menu/status surfaces. |
+| INTEGRATED MODERN UI | ON / OFF | ON | **Gen 1 only.** Chooses KIM's integrated Modern UI or vanilla UI. Ownership swaps live without restarting. |
+| SPRITE GEN | GEN 2 / GEN 3 / GEN 4 / GEN 5 | GEN 5 | Selects the animated front-sprite generation used by KIM menu/title presentation and by battle **FRONT SET = SAME AS MENU**. |
+| ANIMATION | ON / OFF | ON | Enables animated sprite playback. Also controls supported animated player-trainer intros; OFF holds them on their first frame. |
+| TITLE SCREEN | ON / OFF | ON | Enables KIM's animated Red/Blue title-screen Pokémon presentation. |
+| TITLE TRAINER | ANIMATED / ORIGINAL GEN 1 | ANIMATED | Selects KIM's animated Red title trainer or Gen1Recomp's original title trainer. |
+| TITLE CYCLE SPEED | NORMAL / SLOW / SLOWER | SLOW | Controls how quickly title-screen Pokémon change. |
 
-Turning **Animation** off keeps the selected sprite generation but holds a single frame.
+## KANTO IN MOTION → BATTLE settings
 
-## Two release packages
+The Battle submenu is currently **Gen 1 only**. These are the current v1.3.0 settings and their behavior.
 
-v1.2.0 is provided in two ZIPs. Install **one or the other**, not both.
+| Setting | Choices | Default | What it does |
+| --- | --- | --- | --- |
+| **BATTLE SYSTEM** | ON / OFF | ON | Master switch for KIM's Gen 1 battle presentation. OFF yields battle presentation to vanilla Gen1Recomp or another compatible battle owner. |
+| **BATTLE SPRITES** | ON / OFF | ON | Enables KIM's animated Pokémon battle sprites. Turning it off disables KIM's animated battler replacement without enabling voxel rendering. |
+| **SHINY ODDS** | NATIVE 1/8192; 1/4096; 1/2048; 1/1024; 1/512; 1/256; 1/128; 1/64; 1/32; 1/16; 1/8; 1/4; 1/2; ALWAYS | NATIVE 1/8192 | Controls wild shiny generation. NATIVE leaves Gen 1 DVs alone; the other choices deliberately roll KIM's shiny DV pattern. The stored DVs keep captured Pokémon shiny. Compatible Overworld Wild Spawns/Wilds Pokémon use the same identity. |
+| **MOVE ANIMATIONS** | ON / OFF | ON | ON uses the integrated Kanto Rework / Pokémon Essentials-style animation set for all 165 Gen 1 moves. OFF falls back to Gen1Recomp's native move animations. |
+| **FRONT SET** | SAME AS MENU / GEN 2 / GEN 3 / GEN 4 / GEN 5 | SAME AS MENU | Chooses the animated opponent/front sprite collection. SAME AS MENU follows **SPRITE GEN**. |
+| **BACK SET** | GEN 5 / GEN 3 / ROM | GEN 5 | Chooses the player-side battle sprite source. Gen 3 and Gen 5 use animated backs; ROM keeps the game's original back sprite. |
+| **PLAYER TRAINER** | DEFAULT / ROM, PNG, GEN 1–5, ASH, GARY, RED, ASH FRONT, MISTY FRONT, BROCK FRONT, BULMA FRONT, GARY FRONT, BOY, LASS, HILBERT | DEFAULT / ROM | Chooses the player trainer shown during the battle intro/send-out. When a five-frame atlas exists, the global **ANIMATION** setting controls whether it animates. Static-only choices remain static. DEFAULT / ROM yields to the game or another trainer provider. |
+| **PLAYER PKMN SIZE** | 50%–200% in 5% steps | 125% | Scales only the player-side Pokémon around its normal KIM battle anchor. Enemy size is independent. |
+| **HUD SCALE** | OG / SCALED | OG | Battle Art-style HUD scale. OG uses the normal window-fit integer scale; SCALED uses the one-rung-smaller compact HUD. Compatible Quality of Life EXP placement follows the selected HUD geometry. |
+| **BATTLE TEXT SIZE** | 100%–400% in 25% steps | 150% | Scales only the integrated Modern UI's battle command, move, and message text. It does not resize the lower panel, HP/status HUD, or Quality of Life EXP bar. When Modern UI is OFF, vanilla text remains vanilla-owned. |
+| **MOVE LAYOUT** | GRID / VERTICAL | GRID | GRID uses a 2×2 move grid. VERTICAL lists the four moves top-to-bottom. |
+| **MOVE INFO** | ON / OFF | OFF | Shows the selected move's type, PP, power, and accuracy beside the move list. OFF gives move names the full panel width. |
+| **ARENA FILL** | OFF / WHITE / KRS / GEN6 | KRS | Chooses the battle arena. KRS uses Kanto Rework Suite location/time backgrounds and authored stance anchors. GEN6 uses KIM's previous flat Gen 6 arena set. WHITE is a plain field; OFF leaves the normal source background path. |
+| **BG Y-OFFSET** | 0 PX–400 PX in 20 PX steps | 140 PX | Applies to the GEN6 arena source and chooses how far down into the source image the top crop begins. |
+| **HUD COLOR** | COLOR / INVERTED | COLOR | Chooses Battle Art-style HP/status glyph treatment. COLOR uses dark glyphs; INVERTED uses light glyphs with a dark pixel shadow. HP gauge health colors remain green/yellow/red. |
 
-### Full Assets
+The Battle submenu also includes **RESET TO DEFAULT**, which restores only the Battle settings above to their defaults.
 
-`Kanto-in-Motion-v1.2.0-Full-Assets.zip`
+### Typed Move Colors compatibility
 
-Includes the animated Pokémon/title assets present in the maintainer's release build, so no local asset import is required for those included sets.
+When the external **Typed Move Colors** mod is installed, KIM's Modern move tiles reuse that mod's own effectiveness calculation instead of duplicating its type chart. Its MOVE EFFECT option remains authoritative. KIM mirrors the resulting effectiveness symbols inside its move tiles while leaving the external mod unmodified.
 
-### No Pokémon Assets
+### Overworld Wild Spawns / Wilds shiny compatibility
 
-`Kanto-in-Motion-v1.2.0-No-Pokemon-Assets.zip`
+When compatible `overworld_wild_spawns` / Wilds is installed, KIM assigns the persistent shiny identity before the visible spawn is created. Wilds continues to own spawning, movement, sizing, water handling, and the actual overworld art; it simply selects its own shiny sprite for a shiny spawn. The same DVs are carried into battle, Safari encounters, and direct overworld catches.
 
-Contains the mod code, integrated UI, Trainer Card presentation assets, and importer, but excludes locally imported Pokémon battle/title payloads.
+### Quality of Life compatibility
 
-Import compatible assets with:
+KIM does not modify Quality of Life. Its battle EXP/caught overlays remain source-owned. KIM only supplies the geometry needed to keep those overlays aligned with KIM's battle HUD, including the mobile portrait EXP-bar correction.
 
-```bash
-python tools/import_assets.py "path/to/compatible-sprite-source.zip"
-```
+## Credits and acknowledgements
 
-or:
+Kanto in Motion includes or adapts work from several community projects. Credit for those original projects belongs to their authors.
 
-```bash
-python tools/import_assets.py "path/to/compatible-sprite-source"
-```
+- **Battle Art / DramaticShapeVoxelMod — absol89**  
+  https://github.com/absol89/DramaticShapeVoxelMod  
+  KIM's standalone Battle System adapts selected Battle Art 2D battle/HUD geometry, trainer presentation, and compatibility behavior while deliberately omitting the voxel/world renderer.
 
-## Trainer Card credit
+- **Kanto Rework Battle Anims + KRS battle backgrounds — Faendra**  
+  https://github.com/Faendra/kanto-rework-suite  
+  KIM integrates the Kanto Rework battle-animation data/bridge lineage and KRS battle-background routing used by the v1.3.0 arena.
 
-The animated Trainer Card badge artwork is credited to **xpixelpriorx**:
+- **Pokéball Colorfix — keberos**  
+  https://github.com/keberos/pokeball-colorfix  
+  KIM integrates the Gen 1 Poké Ball palette/presentation fixes required by its standalone battle path.
 
-https://www.deviantart.com/xpixelpriorx
+- **Gen1 Modern UI — ArmstrongThomas**  
+  https://github.com/ArmstrongThomas/gen1-modern-ui  
+  KIM includes a heavily customized integrated build derived from the Gen1 Modern UI foundation.
 
-Thank you to xpixelpriorx for the animated badge artwork used by Kanto in Motion's earned-badge presentation.
+- **Animated Trainer Card badges — xpixelpriorx**  
+  https://www.deviantart.com/xpixelpriorx  
+  The animated earned-badge artwork used by KIM's Trainer Card presentation is credited to xpixelpriorx.
 
-## Modern UI credit
+- **Gen 9 Move Animation Project — KRLW890 and contributors**  
+  https://www.eeveeexpo.com/resources/1480/  
+  The Pokémon Essentials `PkmnAnimations.rxdata` animation data used by the integrated Kanto Rework animation conversion identifies this project as its upstream source. See `THIRD_PARTY_NOTICES.md` for details.
 
-The Gen1 Modern UI foundation was created by **ArmstrongThomas**:
+Kanto in Motion does **not** claim ownership of third-party or Pokémon-derived artwork. See `THIRD_PARTY_NOTICES.md` and `ASSET_NOTICES.md` before redistributing the Full Assets package.
 
-https://github.com/ArmstrongThomas/gen1-modern-ui
+## External compatibility mods are not bundled
 
-Kanto in Motion integrates the customized local 0.9.12-based build used by this project. See `THIRD_PARTY_NOTICES.md` for additional attribution and redistribution notes.
+The following integrations are compatibility-only in v1.3.0. Their packages are **not copied, modified, or redistributed by Kanto in Motion**:
+
+- Quality of Life
+- Typed Move Colors
+- Overworld Wild Spawns / Wilds of Kanto
+- Gen2 Clean UI
+- Useful Bag
+- other UI/battle mods using KIM's compatibility API
 
 ## Compatibility
 
@@ -122,45 +157,73 @@ Kanto in Motion integrates the customized local 0.9.12-based build used by this 
 - Games: **Gen 1 + Gen 2**
 - Gen 1 carts: **Red / Blue / Yellow**
 - Gen 2 carts: **Gold / Silver / Crystal**
-- Tested engine target for this release: **Gen1Recomp 0.2.24**
 - Declared engine range: **>= 0.2.24 and < 0.3.0**
-- Gen1 Modern UI: integrated customized **0.9.12** build
+- Integrated Gen1 Modern UI: customized project build
 - Gen2 Clean UI: original/unmodified **0.4.1** supported
 - Battle Art: **not required at runtime**
-- Useful Bag: official/unmodified releases supported on the Gen 1 integrated-UI path
 - Link-relevant gameplay data: unchanged (`affects_link: false`)
 
-Because Kanto in Motion uses `engine_internals` for UI integration, large Gen1Recomp UI refactors may require an update even when the manifest version range still accepts the engine.
+### Open UI / battle compatibility API
+
+Kanto in Motion exposes an opt-in compatibility registry so UI and battle mods can coordinate ownership without requiring KIM-specific file patches.
+
+A cooperating battle mod can register through `animated_menu_pokemon`'s public `kantoInMotionCompatibility` export and choose:
+
+- `modernUi = "native"` — source battle mod owns its complete battle UI.
+- `modernUi = "lower"` — source keeps world/battlers/effects/HP/status/EXP; KIM Modern UI owns only dialogue, commands, and moves.
+- `modernUi = "full"` — compatible standard battle state opts into the complete Modern battle presenter.
+
+Scene-owning battle mods make KIM's standalone battle scene yield by default. A source can explicitly opt into KIM sprites and/or KIM animations through the compatibility registration.
+
+A cooperating UI mod can claim only the presenter families it replaces (`battle`, `dialogue`, `pokemon`, `menus`, `manager`, `title`, `all`, or exact presenter-kind names). Invalid or failing registrations are fail-open so the native/source presentation remains visible.
+
+Because Kanto in Motion uses `engine_internals` for UI/battle integration, large Gen1Recomp internal refactors may require an update even when the manifest range still accepts the engine.
+
+## Release packages
+
+v1.3.0 is provided in two ZIPs. Install **one**, not both.
+
+### Full Assets
+
+`Kanto-in-Motion-v1.3.0-Full-Assets.zip`
+
+Includes the animated Pokémon/title payloads present in the maintainer's working release build, along with the integrated battle/background/UI assets used by KIM.
+
+### No Pokémon Assets
+
+`Kanto-in-Motion-v1.3.0-No-Pokemon-Assets.zip`
+
+Excludes the locally imported Pokémon front/back/title artwork and associated generated sprite metadata where required. The runtime code remains intact and `tools/import_assets.py` can populate compatible local sprite assets.
+
+See `ASSET_NOTICES.md` for the exact packaging boundary.
 
 ## Installation
 
-1. Download **one** v1.2.0 ZIP: Full Assets or No Pokémon Assets.
-2. Import/extract it as a Gen1Recomp mod.
-3. If using the no-assets package, run `tools/import_assets.py` against a compatible local sprite source.
+1. Download **one** v1.3.0 ZIP: Full Assets or No Pokémon Assets.
+2. Import the ZIP through Gen1Recomp's Mods interface.
+3. If using No Pokémon Assets, populate compatible local sprite art using `tools/import_assets.py` or your established local asset workflow.
 4. Enable Kanto in Motion.
-5. Gen 1 uses the player's saved Gen 1 Modern UI preference.
-6. Gen 2 automatically suppresses Kanto in Motion's Modern UI and uses the native Gen 2 UI or stock Gen2 Clean UI.
+5. Do not enable a separate Gen1 Modern UI / Gen1 Clean UI at the same time as KIM's integrated Gen 1 UI unless you intentionally disable/yield the overlapping presenter.
 
-Do not enable a separate `gen1_modern_ui` or `gen1_clean_ui` alongside Kanto in Motion's Gen 1 integrated UI.
+### Upgrading from v1.2.0
 
-### Upgrading from older Kanto in Motion
+Replace the v1.2.0 Kanto in Motion package with v1.3.0. The internal ID remains `animated_menu_pokemon`, so compatible saved KIM options carry forward.
 
-Replace the older Kanto in Motion package with v1.2.0. The internal ID remains `animated_menu_pokemon`, so compatible saved mod options can carry forward.
-
-If upgrading from **Animated Menu Pokémon 0.1.26**, remove/disable the old package before enabling Kanto in Motion because they share the same internal mod ID.
+If upgrading from the older **Animated Menu Pokémon** package, remove/disable that package first because it shares the same internal mod ID.
 
 ## Repository layout
 
-- `main.lua` — generation detection, animated sprite provider, stock-screen hooks, title animation, Gen2 compatibility bridges, and UI bootstrap.
-- `lib/modern_ui_integrated.lua` — customized Gen1 Modern UI integration.
-- `lib/modern_ui_gen2.lua` — retained Gen2 compatibility support code; bundled Modern UI ownership remains suppressed on Gen2 in v1.2.0.
-- `assets/pixel_frame*.png` — integrated Modern UI frame assets.
-- `assets/trainer_card/` — Trainer Card presentation assets.
+- `main.lua` — generation detection, options, animated sprite provider, battle presentation, compatibility hooks, title animation, and UI bootstrap.
+- `lib/modern_ui_integrated*.lua` — customized Gen1 Modern UI integration and platform presenters.
+- `lib/integrated_krba.lua` / `lib/krba_essentials_player.lua` — integrated Kanto Rework / Pokémon Essentials animation bridge.
+- `lib/integrated_pokeball_colorfix.lua` / `lib/pokeball_target_fix.lua` — integrated Poké Ball presentation and fullscreen catch-target compatibility.
+- `lib/shiny_encounter_fx.lua` — one-shot shiny sparkle/audio presentation.
+- `lib/overworld_wild_shiny_bridge.lua` — KIM-side Wilds/Overworld Wild Spawns shiny identity bridge.
+- `data/krs_battle_backgrounds.lua` — KRS background routing and stance metadata.
+- `assets/battle/backgrounds/krs/` — KRS battle background assets used by the KRS arena choice.
 - `tools/import_assets.py` — local animated-asset importer.
-- `manifest.json` — Gen1Recomp metadata.
-- `DIFFERENCES.md` — deliberate presentation differences.
-- `ASSET_NOTICES.md` — asset and redistribution notes.
-- `CHANGELOG.md` — release history.
+- `THIRD_PARTY_NOTICES.md` / `ASSET_NOTICES.md` — attribution and redistribution notes.
+- `CHANGELOG.md` / `RELEASE_NOTES.md` — public release summary plus retained development history.
 
 ## AI development disclosure
 
