@@ -964,15 +964,10 @@ local function viewportForTouchControls(game, viewport)
 end
 
 local function touchBattleControlsVisible(game)
-  local touch = game and game.touchControls
-  local stack = game and game.stack
-  if not touch or (stack and type(stack.touchControlsHidden) == "function"
-      and stack:touchControlsHidden()) then return false end
-  if type(touch.visible) ~= "function" then return false end
-  local ok, visible = pcall(touch.visible, touch)
-  return ok and visible == true
+  -- Windows implementation: TouchControls are input only. Never route a
+  -- touchscreen-capable desktop/handheld through Android/iOS presenter code.
+  return false
 end
-
 
 local function fullViewportRect(viewport)
   if viewport and viewport.fullSafe then
@@ -1277,19 +1272,6 @@ end
 return function(mod)
 
   local runtime = {}
-  runtime.hostPlatform = function()
-    local system = love and love.system
-    if not system or type(system.getOS) ~= "function" then return "" end
-    local ok, value = pcall(system.getOS)
-    return ok and safeText(value) or ""
-  end
-  runtime.nativeMobilePlatform = function()
-    local value = runtime.hostPlatform()
-    return value == "Android" or value == "iOS"
-  end
-  runtime.windowsPlatform = function()
-    return runtime.hostPlatform() == "Windows"
-  end
   runtime.nativeNewGameGames = setmetatable({}, { __mode = "k" })
   runtime.stateGames = setmetatable({}, { __mode = "k" })
   local okStrings, engineStrings = pcall(require, "src.core.Strings")
@@ -6011,8 +5993,7 @@ return function(mod)
   runtime.remapBattleMoveGrid = function(game)
     local stack = game and game.stack
     local state = stack and type(stack.top) == "function" and stack:top() or nil
-    if not runtime.battlePresenterActive(game, state)
-        and not runtime.windowsKimBattleVisualActive(game, state) then return end
+    if not runtime.battlePresenterActive(game, state) then return end
     local phase = state and state.phase
     if phase ~= "moveSelect" and phase ~= "mimicSelect" then return end
     local kimBattle = state and state._kantoInMotionBattleLite == true
@@ -6445,16 +6426,12 @@ return function(mod)
       return state.wideLayout == true
     end
     if runtime.option("battleUiWip", true) ~= true then return false end
-    -- Windows-safe KIM path: never decorate/suppress the source BattleState
-    -- while Game:draw is active. Windows' LOVE graphics stack is shallower
-    -- here than Android's; the final Modern lower panel is drawn later from
-    -- render.hud instead. This applies only while KIM's Battle System owns the
-    -- battle, leaving unrelated Modern UI screens untouched.
-    if runtime.windowsPlatform() and runtime.option("battleSystem", true) ~= false then
-      return false
-    end
-    -- TouchControls are input chrome only on native mobile hosts. Android/iOS
-    -- keep the v8.6.38 hybrid battle presenter.
+    -- The engine's virtual controls are themselves the mobile battle chrome.
+    -- Yield only the base BattleState while they are visible so commands/text
+    -- use the compact source UI between/above the controls. Child Bag/Party
+    -- screens remain eligible for Modern UI and desktop/controller-only play
+    -- is unchanged.
+    if touchBattleControlsVisible(game) then return false end
     -- Full UI overhauls can claim the battle presenter through the open KIM
     -- UI registry. Their claim wins before any lower-panel integration.
     if runtime.externalUiOwner("battle", state, game) then return false end
@@ -6502,19 +6479,6 @@ return function(mod)
     if runtime.option("battleSystem", true) ~= false then return false end
     return type(runtime.battleUsesWideLayout) == "function"
       and runtime.battleUsesWideLayout(state, game) == true
-  end
-
-  runtime.windowsKimBattleVisualActive = function(game, state)
-    if not runtime.windowsPlatform() then return false end
-    game = runtime.ownerGame(state, game or currentGame)
-    if runtime.option("battleUiWip", true) ~= true
-        or runtime.option("integratedModernUi", true) == false
-        or runtime.option("battleSystem", true) == false then return false end
-    if type(state) ~= "table" or runtime.kindFor(state, game) ~= "battle" then
-      return false
-    end
-    if runtime.externalUiOwner("battle", state, game) then return false end
-    return true
   end
 
   runtime.battlePresenterActiveForState = function(game, state, kind)
@@ -13848,7 +13812,7 @@ return function(mod)
     local showMoveInfo = runtime.option("battleMoveInfo", false) == true
     local detailW = 0
     if showMoveInfo then
-      if runtime.nativeMobilePlatform() and touchBattleControlsVisible(game) then
+      if touchBattleControlsVisible(game) then
         detailW = clamp(w * 0.18, 90, math.max(90, w * 0.21))
       else
         detailW = clamp(w * 0.24, 190, math.max(190, w * 0.28))
@@ -15525,33 +15489,6 @@ return function(mod)
     end
 
     if isTop and fullscreenLowerPanel then
-      -- Mobile void fill uses KIM's *actual* final battlefield rectangle.
-      -- main.lua publishes this after Android DPI + TouchSkin placement so the
-      -- portrait top/bottom theme bands meet the KRS image exactly instead of
-      -- relying on Modern UI's unrelated responsive arena estimate.
-      local mobileTouch = runtime.nativeMobilePlatform()
-        and touchBattleControlsVisible(game)
-      local mobileStage = mobileTouch and (
-        (source and source._kantoInMotionMobileStageRect)
-        or (native and native._kantoInMotionMobileStageRect)
-        or (state and state._kantoInMotionMobileStageRect)) or nil
-      if mobileTouch and orientation == "portrait" and type(mobileStage)=="table" then
-        local windowW, windowH = love.graphics.getDimensions()
-        local stageTop = clamp(tonumber(mobileStage.y) or 0, 0, windowH)
-        local stageBottom = clamp(tonumber(mobileStage.bottom)
-          or ((tonumber(mobileStage.y) or 0)+(tonumber(mobileStage.h) or 0)),
-          0, windowH)
-        setColor(battleRuntime.opaque(theme.colors.surfaceRaised
-          or theme.colors.surface))
-        if stageTop > 0 then
-          love.graphics.rectangle("fill", 0, 0, windowW, stageTop)
-        end
-        if stageBottom < windowH then
-          love.graphics.rectangle("fill", 0, stageBottom, windowW,
-            windowH-stageBottom)
-        end
-      end
-
       -- KRS battle backgrounds are 1920x950. When Kanto in Motion lifts that
       -- scenery on a taller viewport, the transformed image can end above the
       -- physical bottom edge. Turn that unavoidable remainder into an
@@ -15567,24 +15504,13 @@ return function(mod)
         local fy = math.max(fullY, krsFooterTop)
         setColor(battleRuntime.opaque(theme.colors.surfaceRaised
           or theme.colors.surface))
-        if runtime.nativeMobilePlatform() and touchBattleControlsVisible(game)
-            and orientation == "landscape" then
-          -- Keep the established KRS footer *height* exactly as before, but
-          -- widen the theme band to the complete physical LOVE window so no
-          -- black side remainder shows behind TouchControls.
-          local windowW, windowH = love.graphics.getDimensions()
-          local footerY = clamp(fy, 0, windowH)
-          love.graphics.rectangle("fill", 0, footerY, windowW,
-            math.max(0, windowH-footerY))
-          -- Intentionally no bright accent seam on mobile landscape.
-        else
-          love.graphics.rectangle("fill", fullX, fy, fullW,
-            math.max(0, fullY + fullH - fy))
-          setColor(theme.colors.accent or theme.colors.frame
-            or theme.colors.divider or {1,1,1,1})
-          love.graphics.rectangle("fill", fullX, fy, fullW,
-            math.max(2, 2 * effectiveScale))
-        end
+        love.graphics.rectangle("fill", fullX, fy, fullW,
+          math.max(0, fullY + fullH - fy))
+        -- A thin accent makes the footer read as part of the UI skin rather
+        -- than as scenery that abruptly changed colour.
+        setColor(theme.colors.accent or theme.colors.frame or theme.colors.divider or {1,1,1,1})
+        love.graphics.rectangle("fill", fullX, fy, fullW,
+          math.max(2, 2 * effectiveScale))
       end
 
       -- KIM Battle Lite always owns one fixed, full-width lower strip. This is
@@ -15593,43 +15519,22 @@ return function(mod)
       -- Match the accepted v7.8/v7.9 full-bottom footprint against the real
       -- window: ~11% side margins, ~22% window height, and a small bottom gap.
       -- This is intentionally independent from BATTLE TEXT SIZE.
-      local mobileRect = nil
-      if kimFullscreen and runtime.nativeMobilePlatform()
-          and touchBattleControlsVisible(game) then
-        mobileRect = (source and source._kantoInMotionMobileDialogRect)
-          or (native and native._kantoInMotionMobileDialogRect)
-          or (state and state._kantoInMotionMobileDialogRect)
-      end
       local sideInset = math.max(spacing.md, fullW * 0.109)
       local bottomInset = math.max(8, fullH * 0.015)
-      local panelX, panelY, panelW, panelH
-      if type(mobileRect)=="table" and tonumber(mobileRect.w)
-          and tonumber(mobileRect.h) and tonumber(mobileRect.x)
-          and tonumber(mobileRect.y) then
-        -- Mobile uses the exact native dialog footprint that was tuned against
-        -- the user's portrait/landscape references. This keeps Modern UI clear
-        -- of TouchControls and leaves the accepted player HP position alone.
-        panelX = tonumber(mobileRect.x) + shakeX
-        panelY = tonumber(mobileRect.y) + shakeY
-        panelW = math.max(1, tonumber(mobileRect.w))
-        panelH = math.max(1, tonumber(mobileRect.h))
-      else
-        panelX = fullX + sideInset + shakeX
-        panelW = math.max(1, fullW - sideInset * 2)
-        local basePanelH = math.min(fullH - bottomInset * 2,
-          math.max(140, math.min(230, fullH * 0.22)))
-        -- Keep the accepted full-width footprint, but raise it into the battle
-        -- field so its top edge sits just below the player back-sprite anchor
-        -- instead of hugging the physical bottom of large desktop windows.
-        local panelLift = clamp(fullH * 0.09, 56, 104)
-        panelY = math.max(fullY + spacing.md,
-          fullY + fullH - bottomInset - basePanelH - panelLift) + shakeY
-        panelH = basePanelH
-      end
+      local panelX = fullX + sideInset + shakeX
+      local panelW = math.max(1, fullW - sideInset * 2)
+      local basePanelH = math.min(fullH - bottomInset * 2,
+        math.max(140, math.min(230, fullH * 0.22)))
+      -- Keep the accepted full-width footprint, but raise it into the battle
+      -- field so its top edge sits just below the player back-sprite anchor
+      -- instead of hugging the physical bottom of large desktop windows.
+      local panelLift = clamp(fullH * 0.09, 56, 104)
+      local panelY = math.max(fullY + spacing.md,
+        fullY + fullH - bottomInset - basePanelH - panelLift) + shakeY
+      local panelH = basePanelH
       local arenaFill = safeText(runtime.option("battleArenaFill", "gen6")):lower()
-      local sharedFullscreenPanel = mobileRect == nil and (
-        options.sharedFullscreenPanel == true
-        or (kimFullscreen and (arenaFill == "krs" or arenaFill == "gen6")))
+      local sharedFullscreenPanel = options.sharedFullscreenPanel == true
+        or (kimFullscreen and (arenaFill == "krs" or arenaFill == "gen6"))
       if sharedFullscreenPanel then
         -- User mock reference: KRS and GEN6 use the same intentionally oversized lower UI
         -- surface, not a normal inset panel sitting above a filler band. Keep
@@ -15850,26 +15755,6 @@ return function(mod)
       end
     end
     love.graphics.pop()
-  end
-
-  runtime.drawWindowsKimBattleOverlay = function(game, viewport)
-    if not runtime.windowsPlatform() then return false end
-    local stack = game and game.stack
-    local state = stack and type(stack.top) == "function" and stack:top() or nil
-    if not runtime.windowsKimBattleVisualActive(game, state) then return false end
-    -- Wait until KIM has published live Battle Lite ownership during the source
-    -- draw. This keeps startup/transition frames native instead of inventing a
-    -- panel before the battle is actually ready.
-    if state._kantoInMotionBattleLite ~= true then return false end
-    local model = battleRuntime.sourceModel(game, state)
-    if model then
-      model._gen1ModernBattleState = state
-      if getmetatable(model) == nil then setmetatable(model, { __index = state }) end
-    end
-    local theme = responsiveTheme(runtime.currentTheme(viewport, state),
-      viewport, responsiveThemeCache)
-    runtime.drawBattleHud(game, model or state, viewport, theme, model, "lower")
-    return true
   end
 
   runtime.drawBattle = function(game, state, viewport, theme)
@@ -19349,12 +19234,6 @@ return function(mod)
             responsiveThemeCache))
       end
     end
-    -- Windows KIM battles use a final-HUD-only Modern presenter. The source
-    -- BattleState was left entirely native above, so this draw cannot add stack
-    -- depth around KIM's animated sprite/proxy renderers. Use the raw viewport
-    -- so desktop layout stays desktop even if TouchControls are visible.
-    runtime.drawWindowsKimBattleOverlay(game, viewport)
-
     runtime.drawSourceTransients(game, viewportForTouchControls(game, viewport),
       responsiveTheme(runtime.currentTheme(viewport, nil), viewport,
         responsiveThemeCache))
