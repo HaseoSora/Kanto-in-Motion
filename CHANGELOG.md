@@ -1,3 +1,121 @@
+## 1.3.1
+
+- Promoted the confirmed post-v1.3.0 compatibility work into the public **Kanto in Motion v1.3.1** release.
+- Added explicit Windows vs Android/iOS Battle Art 1.10.0 behavior so platform-specific renderer fixes no longer bleed across platforms.
+- Fixed PC 3D-BTL player back-sprite clipping while the Modern move selector is open.
+- Restored the confirmed mobile Battle Art stage-only handoff, Modern UI/Typed Move Colors layering, Quality of Life EXP geometry, mobile Battle Art MODS MENU access, and graphics-stack safety.
+- Preserved party-ball HUD-invert isolation and the stable mobile sprite/animation compositor.
+- Made KIM the authoritative shiny odds/DV owner for Wilds overworld spawns, battle, and capture without depending on Battle Art's removed/private shiny bridge.
+- Retains the v1.3.0 standalone battle system, KRS/KRBA/Pokéball integration, animated sprite/trainer features, Gen 2 support, and open compatibility API.
+
+## v28 test — compatibility reconstruction from confirmed mobile fixes
+
+- Rebuilt the mobile compatibility layer from the original user-confirmed checkpoints instead of stacking another renderer workaround.
+- Restores the exact Battle Art MOD MENU v5 mobile presenter on top of the confirmed Typed-Move-Colors v4 layer; Battle Art 1.10 category rows now open through its own authored OptionsMenu callbacks.
+- Reuses the confirmed v8.6.63 KIM player-HUD EXP geometry. With 3D-BTL ON, only Android/iOS portrait EXP pixels are moved to KIM's real player HUD row; 3D-BTL ON landscape is unchanged.
+- Adapts that same EXP geometry to unmodified Battle Art 1.10 when 3D-BTL is OFF by redirecting only QOL's final EXP fill/burst pixels to KIM's existing flat battle canvas. It does not restore `dramaticShapeShot`, wrap `BattleState.draw`, or change Modern UI/native-dialog ownership.
+- Keeps the confirmed v20 mobile stage-only/HUD boundary, v22 Windows move-menu clip fix, v24 KIM-owned shiny authority, and v25 mobile renderer restoration.
+- `main.lua`, Windows Modern UI, Battle Art, Quality of Life, and Wilds are unchanged.
+
+## v24 test — KIM-owned Wilds shiny authority
+
+- Replaces the temporary v23 Battle Art `exports.shinyBridge` fallback. KIM no longer publishes, patches, or depends on any Battle Art shiny API.
+- KIM now patches Wilds' already-loaded `battle_art_shiny_bridge` helper table directly through Wilds' exported cached module loader. Wilds' own `SpawnLogic` therefore receives KIM's shiny roll/DVs before it creates the spawn record on both desktop and mobile.
+- Wilds continues to render its own packaged normal/shiny overworld sprites; KIM owns only shiny identity and persistent DVs.
+- When that visible Pokémon starts a battle, Wilds' existing prepare/cancel calls now route straight to KIM, and KIM's `BattleState.newWild` wrapper consumes the exact same identity. Catch persistence remains DV-backed.
+- Battle Art is now presentation-only for this feature: 3D-BTL can be ON or OFF without affecting shiny identity. No Battle Art or Wilds files are modified.
+- Preserves the v22 PC 3D-BTL move-menu clip fix and the confirmed v20 mobile stage/UI handoff.
+
+## v21 — Desktop v11 / Mobile v20 platform isolation
+
+- Restores the confirmed-good v11 Windows/desktop Battle Art path while retaining the working v20 Android/iOS 3D-BTL UI handoff.
+- Desktop uses the v11 Battle Art sprite bridge, Modern UI battle presenter, HUD capture semantics, KRBA compositor, and shiny overlay path.
+- Android/iOS keep v20 stage-only ownership, pre/post `render.hud` stack cleanup, KIM HP/status/party-ball HUD, Modern UI lower battle panel, and normal Gen1Recomp TouchControls.
+- Mobile-only KRBA/shiny no-push helpers remain available only through the Android/iOS Battle Art branch.
+- No Battle Art files are modified. 3D-BTL OFF remains on KIM's established 2D path.
+
+## v20 test - Mobile Battle Art UI handoff + HUD capture isolation
+
+- Fixed a stage-only ownership bug exposed by the v19 screenshot: Battle Art is an external scene owner, so KIM's normal fullscreen `active` flag is false. v19 therefore cleared `_kantoInMotionBattleLite`, which caused the bundled Modern UI to intentionally stay out of its KIM lower-panel presenter even though KIM still owned the mobile 2D UI.
+- Android/iOS + Battle Art 3D-BTL now keeps KIM's hybrid battle marker live while the native `BattleState` continues to own input. Modern UI receives the same lower command/move/message ownership contract used by KIM's fullscreen 2D battles, plus KIM's exact mobile dialog rectangle.
+- KIM's private HP/status HUD capture now temporarily removes Battle Art's `dramaticShapeShot` marker before calling `BattleState:drawHUDs`. This bypasses Battle Art's HUD suppression/legacy Modern UI fallback only for the scratch capture, while preserving the v11 isolated true-color party-ball layer.
+- Hardened that scratch capture against nested graphics-stack leaks: it records LOVE's entry stack depth and unwinds precisely back to that depth even when a protected HUD draw fails.
+- Expanded the Gen1Recomp 0.2.45 `render.hud` boundary guard to clean both **entry and exit**. Any state left by Battle Art is repaired before UI drawing, and any state left by HUD composition is repaired again before `GameViewport.finish()`, so it cannot contaminate TouchControls or Battle Art's next frame.
+- Included the confirmed v11 `integrated_pokeball_colorfix.lua` behavior unchanged so HUD Color Invert still cannot invert the party-ball outlines.
+- The mobile Battle Art sprite bridge is intentionally unchanged in this test. If the Red/trainer rectangle survives after the UI handoff is corrected, it can be isolated separately without mixing another sprite-provider experiment into this build.
+- Desktop and 3D-BTL OFF paths remain unchanged.
+
+## v19 test - Mobile stage-only + pre-HUD boundary repair
+
+- Based on the user-supplied Gen1Recomp 0.2.45 source, which confirms the mobile frame order is `Renderer:endFrame -> render.hud -> GameViewport.finish -> TouchControls:draw`.
+- Keeps v18's Android/iOS Battle Art **stage-only** ownership split: Battle Art owns the voxel stage; KIM owns HP/status/party-ball HUD; Modern UI/vanilla own the lower battle UI.
+- Restores the supported `love.graphics.getStackDepth()` repair at the **start of `render.hud`**, not at TouchControls. It runs only while KIM's mobile Battle Art stage-only path is active.
+- After unwinding leaked states, KIM rebinds Gen1Recomp's real `GameViewport` target and neutral HUD draw state before Modern UI/KIM render.
+- v18's snapped Battle Art HUD/frosted-panel suppression and stable mobile sprite bridge remain unchanged.
+- Desktop and 3D-BTL OFF paths remain untouched.
+
+## v18 test - Mobile Battle Art strict stage-only ownership
+
+- Replaced the v15-v17 graphics-state repair experiments with a cleaner Android/iOS ownership split: while Battle Art 1.10.0 **3D-BTL = ON**, Battle Art supplies only the voxel stage/camera/lighting/shadows and KIM owns the 2D battle HUD.
+- Disabled Battle Art's snapped HUD composite and frosted HUD-panel pass at runtime on mobile only. This mirrors Battle Art's own conservative iOS fallback and avoids the extra scratch-canvas path before TouchControls. Battle Art's files and saved settings are not modified.
+- KIM now captures/renders its own HP/status/party-ball HUD over the mobile Battle Art stage, while Modern UI (or vanilla when Modern UI is OFF) continues to own the lower command/message surface.
+- Returned mobile Battle Art sprite delegation to KIM's established stable-frame renderer instead of the experimental CPU atlas slicer, preventing corrupted rectangular player-sprite crops.
+- Removes the v17 pre-HUD stack/canvas repair from the active mobile path. Desktop Battle Art and 3D-BTL OFF behavior are unchanged.
+
+## v17 test - Mobile Battle Art GameViewport HUD-state restore
+
+- Fixed the v16 mobile 3D-BTL regression where the crash was gone but Modern UI disappeared and KRBA effects could appear as raw rectangular surfaces.
+- After unwinding Battle Art's leaked LOVE graphics stack, KIM now rebinds Gen1Recomp's `GameViewport` render target and restores neutral HUD canvas/transform/scissor/shader/depth/blend/color state before `render.hud` continues.
+- The completed Battle Art stage is not cleared; Modern UI, KIM shiny/KRBA overlays, and the HP/status HUD render on top normally.
+- Android/iOS + 3D-BTL only. Desktop and KIM 2D ownership paths are unchanged.
+
+## v16 test - Mobile Battle Art pre-HUD boundary repair
+
+- Repair Battle Art's leaked LOVE graphics states at the start of `render.hud` on Android/iOS while 3D-BTL is active.
+- Restores Modern UI lower battle UI while retaining the mobile stack-overflow fix.
+- Removes the v15 TouchControls-level repair wrapper.
+
+## v15 test - mobile Battle Art TouchControls boundary repair
+
+- Removed the invasive v14 graphics-function stack guard; KIM never replaces `love.graphics.push` / `pop`.
+- Android/iOS now use LÖVE's supported `love.graphics.getStackDepth()` immediately before Gen1Recomp's original `TouchControls:draw()` while Battle Art 3D-BTL is active.
+- Because Gen1Recomp has already completed `GameViewport.finish()` at this point, the expected stack depth is zero; any remaining states are leaked staged-battle states and are unwound before TouchControls performs its own push.
+- Desktop and 3D-BTL OFF paths are unchanged. Preserves the v13 mobile CPU sprite bridge, v12 single-shiny guard, and v11 HUD/party-ball isolation.
+
+## v13 test - mobile Battle Art platform split
+
+- Split the Battle Art 1.10.0 sprite/provider path by platform instead of reusing the desktop GPU Canvas/readback bridge on Android/iOS.
+- Android/iOS now slice KIM's selected animated/shiny front/back frames directly from the sprite atlas as CPU `ImageData` before handing them to Battle Art.
+- Added mobile-only Battle Art shiny and KRBA fullscreen timing-plane compositors that restore graphics state explicitly and do not use `love.graphics.push()`/`pop()`, keeping KIM out of the graphics stack immediately before Gen1Recomp draws TouchControls.
+- Desktop retains the confirmed v12 Canvas-based Battle Art integration unchanged.
+- Preserves the v12 single-shiny ownership guard and the confirmed v11 HUD/party-ball isolation behavior.
+
+## v12 test - mobile Battle Art graphics-stack + single shiny cue
+
+- Fixed the Battle Art shiny overlay treating KIM's own 2D `dramaticShapeShot` compatibility record as a real voxel stage, which could draw the enemy shiny sparkle twice with 3D-BTL OFF.
+- Battle Art's projected shiny overlay now runs only while Battle Art 3D-BTL is actually enabled and the published shot is a real external stage.
+- Hardened KIM's Battle Art shiny and KRBA projected/fullscreen-plane draws so every graphics `push` is paired with a `pop` even if a mobile draw operation errors inside a protected compatibility call. This prevents swallowed render errors from accumulating graphics-stack depth until TouchControls fails.
+- Preserves the confirmed v11 isolated Poké Ball invert layer and all v7-v9 Battle Art ownership/KRBA/Colorfix behavior.
+
+## v11 test - isolated Poké Ball invert protection
+
+- Reverts the v10 marker-palette/HUD-shader experiment that also changed the apparent HUD rendering.
+- Restores the exact confirmed v9 HUD capture/shader path for names, levels, HP gauges and linework.
+- Captures integrated Pokéball Colorfix party icons on a separate native 160x144 layer and composites them after HUD inversion, so their normal dark outlines/palette are preserved without changing HUD scale or resolution.
+
+## Battle Art ownership / party-ball handoff (v9 test)
+
+- Fixed integrated Pokeball Colorfix party-status balls when Battle Art 1.10.0 is installed but **3D-BTL = OFF**.
+- KIM's fullscreen HUD capture now draws the true-color healthy/status/fainted party-ball row directly instead of inheriting Gen1Recomp's grayscale `balls.png` strip.
+- Battle Art's existing 3D-BTL ON ink-safe party-ball palette is unchanged.
+- No Battle Art or standalone Pokeball Colorfix files are modified.
+
+## Battle Art KRBA fullscreen timing-plane compatibility (v7 test)
+
+- Fixed the centered 160x96-scaled KRBA timing-plane rectangle in Battle Art 1.10.0 staged battles.
+- Generalized the fix to every KRBA BG/FG timing plane instead of special-casing ThunderShock or `PRAS- Black BG.png`.
+- Image and color planes are now composited against the actual viewport while Modern UI remains above them.
+
 ## 1.3.0
 
 - Promoted the completed v8.6.x Battle Lite development line to the public **Kanto in Motion v1.3.0** release.
@@ -463,3 +581,21 @@
 - Fixed portrait trainer intro placement so the native trainer/send-out layer is fitted inside the same contained battle stage rather than the black area above it.
 - Fixed the title-screen HD trainer, cycling Pokemon, and custom logo so they follow Gen1Recomp's actual renderer title rect for CENTER / UPPER / TOP and layout-mod viewports.
 - Suppressed the stock Pokemon wordmark directly on the source title canvas while the KIM replacement logo is active, preventing the original title art from being revealed when the screen is moved.
+
+### Battle Art mobile platform split test (v13)
+- Android/iOS now use a dedicated Battle Art sprite bridge that slices KIM animation frames directly as CPU `ImageData`; the desktop Canvas/readback bridge is no longer used on mobile.
+- Battle Art shiny and KRBA fullscreen timing-plane overlays use mobile no-stack compositors so KIM adds no graphics `push()` calls to the staged mobile battle before `TouchControls:draw()`.
+- Desktop Battle Art behavior is unchanged.
+- Preserves the v11 isolated Pokeball Colorfix HUD layer and v12 single-shiny ownership guard.
+
+## v22 test — desktop Battle Art move-menu back-sprite clip
+- Gen1Recomp 0.2.45's native move/Mimic menu row clip is bypassed only for desktop Battle Art 3D battles when KIM Modern UI owns the lower menu.
+- Prevents a player BACK SPRITES battler left on Battle Art's 2D pic layer from being cut to Y=64/Y=56 when the replacement Modern move menu is open.
+- Android/iOS v20 stage-only rendering is unchanged. No Battle Art files are modified.
+
+## Mobile Battle Renderer Restore v25
+- Restores the exact known-good Android/iOS Battle Art presentation modules from the v20 mobile chain after the desktop-baseline reconstruction replaced shared/mobile renderer files.
+- Mobile now loads a dedicated stable Battle Art sprite bridge, shiny encounter renderer, and KRBA renderer; Windows continues using the current desktop files and retains the v22 3D-BTL move-menu clipping fix.
+- Restores the v20 mobile Modern UI implementation and keeps the v20 stage-only/HUD-boundary/party-ball isolation files explicit.
+- Keeps v24 KIM-owned Wilds shiny identity/DV authority. Battle Art remains a stage renderer only and is not consulted for shiny decisions.
+- No Battle Art or Wilds archive is modified.

@@ -224,12 +224,16 @@ return function(mod, isBattleShiny, directStageGeometry, directSideMetrics)
     local drawY = math.floor((tonumber(metrics.y) or 0)
       - (tonumber(fx.frameHeight) or CFG.frameHeight) * effectScale * 0.15 + 0.5)
 
-    love.graphics.push("all")
-    love.graphics.setShader()
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(fx.image, quad, drawX, drawY, 0, effectScale, effectScale)
-    love.graphics.pop()
-    return true
+    local g = love.graphics
+    local pushed = pcall(g.push, "all")
+    if not pushed then return false end
+    local okDraw = pcall(function()
+      g.setShader()
+      g.setColor(1, 1, 1, 1)
+      g.draw(fx.image, quad, drawX, drawY, 0, effectScale, effectScale)
+    end)
+    pcall(g.pop)
+    return okDraw
   end
 
   -- Battle Art 1.10 compatibility. Battle Art owns the window-resolution
@@ -280,12 +284,15 @@ return function(mod, isBattleShiny, directStageGeometry, directSideMetrics)
       -- over the body so the stars surround the sprite rather than the ground.
       local drawY = math.floor(anchorY
         - (tonumber(fx.frameHeight) or CFG.frameHeight) * effectScale * 0.85 + 0.5)
-      g.push("all")
-      g.setShader()
-      g.setColor(1, 1, 1, 1)
-      g.draw(fx.image, quad, drawX, drawY, 0, effectScale, effectScale)
-      g.pop()
-      return true
+      local pushed = pcall(g.push, "all")
+      if not pushed then return false end
+      local okDraw = pcall(function()
+        g.setShader()
+        g.setColor(1, 1, 1, 1)
+        g.draw(fx.image, quad, drawX, drawY, 0, effectScale, effectScale)
+      end)
+      pcall(g.pop)
+      return okDraw
     end
 
     local drew = false

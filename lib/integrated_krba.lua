@@ -21,7 +21,11 @@ return function(mod)
   for id,file in pairs(data.sfx or {}) do
     mod.content.sfx:register(id,{file=mod.assets:path("assets/sfx/"..file)})
   end
-  local installer=loadLocal("lib/krba_essentials_player.lua")
+  local mobile = type(mod._kantoInMotionNativeMobileHost) == "function"
+    and mod._kantoInMotionNativeMobileHost()
+  local installer=loadLocal(mobile
+    and "lib/krba_essentials_player_mobile.lua"
+    or "lib/krba_essentials_player.lua")
   installer(mod,data)
   mod.exports.integratedKrba=true
   mod.exports.integratedKrbaCoverage=165

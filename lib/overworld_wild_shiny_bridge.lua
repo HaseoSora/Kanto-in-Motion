@@ -1,19 +1,17 @@
--- Kanto in Motion -> Wilds of Kanto persistent shiny identity bridge.
+-- Kanto in Motion -> Wilds persistent shiny identity bridge.
 --
--- Wilds already contains its own normal + shiny overworld sprite assets. KIM
--- never copies or edits those assets. Instead it supplies shiny identity at
--- runtime through Wilds' exported logic/render objects, then carries the same
--- DVs into battle through KIM's existing BattleState.newWild wrapper.
+-- KIM is the sole shiny authority. Battle Art is intentionally not part of the
+-- shiny decision chain: it may render the 3D battle stage, but KIM rolls the DVs,
+-- Wilds uses those DVs to choose its own normal/shiny overworld art, and KIM
+-- carries the same identity into battle/capture.
 --
--- The earlier v8.6.64 compatibility attempt proxied mod.find on the public
--- Wilds handle. Gen1Recomp does not guarantee that handle is the same object as
--- Wilds' private mod context used by battle_art_shiny_bridge.lua, so the proxy
--- could be installed without ever reaching the actual spawn roll. This module
--- keeps that proxy only as a harmless best-effort compatibility path, but the
--- authoritative integration is now the exported SpawnLogic/SpawnRender pair.
+-- Wilds 2.1.8+ still names its internal helper battle_art_shiny_bridge.lua for
+-- historical compatibility. KIM patches that already-loaded module table at
+-- runtime through Wilds' exported module loader. Because V.require caches module
+-- tables, SpawnLogic's local helper reference sees KIM's functions immediately.
+-- No Battle Art API, proxy handle, or Battle Art file modification is required.
 return function(mod)
   local M = {}
-  local BATTLE_ART_ID = "BATTLE_ART_VOXEL_FORK"
   local WILDS_ID = "overworld_wild_spawns"
   local SHINY_ATTACK = {
     [2] = true, [3] = true, [6] = true, [7] = true,
@@ -172,20 +170,16 @@ return function(mod)
 
   local bridgeApi = {
     api = 1,
+    owner = "kanto_in_motion",
     rollWildDVs = rollWildDVs,
     prepareWildIdentity = prepareWildIdentity,
     cancelPreparedWildIdentity = cancelPreparedWildIdentity,
   }
-  local proxyHandle = {
-    id = BATTLE_ART_ID,
-    name = "Kanto in Motion shiny compatibility proxy",
-    exports = { shinyBridge = bridgeApi },
-    _kantoInMotionShinyProxy = true,
-  }
 
   mod.exports._kantoInMotionConsumePreparedWildIdentity = consumePreparedWildIdentity
   mod.exports.overworldWildShinyBridge = {
-    api = 2,
+    api = 3,
+    owner = "kanto_in_motion",
     active = function()
       return installedWilds ~= nil
     end,
@@ -200,58 +194,74 @@ return function(mod)
     return nil
   end
 
-  local function realBattleArtInstalled()
-    local hit = findMod(BATTLE_ART_ID)
-    return hit ~= nil and hit ~= proxyHandle
-      and hit._kantoInMotionShinyProxy ~= true
-  end
-
-  -- Best-effort compatibility for Wilds versions whose internal mod context is
-  -- the same object returned by mod.find. The direct exported-object path below
-  -- does not depend on this succeeding.
-  local function installFindProxy(wilds)
-    if type(wilds) ~= "table" or type(wilds.find) ~= "function" then
-      return false
-    end
-    if wilds._kantoInMotionShinyFindProxy == true then return true end
-    local originalFind = wilds.find
-    local function wrappedFind(a, b, ...)
-      local id = b ~= nil and b or a
-      if id == BATTLE_ART_ID then
-        local ok, hit
-        if b ~= nil then ok, hit = pcall(originalFind, a, b, ...)
-        else ok, hit = pcall(originalFind, a, ...) end
-        if ok and hit ~= nil then return hit end
-        return proxyHandle
-      end
-      if b ~= nil then return originalFind(a, b, ...) end
-      return originalFind(a, ...)
-    end
-    local ok = pcall(function()
-      wilds._kantoInMotionOriginalFind = originalFind
-      wilds.find = wrappedFind
-      wilds._kantoInMotionShinyFindProxy = true
-    end)
-    return ok == true
-  end
-
-  local function enableWildsShinyRuntime(wilds)
+  local function requireWildsModule(wilds, name)
     local exports = wilds and wilds.exports
     local lib = exports and exports.lib
     local requireFn = lib and lib.require
-    if type(requireFn) ~= "function" then return false end
-    local ok, animated = pcall(requireFn, "animated_sprites")
-    if not ok or type(animated) ~= "table" then
-      ok, animated = pcall(requireFn, lib, "animated_sprites")
+    if type(requireFn) ~= "function" then return nil end
+    local ok, value = pcall(requireFn, name)
+    if not ok or type(value) ~= "table" then
+      ok, value = pcall(requireFn, lib, name)
     end
-    if not ok or type(animated) ~= "table" then return false end
+    if ok and type(value) == "table" then return value end
+    return nil
+  end
+
+  -- Wilds keeps this module cached and SpawnLogic stores the same table in a
+  -- local. Replacing the table's functions therefore reaches the true pre-spawn
+  -- roll path directly, regardless of platform or whether Battle Art exists.
+  local function installDirectWildsShinyApi(wilds)
+    local helper = requireWildsModule(wilds, "battle_art_shiny_bridge")
+    if type(helper) ~= "table" then return false end
+    if helper._kantoInMotionDirectOwner == bridgeApi then return true end
+
+    if helper._kantoInMotionOriginalApi == nil then
+      helper._kantoInMotionOriginalApi = helper.api
+      helper._kantoInMotionOriginalAvailable = helper.available
+      helper._kantoInMotionOriginalRoll = helper.roll
+      helper._kantoInMotionOriginalPrepare = helper.prepare
+      helper._kantoInMotionOriginalCancel = helper.cancel
+    end
+
+    helper.api = function(_)
+      return bridgeApi
+    end
+    helper.available = function(_)
+      local animated = requireWildsModule(wilds, "animated_sprites")
+      if type(animated) == "table" then
+        animated.RUNTIME_SHINY_SUPPORT = "AVAILABLE"
+      end
+      return true
+    end
+    helper.roll = function(_)
+      local animated = requireWildsModule(wilds, "animated_sprites")
+      if type(animated) == "table" then
+        animated.RUNTIME_SHINY_SUPPORT = "AVAILABLE"
+      end
+      return rollWildDVs()
+    end
+    helper.prepare = function(_, record)
+      if type(record) ~= "table" then return nil end
+      return prepareWildIdentity(record.species, record.level, record.dvs)
+    end
+    helper.cancel = function(_, token)
+      return cancelPreparedWildIdentity(token)
+    end
+    helper._kantoInMotionDirectOwner = bridgeApi
+    return true
+  end
+
+  local function enableWildsShinyRuntime(wilds)
+    local animated = requireWildsModule(wilds, "animated_sprites")
+    if type(animated) ~= "table" then return false end
     animated.RUNTIME_SHINY_SUPPORT = "AVAILABLE"
     return true
   end
 
   local function ensureRecordIdentity(record)
     if type(record) ~= "table" then return false end
-    if realBattleArtInstalled() then return false end
+    -- KIM owns the persistent shiny identity. Scene ownership (including
+    -- Battle Art 3D-BTL) never changes the shiny roll or DV assignment.
 
     local changed = false
     if type(record.dvs) ~= "table" then
@@ -365,29 +375,30 @@ return function(mod)
   end
 
   local function ensureInstalled(game)
-    if realBattleArtInstalled() then return false, "Battle Art owns shiny identity" end
     local wilds = findMod(WILDS_ID)
     if type(wilds) ~= "table" or type(wilds.exports) ~= "table" then
       return false, "Wilds of Kanto not loaded"
     end
 
-    -- Do not proxy Wilds' internal mod.find here. The direct exported-object
-    -- path is authoritative and avoids duplicate prepare tokens if Wilds and
-    -- KIM happen to share the same public handle object.
     local runtimeOk = enableWildsShinyRuntime(wilds)
+    local directOk = installDirectWildsShinyApi(wilds)
     local entityOk = installMakeEntityWrap(wilds)
-    local battleOk = installBattleWrap(wilds)
+
+    -- The direct helper replacement owns Wilds' native pre-spawn roll and its
+    -- native prepare/cancel handoff. Keep the older _startBattle wrapper only as
+    -- a fallback for Wilds builds that do not expose the cached helper module.
+    local battleOk = directOk or installBattleWrap(wilds)
     scanExisting(wilds, game)
 
-    if runtimeOk and entityOk then
+    if runtimeOk and entityOk and battleOk then
       if installedWilds ~= wilds and mod.log and type(mod.log.info) == "function" then
-        mod.log:info("Wilds shiny compatibility active: KIM assigns persistent DVs and Wilds renders its own shiny overworld sprites")
+        mod.log:info("Wilds shiny ownership active: KIM supplies pre-spawn DVs and Wilds renders its own shiny overworld sprites (Battle Art independent)")
       end
       installedWilds = wilds
       scanComplete = true
       return true
     end
-    return false, "Wilds runtime exports not ready"
+    return false, "Wilds runtime shiny hooks not ready"
   end
 
   -- Load order is intentionally not assumed. KIM can initialize before Wilds,
@@ -398,6 +409,12 @@ return function(mod)
       pcall(ensureInstalled, game)
       return nextFn(game, viewport)
     end, -25000)
+  end
+
+  if mod.events and type(mod.events.on) == "function" then
+    mod.events:on("mods.loaded", function()
+      pcall(ensureInstalled, nil)
+    end)
   end
 
   -- Try immediately as well for load orders where Wilds is already available.

@@ -1063,26 +1063,105 @@ return function(mod)
     return not IS_GEN2 and mod.options:get("battleSystem") ~= false
   end
 
-  local function battleArtInstalled()
-    if type(mod.find) ~= "function" then return false end
+  local function battleArtHandle()
+    if type(mod.find) ~= "function" then return nil end
     local ok, handle = pcall(mod.find, "BATTLE_ART_VOXEL_FORK")
-    return ok and handle ~= nil
+    return ok and handle or nil
   end
 
-  -- Battle Lite yields its scene/sprite/HUD ownership whenever a cooperating
-  -- external battle mod registers as a scene owner. Battle Art remains a
-  -- built-in compatibility fallback for existing releases that predate this
-  -- open registration API.
+  -- Battle Art being INSTALLED is not the same thing as Battle Art owning the
+  -- current battle. 1.10.0 deliberately lets 3D-BTL be switched OFF while the
+  -- rest of the voxel mod remains enabled. Read its public OverworldBattle
+  -- module so KIM yields only while that actual staged-battle switch is ON.
+  -- If a future/older Battle Art build does not expose the module, fall back
+  -- to its saved `battles` option and finally to the legacy installed=owner
+  -- behavior so compatibility fails safe rather than creating two presenters.
+  local function battleArt3DBattleEnabled()
+    local handle = battleArtHandle()
+    if not handle then return false end
+    local exports = type(handle.exports) == "table" and handle.exports or nil
+    local lib = exports and exports.lib or nil
+    if type(lib) == "table" and type(lib.require) == "function" then
+      local ok, OverworldBattle = pcall(lib.require, "OverworldBattle")
+      if ok and type(OverworldBattle) == "table"
+          and type(OverworldBattle.enabled) == "function" then
+        local okEnabled, enabled = pcall(OverworldBattle.enabled)
+        if okEnabled then return enabled and true or false end
+      end
+    end
+    local loader = nil
+    do
+      local okGame, Game = pcall(require, "src.core.Game")
+      loader = okGame and Game and Game.mods or nil
+    end
+    local bucket = loader and loader.modOptions
+      and loader.modOptions.BATTLE_ART_VOXEL_FORK or nil
+    if type(bucket) == "table" and bucket.battles ~= nil then
+      return bucket.battles and true or false
+    end
+    return true
+  end
+
+  -- KIM's HUD COLOR is the presentation authority whenever its battle system
+  -- is enabled. While Battle Art owns only the 3D stage, mirror that choice
+  -- into Battle Art's live UiBackplates setting without writing its files or
+  -- changing its saved option. This makes KIM COLOR/INVERTED apply immediately
+  -- to Battle Art's captured HP/status glyphs.
+  local function syncBattleArtHudColor()
+    if not battleSystemEnabled() or not battleArt3DBattleEnabled() then return false end
+    local handle = battleArtHandle()
+    local exports = handle and type(handle.exports) == "table" and handle.exports or nil
+    local lib = exports and exports.lib or nil
+    if not (type(lib) == "table" and type(lib.require) == "function") then return false end
+    local ok, UiBackplates = pcall(lib.require, "UiBackplates")
+    local setting = ok and type(UiBackplates) == "table" and UiBackplates.hudColor or nil
+    if type(setting) ~= "table" or type(setting.sync) ~= "function" then return false end
+    local function adoptKimChoice()
+      local value = mod.options:get("battleHudColor") == "inverted"
+        and "INVERTED" or "COLOR"
+      return pcall(setting.sync, setting, value) and true or false
+    end
+    adoptKimChoice()
+
+    -- Battle Art snaps its HUD into the voxel scene before KIM's final HUD
+    -- pass. Wrap that PUBLIC runtime seam from KIM so every future snap first
+    -- adopts KIM's live color choice. The wrapper lives only in memory; the
+    -- Battle Art archive and its persisted option remain untouched.
+    local okStage, OverworldBattle = pcall(lib.require, "OverworldBattle")
+    if okStage and type(OverworldBattle) == "table"
+        and type(OverworldBattle.snapHUDs) == "function"
+        and not OverworldBattle._kantoInMotionHudColorBridge then
+      local originalSnap = OverworldBattle.snapHUDs
+      OverworldBattle._kantoInMotionHudColorBridge = originalSnap
+      OverworldBattle.snapHUDs = function(...)
+        adoptKimChoice()
+        return originalSnap(...)
+      end
+    end
+    return true
+  end
+
+  -- Battle Lite yields scene/sprite/HUD ownership only while a cooperating
+  -- external scene is ACTUALLY active. With Battle Art 1.10, turning 3D-BTL
+  -- OFF therefore returns the complete battle presentation to KIM rather than
+  -- dropping through to vanilla Gen1Recomp.
   local function externalBattleSceneOwnerRegistered()
-    return battleArtInstalled()
+    return battleArt3DBattleEnabled()
       or (mod._kantoInMotionInterop
         and mod._kantoInMotionInterop:hasBattleSceneOwner())
   end
 
   local function externalBattleSpritesBlocked()
-    return battleArtInstalled()
+    return battleArt3DBattleEnabled()
       or (mod._kantoInMotionInterop
         and mod._kantoInMotionInterop:blocksBattleFeature("sprites"))
+  end
+
+  -- Install the Battle Art HUD-color bridge as soon as optional mods are
+  -- available. Repeating the call is harmless and lets live reloads recover.
+  pcall(syncBattleArtHudColor)
+  if mod.events and type(mod.events.on) == "function" then
+    mod.events:on("mods.loaded", function() pcall(syncBattleArtHudColor) end)
   end
 
   -- Player battle-trainer selector. The setting chooses WHO the trainer is;
@@ -1210,9 +1289,22 @@ return function(mod)
     return fill == "gen6" or fill == "white" or fill == "krs"
   end
 
-  local function battleLiteHudActive()
-    return battleSystemEnabled() and not externalBattleSceneOwnerRegistered()
+  -- On mobile with Battle Art 3D-BTL enabled, Battle Art is a stage provider
+  -- only. Store this helper on the mod table instead of consuming another Lua
+  -- local in main() (which is intentionally kept just below Lua's 200-local
+  -- ceiling). KIM still owns every 2D HUD surface there.
+  mod._kantoInMotionMobileBattleArtStageOnlyActive = function()
+    return battleSystemEnabled() and battleArt3DBattleEnabled()
+      and type(mod._kantoInMotionNativeMobileHost) == "function"
+      and mod._kantoInMotionNativeMobileHost()
   end
+
+  local function battleLiteHudActive()
+    return battleSystemEnabled()
+      and (not externalBattleSceneOwnerRegistered()
+        or mod._kantoInMotionMobileBattleArtStageOnlyActive())
+  end
+
 
   local function battleBridgePath(species, side, mon)
     if not battleLiteOwnsSprites() then return nil end
@@ -1981,9 +2073,14 @@ return function(mod)
         BattleState._kantoInMotionBattleDraw = nativeBattleDraw
         BattleState.draw = function(self, ...)
           local ownsFullscreen = battleLiteFullScreenActive()
+          local ownsMobileStageUi = mod._kantoInMotionMobileBattleArtStageOnlyActive()
           if not ownsFullscreen then
             if pendingFullscreenBattle == self then pendingFullscreenBattle = nil end
-            self._kantoInMotionBattleLite = nil
+            -- Battle Art can own the 3D stage without owning the 2D battle UI.
+            -- Keep KIM's hybrid marker live on that mobile stage so bundled
+            -- Modern UI routes commands/moves/messages through its lower-panel
+            -- presenter while the native BattleState continues to own input.
+            self._kantoInMotionBattleLite = ownsMobileStageUi and true or nil
             if self._kantoInMotionOwnsBattlePaper then
               self.letterboxWhite = nil
               self._kantoInMotionOwnsBattlePaper = nil
@@ -2153,6 +2250,14 @@ return function(mod)
     gen6ImageCache[path] = image or false
     return image
   end
+
+  mod._kantoInMotionNativeMobileHost = function()
+    local system = love and love.system
+    if not system or type(system.getOS) ~= "function" then return false end
+    local ok, host = pcall(system.getOS)
+    return ok and (host == "Android" or host == "iOS")
+  end
+
 
   -- Mobile battle presentation policy. Kanto in Motion keeps its desktop
   -- presentation whenever the virtual controls are hidden. When Android/iOS
@@ -2765,9 +2870,12 @@ return function(mod)
   -- Load the shiny encounter presenter outside this large setup closure's local
   -- namespace. Keeping its state/functions in a separate module avoids Lua's
   -- 200-local limit while still sharing KIM's live battler geometry.
+  mod._kantoInMotionShinyEncounterFxFile =
+    mod._kantoInMotionNativeMobileHost() and "lib/shiny_encounter_fx_mobile.lua"
+      or "lib/shiny_encounter_fx.lua"
   mod._kantoInMotionShinyEncounterFx = (assert(load(assert(
-    mod:read("lib/shiny_encounter_fx.lua")),
-    "@" .. mod.path .. "/lib/shiny_encounter_fx.lua")))()(
+    mod:read(mod._kantoInMotionShinyEncounterFxFile)),
+    "@" .. mod.path .. "/" .. mod._kantoInMotionShinyEncounterFxFile)))()(
       mod, isBattleShiny, directStageGeometry, directSideMetrics)
 
   setFlatBattleWorld = function(game, battle)
@@ -2965,6 +3073,12 @@ return function(mod)
   -- messages.  HP/status/EXP overlays remain source/KIM-owned.  Keeping this
   -- decision here also gives the master BATTLE SYSTEM switch a true bypass for
   -- users who prefer vanilla or another battle presentation mod.
+  -- Forward declaration used by the Battle Art + Typed Move Colors branch.
+  -- The Battle Art path needs to inspect the live battle before the concrete
+  -- scanner is defined later in this file. Keeping this as a real upvalue
+  -- avoids Lua resolving currentBattleState as a missing global.
+  local currentBattleState
+
   local function battleModernUiActive(game,state)
     -- Mobile uses the same hybrid ownership as desktop: Modern UI owns the
     -- command/move/message surface while KIM keeps the Battle Art-style
@@ -3000,7 +3114,11 @@ return function(mod)
     local originalDetached = patch.detached
     patch._kantoInMotionDetached = originalDetached
     patch.detached = function(battle, ...)
-      if battle and battleLiteFullScreenActive() and battleModernUiActive(battle and battle.game,battle) then
+      if battle and ((battleLiteFullScreenActive()
+          and battleModernUiActive(battle and battle.game,battle))
+          or (battle.dramaticShapeShot ~= nil and integratedModernUiEnabled()
+            and mod._kantoInMotionModernUiInstalled == true
+            and mod.options:get("battleUiWip") ~= false)) then
         return false
       end
       return originalDetached(battle, ...)
@@ -3010,7 +3128,11 @@ return function(mod)
 
   local function withTypedBattlePresentationSuppressed(game, fn)
     pcall(installTypedBattleLiteInputCompat)
-    if not typedMoveColorsHandle() or not battleModernUiActive(game) then
+    if not typedMoveColorsHandle() or not (battleModernUiActive(game)
+        or (integratedModernUiEnabled() and mod._kantoInMotionModernUiInstalled == true
+          and mod.options:get("battleUiWip") ~= false
+          and currentBattleState(game) ~= nil
+          and currentBattleState(game).dramaticShapeShot ~= nil)) then
       return fn()
     end
     local loader = game and game.mods
@@ -3070,6 +3192,9 @@ return function(mod)
   local battleSceneExpandedCanvas = nil
   local battleTrainerCanvas = nil
   local battleHudCanvas = nil
+  -- Party Poké Balls are captured separately so HUD COLOR = INVERTED can
+  -- transform HUD ink without recoloring Pokéball Colorfix artwork.
+  local battlePartyBallCanvas = nil
   local battleTextCanvas = nil
   local battleHudQuads = nil
   local battleHudShader = nil
@@ -3110,7 +3235,7 @@ return function(mod)
     return 0,0,vw,vh
   end
 
-  local function currentBattleState(game)
+  currentBattleState = function(game)
     local stack = game and game.stack
     local states = stack and stack.states
     if type(states) == "table" then
@@ -3500,12 +3625,44 @@ return function(mod)
   -- over the photographic/painted Gen 6 arena with no opaque status boxes.
   local function captureBattleHud(battle, slide)
     battleHudCanvas = logicalCanvas(battleHudCanvas)
-    if not battleHudCanvas then return nil end
+    battlePartyBallCanvas = logicalCanvas(battlePartyBallCanvas)
+    if not battleHudCanvas then return nil, nil end
     local g = love.graphics
     local previousCanvas = g.getCanvas and g.getCanvas() or nil
     local ownColorMode = rawget(battle, "colorMode")
-    g.push("all")
+    local mobileStageOnly = type(mod._kantoInMotionMobileBattleArtStageOnlyActive) == "function"
+      and mod._kantoInMotionMobileBattleArtStageOnlyActive()
+    local ownDramaticShapeShot = mobileStageOnly and rawget(battle, "dramaticShapeShot") or nil
+    local stackBase = nil
+
+    if mobileStageOnly and type(g.getStackDepth) == "function" then
+      local okDepth, depth = pcall(g.getStackDepth)
+      if okDepth then stackBase = tonumber(depth) end
+    end
+
+    if mobileStageOnly then
+      local okPush, pushErr = pcall(g.push, "all")
+      if not okPush then
+        if mod.log and type(mod.log.warn) == "function" then
+          mod.log:warn("Battle Lite HUD capture could not save graphics state: " .. tostring(pushErr))
+        end
+        return nil, nil
+      end
+    else
+      -- Desktop deliberately keeps the confirmed v11 graphics path exactly.
+      g.push("all")
+    end
+
     local ok, err = pcall(function()
+      -- Keep party-ball artwork on its own native-resolution layer.  The
+      -- integrated Pokéball Colorfix drawBallRow hook switches to this canvas
+      -- only for the six party icons, leaving every other HUD pixel exactly as
+      -- it was in the confirmed v9 capture path.
+      if battlePartyBallCanvas then
+        g.setCanvas(battlePartyBallCanvas)
+        g.origin()
+        g.clear(0, 0, 0, 0)
+      end
       g.setCanvas(battleHudCanvas)
       g.origin()
       g.clear(0, 0, 0, 0)
@@ -3515,10 +3672,35 @@ return function(mod)
       -- not followed by the engine's zone recolour pass.
       battle.colorMode = function() return false end
       battle._kantoInMotionHudCapture = true
+      battle._kantoInMotionPartyBallCanvas = battlePartyBallCanvas
+
+      -- Mobile Battle Art wraps drawHUDs and can suppress this private KIM
+      -- capture through its staged-scene marker. Remove that marker only on
+      -- Android/iOS stage-only battles. Desktop keeps the v11 call untouched.
+      if mobileStageOnly then battle.dramaticShapeShot = nil end
       battle:drawHUDs(slide or 0)
     end)
-    g.pop()
+
+    if mobileStageOnly then
+      -- A swallowed nested draw error must not strand graphics pushes before
+      -- Gen1Recomp reaches GameViewport.finish -> TouchControls.
+      if stackBase ~= nil and type(g.getStackDepth) == "function" then
+        for _ = 1, 128 do
+          local okDepth, depth = pcall(g.getStackDepth)
+          depth = okDepth and tonumber(depth) or nil
+          if not depth or depth <= stackBase then break end
+          if not pcall(g.pop) then break end
+        end
+      else
+        pcall(g.pop)
+      end
+      battle.dramaticShapeShot = ownDramaticShapeShot
+    else
+      g.pop()
+    end
+
     battle._kantoInMotionHudCapture = nil
+    battle._kantoInMotionPartyBallCanvas = nil
     if ownColorMode ~= nil then battle.colorMode = ownColorMode
     else battle.colorMode = nil end
     if previousCanvas then g.setCanvas(previousCanvas) else g.setCanvas() end
@@ -3526,9 +3708,9 @@ return function(mod)
       if mod.log and type(mod.log.warn) == "function" then
         mod.log:warn("Battle Lite HUD capture failed: " .. tostring(err))
       end
-      return nil
+      return nil, nil
     end
-    return battleHudCanvas
+    return battleHudCanvas, battlePartyBallCanvas
   end
 
   local BATTLE_HUD_SHADER = [[
@@ -3612,7 +3794,7 @@ return function(mod)
   end
 
   local function drawBattleArtHud(battle, viewport, slide)
-    local layer = captureBattleHud(battle, slide)
+    local layer, partyBalls = captureBattleHud(battle, slide)
     local quads = layer and hudQuads() or nil
     if not (layer and quads) then return false end
     local ox,oy,vw,vh=battleUiViewportRect(battle and battle.game,viewport)
@@ -3669,7 +3851,16 @@ return function(mod)
     end
     g.draw(layer, quads.enemy, enemyBandX, enemyBandY, 0, hsX, hsY)
     g.draw(layer, quads.player, playerBandX, playerBandY, 0, hsX, hsY)
+
+    -- Composite Pokéball Colorfix artwork after the HUD shader.  This keeps
+    -- the exact v9 HUD resolution/geometry while preventing HUD COLOR =
+    -- INVERTED from turning the balls' dark artwork outlines into white ink.
     g.setShader()
+    if partyBalls then
+      g.setColor(1, 1, 1, 1)
+      g.draw(partyBalls, quads.enemy, enemyBandX, enemyBandY, 0, hsX, hsY)
+      g.draw(partyBalls, quads.player, playerBandX, playerBandY, 0, hsX, hsY)
+    end
     g.pop()
     return true
   end
@@ -3931,6 +4122,9 @@ return function(mod)
     -- briefly fail open while captureBattleHud redraws those exact native
     -- glyphs into its transparent scratch texture.
     mod.hooks:wrap("battle.status_hud_visible", function(nextFn, state)
+      -- Battle Art may own the staged scene, but KIM still owns the selected
+      -- HUD glyph treatment. Sync before Battle Art decides how to capture it.
+      pcall(syncBattleArtHudColor)
       if state and state._kantoInMotionHudCapture then return true end
       if battleLiteHudActive() then
         if state then state._kantoInMotionStatusHudSuppressed = true end
@@ -3944,15 +4138,21 @@ return function(mod)
     -- first, let downstream Modern UI paint its command/move/message panels,
     -- then place the Battle-Art-style native Gen 1 HUD above everything.
     mod.hooks:wrap("render.hud", function(nextFn, game, viewport)
+      pcall(syncBattleArtHudColor)
       local battle = currentBattleState(game)
       local active = battle and battleLiteFullScreenActive() or false
+      local mobileBattleArtStageOnly = battle and mod._kantoInMotionMobileBattleArtStageOnlyActive() or false
       if not battle or not battleSystemEnabled() or externalBattleSceneOwnerRegistered() then
         restoreBattleLayout(game)
       elseif battleSystemEnabled() and not externalBattleSceneOwnerRegistered() then
         forceBattleLayoutOG(game)
       end
-      if battle then battle._kantoInMotionBattleLite = active and true or nil end
-      if game then game._kantoInMotionFullscreenBattle = active and true or nil end
+      if battle then
+        battle._kantoInMotionBattleLite = (active or mobileBattleArtStageOnly) and true or nil
+      end
+      if game then
+        game._kantoInMotionFullscreenBattle = (active or mobileBattleArtStageOnly) and true or nil
+      end
 
       -- render.compose removed the complete native 160x144 battle surface.
       -- Put back only its transparent trainer/send-out/native-fallback pieces
@@ -3961,9 +4161,10 @@ return function(mod)
       -- Party/Bag child screens are full UI owners: never reconstruct battle
       -- furniture over them. This fixes the clipped/incomplete Pokemon menu
       -- and HP/status bands appearing on top of both Pokemon and Item screens.
-      local childMenuOpen = active and battleChildMenuOpen(game, battle) or false
+      local childMenuOpen = (active or mobileBattleArtStageOnly)
+        and battleChildMenuOpen(game, battle) or false
       if battle then
-        battle._kantoInMotionMobileDialogRect = active
+        battle._kantoInMotionMobileDialogRect = (active or mobileBattleArtStageOnly)
           and mobileBattleDialogRect(battle,viewport) or nil
         -- Publish the exact mobile portrait battlefield rectangle in LOVE/window
         -- units. Modern UI must use this instead of its own responsive arena
@@ -4000,12 +4201,53 @@ return function(mod)
         end
       end
 
+      -- Battle Art 1.10's public stage API projects attack cels but does not
+      -- provide a final-resolution Essentials BG/FG plane seam. Keep those
+      -- planes out of the native 160x96 UI surface and composite them here at
+      -- the real window size. This fixes the centered translucent rectangles
+      -- used by ThunderShock/Thunder/Thunderbolt/Flash and every other KRBA
+      -- full-field image/color timing plane.
+      local krbaBattleArtSession=nil
+      local mobileBattleArt = battle and battleArt3DBattleEnabled() and mod._kantoInMotionNativeMobileHost()
+      if battle and battleSystemEnabled() and battle.dramaticShapeShot
+          and mod.exports and type(mod.exports._kantoInMotionKRBAActiveSession)=="function" then
+        local okSess,sess=pcall(mod.exports._kantoInMotionKRBAActiveSession)
+        if okSess and type(sess)=="table" and not sess.done then
+          krbaBattleArtSession=sess
+          local backFn = mobileBattleArt and sess.drawBattleArtScreenBackMobile
+            or sess.drawBattleArtScreenBack
+          if type(backFn)=="function" then pcall(backFn,sess) end
+        end
+      end
+
+      -- Battle Art owns only the staged 3D scene here. KIM's shiny encounter
+      -- cue remains an independent presentation layer. Android/iOS use a
+      -- separate no-push compositor so TouchControls receives a clean graphics
+      -- stack after Renderer:endFrame; desktop keeps the established path.
+      local battleArtShot = battle and battle.dramaticShapeShot or nil
+      if battle and battleSystemEnabled() and battleArt3DBattleEnabled()
+          and type(battleArtShot) == "table" and not battleArtShot.kantoInMotion2D
+          and mod._kantoInMotionShinyEncounterFx then
+        local shinyFn = mobileBattleArt
+          and mod._kantoInMotionShinyEncounterFx.drawBattleArtMobile
+          or mod._kantoInMotionShinyEncounterFx.drawBattleArt
+        if type(shinyFn) == "function" then
+          pcall(shinyFn, mod._kantoInMotionShinyEncounterFx, battle, game)
+        end
+      end
+      if krbaBattleArtSession then
+        local frontFn = mobileBattleArt and krbaBattleArtSession.drawBattleArtScreenFrontMobile
+          or krbaBattleArtSession.drawBattleArtScreenFront
+        if type(frontFn)=="function" then pcall(frontFn,krbaBattleArtSession) end
+      end
+
       local result = { pcall(function()
         return withTypedBattlePresentationSuppressed(game,
           function() return nextFn(game, viewport) end)
       end) }
 
-      if active and not childMenuOpen and battleLiteHudActive() then
+      if (active or mobileBattleArtStageOnly) and not childMenuOpen
+          and battleLiteHudActive() then
         drawBattleArtHud(battle, viewport, select(1, battleOffsets(battle)))
       end
 
@@ -4015,7 +4257,9 @@ return function(mod)
         battle._kantoInMotionMobileDialogRect = nil
         battle._kantoInMotionMobileStageRect = nil
       end
-      if battle and not active then battle._kantoInMotionBattleLite = nil end
+      if battle and not (active or mobileBattleArtStageOnly) then
+        battle._kantoInMotionBattleLite = nil
+      end
       local ok = table.remove(result, 1)
       if not ok then error(result[1], 0) end
       return unpack(result)
@@ -5280,6 +5524,99 @@ return function(mod)
       end
     else
       mod.log:error("cannot load integrated Pokeball target fix: %s",tostring(ballInstaller))
+    end
+
+    -- Battle Art 1.10+ remains the 3D scene owner while DUPLICATE FIX =
+    -- MODDED delegates Pokemon pictures to KIM. Use the established stable
+    -- Canvas provider on every platform; it runs from BattleState:update, not
+    -- from the final mobile draw, and exactly matches KIM's accepted sprite
+    -- presentation/cropping path.
+    okBall,ballInstaller=pcall(function()
+      local bridgeFile=mod._kantoInMotionNativeMobileHost()
+        and "lib/battle_art_sprite_bridge_mobile_stable.lua"
+        or "lib/battle_art_sprite_bridge.lua"
+      local src=assert(mod:read(bridgeFile))
+      local loader=loadstring or load
+      return assert(loader(src,"@"..mod.path.."/"..bridgeFile))()
+    end)
+    if okBall and type(ballInstaller)=="function" then
+      okBall,ballInstaller=pcall(ballInstaller,mod,battleRecord,
+        renderPresentationFrame,currentFrame)
+    end
+    if okBall and type(ballInstaller)=="table" then
+      mod._kantoInMotionBattleArtSpriteBridge=ballInstaller
+      mod._kantoInMotionBattleArtBridgePlatform=mod._kantoInMotionNativeMobileHost()
+        and "mobile_stage_stable" or "desktop_canvas"
+    elseif not okBall then
+      mod.log:error("Battle Art sprite compatibility bridge failed: %s",tostring(ballInstaller))
+    end
+
+    -- Gen1Recomp 0.2.45 clips the classic player back-pic rows while its
+    -- native move/Mimic menu is open. On desktop Battle Art can intentionally
+    -- keep BACK SPRITES on that 2D pic layer, but KIM Modern UI replaces the
+    -- native menu with its separate lower panel. Skip only that now-obsolete
+    -- native clip on the desktop Battle Art + Modern UI path. Mobile has its
+    -- independent v20 stage-only renderer and never installs this bridge.
+    if not mod._kantoInMotionNativeMobileHost() then
+      okBall,ballInstaller=pcall(function()
+        local src=assert(mod:read("lib/battle_art_desktop_menu_clip_fix.lua"))
+        local loader=loadstring or load
+        return assert(loader(src,"@"..mod.path.."/lib/battle_art_desktop_menu_clip_fix.lua"))()
+      end)
+      if okBall and type(ballInstaller)=="function" then
+        okBall,ballInstaller=pcall(ballInstaller,mod,integratedModernUiEnabled,
+          battleArt3DBattleEnabled,mod._kantoInMotionNativeMobileHost)
+      end
+      if okBall and ballInstaller then
+        mod._kantoInMotionBattleArtDesktopMenuClipFix=ballInstaller
+      elseif not okBall then
+        mod.log:error("Battle Art desktop move-menu clip fix failed: %s",tostring(ballInstaller))
+      end
+    end
+
+    -- Android/iOS use Battle Art as a strict STAGE provider. Battle Art's
+    -- snapped HUD path binds and blits extra scratch canvases before the
+    -- engine's mobile TouchControls pass; that path is also explicitly
+    -- disabled upstream on iOS. KIM disables it at runtime on mobile only,
+    -- suppresses Battle Art's native HUD surface, and renders KIM's own
+    -- native-resolution HUD later in render.hud. No Battle Art file is edited.
+    if mod._kantoInMotionNativeMobileHost() then
+      okBall,ballInstaller=pcall(function()
+        local src=assert(mod:read("lib/battle_art_mobile_stage_only.lua"))
+        local loader=loadstring or load
+        return assert(loader(src,"@"..mod.path.."/lib/battle_art_mobile_stage_only.lua"))()
+      end)
+      if okBall and type(ballInstaller)=="function" then
+        okBall,ballInstaller=pcall(ballInstaller,mod,battleSystemEnabled,
+          battleArt3DBattleEnabled)
+      end
+      if okBall and ballInstaller then
+        mod._kantoInMotionBattleArtMobileStageOnly=ballInstaller
+
+        -- Gen1Recomp 0.2.45 confirms the final mobile order is:
+        -- Renderer:endFrame -> render.hud -> GameViewport.finish ->
+        -- TouchControls:draw. Guard the ENTIRE render.hud boundary: repair any
+        -- Battle Art state already present on entry, then repair any state leaked
+        -- by KIM/Modern HUD composition before GameViewport.finish. This keeps a
+        -- bad HUD frame from poisoning Battle Art's canvas/transform on the next
+        -- frame and is deliberately NOT the old TouchControls workaround.
+        okBall,ballInstaller=pcall(function()
+          local src=assert(mod:read("lib/battle_art_mobile_hud_boundary.lua"))
+          local loader=loadstring or load
+          return assert(loader(src,"@"..mod.path.."/lib/battle_art_mobile_hud_boundary.lua"))()
+        end)
+        if okBall and type(ballInstaller)=="function" then
+          okBall,ballInstaller=pcall(ballInstaller,mod,
+            mod._kantoInMotionMobileBattleArtStageOnlyActive)
+        end
+        if okBall and ballInstaller then
+          mod._kantoInMotionBattleArtMobileHudBoundary=true
+        elseif not okBall then
+          mod.log:error("Battle Art mobile HUD handoff guard failed: %s",tostring(ballInstaller))
+        end
+      elseif not okBall then
+        mod.log:error("Battle Art mobile stage-only bridge failed: %s",tostring(ballInstaller))
+      end
     end
 
     -- Wilds of Kanto already ships shiny overworld art and a Battle Art-shaped

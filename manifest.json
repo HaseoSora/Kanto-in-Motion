@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -19,7 +19,8 @@
     "useful_bag",
     "gen2_clean_ui",
     "typed_move_colors",
-    "overworld_wild_spawns"
+    "overworld_wild_spawns",
+    "BATTLE_ART_VOXEL_FORK"
   ],
   "conflicts": [
     "gen1_modern_ui",
@@ -32,6 +33,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion v1.3.0. Major Gen 1 battle/presentation update with standalone Battle Art-style 2D battles, KRS backgrounds, integrated Kanto Rework move animations, persistent shinies, mobile fixes, and cooperative compatibility bridges; Gen 2 support retained.",
+  "description": "Kanto in Motion v1.3.1. Compatibility and stability update for Gen1Recomp 0.2.x with Battle Art 1.10.0 desktop/mobile isolation, KIM-owned shiny identity, restored mobile Modern UI/QOL integration, and retained Gen 2 support.",
   "github": "HaseoSora/Kanto-in-Motion"
 }

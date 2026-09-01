@@ -1,10 +1,10 @@
 # Asset notices
 
-Kanto in Motion v1.3.0 is packaged in two variants.
+Kanto in Motion v1.3.1 is packaged in two variants.
 
 ## No Pokémon Assets package
 
-`Kanto-in-Motion-v1.3.0-No-Pokemon-Assets.zip` excludes locally imported/generated Pokémon front/back/title artwork and the generated sprite metadata that directly depends on those payloads.
+`Kanto-in-Motion-v1.3.1-No-Pokemon-Assets.zip` excludes locally imported/generated Pokémon front/back/title artwork and the generated sprite metadata that directly depends on those payloads.
 
 Excluded from that package:
 
@@ -22,7 +22,7 @@ Players can populate compatible local animated assets with `tools/import_assets.
 
 ## Full Assets package
 
-`Kanto-in-Motion-v1.3.0-Full-Assets.zip` contains the animated Pokémon/title payloads present in the maintainer's working release build.
+`Kanto-in-Motion-v1.3.1-Full-Assets.zip` contains the animated Pokémon/title payloads present in the maintainer's working release build.
 
 Redistribution of third-party or Pokémon-derived artwork is separate from Kanto in Motion's own source-code permissions. Anyone redistributing the Full Assets package is responsible for ensuring they have the necessary rights or permission for included artwork.
 
@@ -59,7 +59,7 @@ Kanto in Motion does not claim ownership of this artwork.
 
 ## Shiny encounter presentation assets
 
-v1.3.0 includes:
+v1.3.1 includes:
 
 - `assets/effects/shiny_sparkle.png`
 - `assets/sfx/shiny.wav`

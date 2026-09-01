@@ -3928,7 +3928,7 @@ return function(mod)
       screens = { { label = "KANTO SETTINGS", id = "animated_menu_pokemon:settings" } },
       modernUi = true },
     { id = "BATTLE_ART_VOXEL_FORK", label = "BATTLE ART",
-      screens = { { label = "SETTINGS", id = "BATTLE_ART_VOXEL_FORK:settings" } },
+      screens = { { label = "SETTINGS", id = "BATTLE_ART_VOXEL_FORK:settings", schemaFallback = true } },
       startExtras = { "CACHE" } },
     { id = "overworld_wild_spawns", label = "WILDS OF KANTO",
       screens = {
@@ -4060,9 +4060,107 @@ return function(mod)
     return out
   end
 
+  -- Source-owned OPTIONS callbacks are the safest way to open authored
+  -- settings screens from the centralized MOD MENU.  In particular, Battle
+  -- Art registers its screen in its own mod context; calling the source row's
+  -- activate closure preserves that context instead of asking KIM's ui.push
+  -- helper to resolve another mod's screen.
+  runtime.capturedCentralOptionRows = runtime.capturedCentralOptionRows or {}
+
+  runtime.captureCentralOptionRow = function(row)
+    if type(row) ~= "table" then return end
+    local id = safeText(row.id or row.key or row.optionId or row.option_id)
+    local label = safeText(row.label)
+    local key = id ~= "" and id or label
+    if key ~= "" then runtime.capturedCentralOptionRows[key] = row end
+  end
+
+  runtime.findCapturedOptionRow = function(spec)
+    if type(spec) ~= "table" then return nil end
+    local specId = safeText(spec.id):lower()
+    local specLabel = safeText(spec.label):upper():gsub("%s+", " ")
+    for _, row in pairs(runtime.capturedCentralOptionRows or {}) do
+      local rawId = safeText(row.id or row.key or row.optionId
+        or row.option_id or row.modId or row.mod_id):lower()
+      local label = safeText(row.label):upper():gsub("%s+", " ")
+      if (specId ~= "" and rawId:find(specId, 1, true))
+          or (specLabel ~= "" and label == specLabel) then
+        if type(row.activate) == "function" then return row end
+      end
+    end
+    return nil
+  end
+
+  runtime.ensureCapturedOptionRows = function(game)
+    if runtime.findCapturedOptionRow({
+        id = "BATTLE_ART_VOXEL_FORK", label = "BATTLE ART" }) then
+      return
+    end
+    local ok, OptionsMenu = pcall(require, "src.ui.OptionsMenu")
+    if ok and OptionsMenu and type(OptionsMenu.new) == "function" then
+      -- Building (not pushing) the normal OPTIONS model runs every source
+      -- ui.options.rows hook.  KIM's wrapper below records centralized rows
+      -- before hiding them from the ordinary OPTIONS page.
+      pcall(OptionsMenu.new, game)
+    end
+  end
+
+  runtime.openSourceOwnedSettings = function(game, spec)
+    runtime.ensureCapturedOptionRows(game)
+    local row = runtime.findCapturedOptionRow(spec)
+    if not row then return false end
+    local before = game and game.stack and game.stack.top and game.stack:top()
+    local ok = pcall(row.activate, game)
+    local after = game and game.stack and game.stack.top and game.stack:top()
+    return ok and (after ~= before or before == nil)
+  end
+
+  -- Battle Art 1.10.0 no longer exposes one monolithic settings screen.
+  -- Its own OptionsMenu collapses the mod settings into four authored category
+  -- rows (WORLD / PERFORMANCE / POKEMON ART / BATTLE SCENE).  Build the normal
+  -- OptionsMenu model without pushing it, then reuse those exact category
+  -- descriptors/callbacks from KIM's centralized MOD MENU.  Battle Art remains
+  -- completely unmodified and continues to own every setting/submenu it opens.
+  runtime.battleArtCategoryItems = function(game)
+    local okMenu, OptionsMenu = pcall(require, "src.ui.OptionsMenu")
+    if not okMenu or type(OptionsMenu) ~= "table"
+        or type(OptionsMenu.new) ~= "function" then return nil end
+    local okBuilt, sourceMenu = pcall(OptionsMenu.new, game)
+    if not okBuilt or type(sourceMenu) ~= "table" then return nil end
+    local rows = sourceMenu.view or sourceMenu.rows or {}
+    local items = {}
+    for _, row in ipairs(rows) do
+      local id = safeText(type(row) == "table" and row.id or "")
+      if id:find("^BATTLE_ART_VOXEL_FORK:group:")
+          and type(row.activate) == "function" then
+        local sourceRow = row
+        items[#items + 1] = {
+          label = safeText(sourceRow.label) ~= "" and safeText(sourceRow.label) or "SETTINGS",
+          keepOpen = true,
+          onSelect = function()
+            -- Source-owned callback: preserves Battle Art's own OptionsMenu
+            -- context, dynamic visibility rules and category refresh logic.
+            pcall(sourceRow.activate, game)
+          end,
+        }
+      end
+    end
+    return #items > 0 and items or nil
+  end
+
   runtime.openPerModMenu = function(game, spec)
     local items = {}
-    for _, screen in ipairs(spec.screens or {}) do
+    local battleArtCategories = nil
+    if spec.id == "BATTLE_ART_VOXEL_FORK" then
+      battleArtCategories = runtime.battleArtCategoryItems(game)
+      for _, item in ipairs(battleArtCategories or {}) do
+        items[#items + 1] = item
+      end
+    end
+    -- Older Battle Art builds still use their single authored settings screen;
+    -- retain that path as a fallback when no 1.10+ category rows were found.
+    for _, screen in ipairs((battleArtCategories and #battleArtCategories > 0)
+        and {} or (spec.screens or {})) do
       items[#items + 1] = {
         label = screen.label or "SETTINGS",
         keepOpen = true,
@@ -4073,7 +4171,17 @@ return function(mod)
           -- code swallowed the unknown-screen error with pcall(), leaving the
           -- SETTINGS row looking dead.  Fall back to ManagerState's schema
           -- renderer so either style remains usable.
-          local opened = runtime.openScreenSafe(game, screen.id)
+          local opened = false
+          -- Battle Art's settings screen is authored and registered by Battle
+          -- Art itself.  Prefer its own OPTIONS callback so the launch keeps
+          -- the source mod's UI context; this fixes the dead SETTINGS row in
+          -- KIM's centralized MOD MENU without modifying Battle Art.
+          if spec.id == "BATTLE_ART_VOXEL_FORK" then
+            opened = runtime.openSourceOwnedSettings(game, spec)
+          end
+          if not opened then
+            opened = runtime.openScreenSafe(game, screen.id)
+          end
           if not opened and screen.schemaFallback then
             runtime.openSchemaModOptions(game, spec.id)
           end
@@ -4198,6 +4306,10 @@ return function(mod)
       if original[row]
           or not runtime.centralManagedDescriptor(row, "options") then
         clean[#clean + 1] = row
+      else
+        -- Preserve the source descriptor/callback even though the centralized
+        -- MOD MENU hides its duplicate row from ordinary OPTIONS.
+        runtime.captureCentralOptionRow(row)
       end
     end
     return clean

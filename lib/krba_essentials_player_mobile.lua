@@ -559,14 +559,18 @@ return function(mod, DATA)
       local k=tonumber(tr.scale) or 1
       if not (k>0) or k~=k then k=1 end
       local g=love.graphics
-      g.push()
-      g.translate((pc[1] or ac[1])-ac[1],(pc[2] or ac[2])-ac[2])
-      if k~=1 then
-        g.translate(ac[1],ac[2]); g.scale(k,k); g.translate(-ac[1],-ac[2])
-      end
-      local ok,err=pcall(self.drawParticles,self,pass,stage)
-      g.pop()
+      local pushed=pcall(g.push)
+      if not pushed then return false end
+      local ok,err=pcall(function()
+        g.translate((pc[1] or ac[1])-ac[1],(pc[2] or ac[2])-ac[2])
+        if k~=1 then
+          g.translate(ac[1],ac[2]); g.scale(k,k); g.translate(-ac[1],-ac[2])
+        end
+        self:drawParticles(pass,stage)
+      end)
+      pcall(g.pop)
       if not ok then error(err,0) end
+      return true
     end
 
     function s:drawPlane(p)
@@ -727,37 +731,42 @@ return function(mod, DATA)
       w,h=tonumber(w),tonumber(h)
       if not (ok and w and h and w>0 and h>0) then return false end
 
-      g.push("all")
-      if g.origin then g.origin() end
-      if g.setScissor then g.setScissor(0,0,w,h) end
-      if g.setShader then g.setShader() end
-      pcall(g.setBlendMode,"alpha","alphamultiply")
+      local pushed=pcall(g.push,"all")
+      if not pushed then return false end
+      local okDraw,drew=pcall(function()
+        if g.origin then g.origin() end
+        if g.setScissor then g.setScissor(0,0,w,h) end
+        if g.setShader then g.setShader() end
+        pcall(g.setBlendMode,"alpha","alphamultiply")
 
-      if p.file then
-        local img=self:image(p.file)
-        if not img then g.pop(); return false end
-        local sourceW=512
-        local sourceH=FIELD_H/SCALE
-        local sx=w/sourceW
-        local sy=h/sourceH
-        local iw,ih=img:getWidth()*sx,img:getHeight()*sy
-        if iw<1 or ih<1 then g.pop(); return false end
-        g.setColor(1,1,1,(p.opacity or 0)/255)
-        local ox=(p.x or 0)*sx
-        local oy=(p.y or 0)*sy
-        local startX=ox-math.ceil((ox+w)/iw)*iw
-        local startY=oy-math.ceil((oy+h)/ih)*ih
-        for y=startY,h,ih do
-          for x=startX,w,iw do
-            g.draw(img,x,y,0,sx,sy)
+        if p.file then
+          local img=self:image(p.file)
+          if not img then return false end
+          local sourceW=512
+          local sourceH=FIELD_H/SCALE
+          local sx=w/sourceW
+          local sy=h/sourceH
+          local iw,ih=img:getWidth()*sx,img:getHeight()*sy
+          if iw<1 or ih<1 then return false end
+          g.setColor(1,1,1,(p.opacity or 0)/255)
+          local ox=(p.x or 0)*sx
+          local oy=(p.y or 0)*sy
+          local startX=ox-math.ceil((ox+w)/iw)*iw
+          local startY=oy-math.ceil((oy+h)/ih)*ih
+          for y=startY,h,ih do
+            for x=startX,w,iw do
+              g.draw(img,x,y,0,sx,sy)
+            end
           end
+        else
+          g.setColor((p.r or 0)/255,(p.g or 0)/255,(p.b or 0)/255,(p.opacity or 0)/255)
+          g.rectangle("fill",0,0,w,h)
         end
-      else
-        g.setColor((p.r or 0)/255,(p.g or 0)/255,(p.b or 0)/255,(p.opacity or 0)/255)
-        g.rectangle("fill",0,0,w,h)
-      end
-      g.pop()
-      return true
+        return true
+      end)
+      pcall(g.pop)
+      if not okDraw then return false end
+      return drew==true
     end
 
     function s:drawBattleArtScreenBack()

@@ -304,6 +304,35 @@ return function(mod)
   -- for that map -- battleLayout stays "og" in that case too, and there the
   -- zone-pass danger is real again.
   function BattleState:drawBallRow(party, x, y, dx)
+    -- Kanto in Motion captures the native HUD into a transparent scratch
+    -- texture with colorMode forced OFF, then composites that HUD at final
+    -- window resolution.  In that capture there is no later SGB zone pass,
+    -- so falling through to the stock balls.png draw leaves the party row
+    -- grayscale. Draw the true-color row directly while KIM owns that capture.
+    --
+    -- This is deliberately separate from Battle Art's dramaticShapeShot path:
+    -- Battle Art keeps its ink-safe palette while 3D-BTL is active; KIM's 2D
+    -- HUD uses the normal Pokeball Colorfix palette when 3D-BTL is disabled.
+    if self._kantoInMotionHudCapture then
+      if icons == nil then icons = buildIcons(ICONS) end
+      if icons then
+        local target = self._kantoInMotionPartyBallCanvas
+        local g = love.graphics
+        local previousCanvas = target and g.getCanvas and g.getCanvas() or nil
+        if target then g.setCanvas(target) end
+        for i = 1, 6 do
+          local mon = party[i]
+          local tile = not mon and 3 or mon.hp <= 0 and 2 or mon.status and 1 or 0
+          g.draw(icons.img, icons[tile], x + (i - 1) * dx, y)
+        end
+        if target then
+          if previousCanvas then g.setCanvas(previousCanvas) else g.setCanvas() end
+        end
+        return
+      end
+      return originalRow(self, party, x, y, dx)
+    end
+
     if self.dramaticShapeShot then
       if iconsDramatic == nil then iconsDramatic = buildIcons(ICONS_DRAMATIC) end
       if iconsDramatic then

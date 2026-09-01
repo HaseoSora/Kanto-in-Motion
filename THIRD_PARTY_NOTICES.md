@@ -1,6 +1,6 @@
 # Third-party notices
 
-Kanto in Motion v1.3.0 includes, adapts, or redistributes portions of third-party community work. Attribution does not imply endorsement and does not transfer ownership of the original work to Kanto in Motion.
+Kanto in Motion v1.3.1 includes, adapts, or redistributes portions of third-party community work. Attribution does not imply endorsement and does not transfer ownership of the original work to Kanto in Motion.
 
 ## Battle Art / DramaticShapeVoxelMod
 
@@ -18,7 +18,7 @@ The optional static and animated player-trainer assets under `assets/battle/play
 **Author / project credit:** Faendra  
 https://github.com/Faendra/kanto-rework-suite
 
-Kanto in Motion integrates the Kanto Rework battle-animation lineage used for the Gen 1 move-animation bridge and the KRS battle-background/routing data used by the v1.3.0 KRS arena choice.
+Kanto in Motion integrates the Kanto Rework battle-animation lineage used for the Gen 1 move-animation bridge and the KRS battle-background/routing data used by the v1.3.1 KRS arena choice.
 
 The integrated animation player has been adapted for KIM's standalone fullscreen 2D battle layout, mobile composition, player/enemy targeting, and KIM sprite geometry. Kanto Rework Suite itself is not required at runtime for these integrated components.
 
@@ -65,7 +65,7 @@ The **No Pokémon Assets** package removes those locally imported Pokémon front
 
 ## Shiny encounter presentation assets
 
-v1.3.0 includes the supplied:
+v1.3.1 includes the supplied:
 
 - `assets/effects/shiny_sparkle.png`
 - `assets/sfx/shiny.wav`
