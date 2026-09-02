@@ -33,11 +33,14 @@ return function(mod, battleSystemEnabled, battleArt3DBattleEnabled)
     end
     local okO, OverworldBattle = pcall(lib.require, "OverworldBattle")
     if not okO or type(OverworldBattle) ~= "table" then return nil end
-    return OverworldBattle
+    local AnimatedBattleArt = nil
+    local okA, animated = pcall(lib.require, "AnimatedBattleArt")
+    if okA and type(animated) == "table" then AnimatedBattleArt = animated end
+    return OverworldBattle, AnimatedBattleArt
   end
 
   local function patchRuntime()
-    local OverworldBattle = battleArtRuntime()
+    local OverworldBattle, AnimatedBattleArt = battleArtRuntime()
     if not OverworldBattle then return false end
 
     -- Battle Art already skips snapHUDs on iOS because its scratch
@@ -51,6 +54,30 @@ return function(mod, battleSystemEnabled, battleArt3DBattleEnabled)
       OverworldBattle.snapHUDs = function(...)
         if active() then return false end
         return original(...)
+      end
+    end
+
+    -- Battle Art 1.10's Gen 5 back metadata predates its stable-frame anchor
+    -- flag for several species. On mobile, let Battle Art remain the normal
+    -- Pokemon-art owner and simply opt its selected animated player back into
+    -- the anchor mechanism it already uses for stable animated sets. This is
+    -- deliberately data-only: no camera, backPinned, placement or ownership
+    -- decision is changed. It also runs before Battle Art decodes the atlas, so
+    -- every prepared frame receives one shared centre/ground contact.
+    if AnimatedBattleArt and type(AnimatedBattleArt.update) == "function"
+        and type(AnimatedBattleArt.definitionFor) == "function"
+        and not AnimatedBattleArt._kantoInMotionMobileStableAnchor then
+      local originalUpdate = AnimatedBattleArt.update
+      AnimatedBattleArt._kantoInMotionMobileStableAnchor = originalUpdate
+      AnimatedBattleArt.update = function(battle, dt, ...)
+        if active() and type(battle) == "table" and battle.player then
+          local okDef, def = pcall(AnimatedBattleArt.definitionFor,
+                                   battle.player, "back")
+          if okDef and type(def) == "table" then
+            def.stableAnchor = true
+          end
+        end
+        return originalUpdate(battle, dt, ...)
       end
     end
 
@@ -107,7 +134,7 @@ return function(mod, battleSystemEnabled, battleArt3DBattleEnabled)
   function M:refresh() return patchRuntime() end
   if mod.exports then
     mod.exports.battleArtMobileStageOnly = true
-    mod.exports.battleArtMobileStageOnlyVersion = 2
+    mod.exports.battleArtMobileStageOnlyVersion = 4
   end
   return M
 end

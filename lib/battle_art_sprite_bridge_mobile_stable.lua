@@ -56,7 +56,7 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame)
     return ok and modded == true, ba
   end
 
-  local function battleArtImage(source, ba)
+  local function preparedImage(source, ba)
     if not (source and ba) then return nil end
     local mode = ""
     if type(ba.displayMode) == "function" then
@@ -73,6 +73,37 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame)
     byMode = byMode or {}
     byMode[mode] = image
     prepared[source] = byMode
+    return image
+  end
+
+  -- MODDED ownership is still supported when the user explicitly selects it,
+  -- but unlike the v3-v6 experiments KIM never forces that ownership on a clean
+  -- Battle Art install. When MODDED is selected, pin every KIM frame to the
+  -- neutral final frame using Battle Art's own metric helper. This changes only
+  -- placement metadata; the authored pixels continue to animate normally.
+  local function battleArtImage(source, ba, record, generation, species, side, variant)
+    local image = preparedImage(source, ba)
+    if not image then return nil end
+    local frames = math.max(1, math.floor(tonumber(record and record.frames) or 1))
+    if frames <= 1 or type(ba.shareFrameAnchor) ~= "function" then return image end
+
+    local referenceSource = renderPresentationFrame(record, generation, species, frames,
+      side, variant or "normal", true)
+    local referenceImage = preparedImage(referenceSource, ba)
+    if referenceImage then
+      pcall(ba.shareFrameAnchor, { image, referenceImage }, 2)
+      -- Pinned backs also clamp their opaque left edge against the classic UI
+      -- canvas. Keep that one clamp coordinate stable too, otherwise a flapping
+      -- wing can move the whole picture even after centre/feet are shared.
+      if type(ba.metrics) == "function" then
+        local metric = ba.metrics(image)
+        local referenceMetric = ba.metrics(referenceImage)
+        if type(metric) == "table" and type(referenceMetric) == "table"
+            and tonumber(referenceMetric.x0) then
+          metric.x0 = referenceMetric.x0
+        end
+      end
+    end
     return image
   end
 
@@ -122,7 +153,8 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame)
     local frame = currentFrame(record)
     local source = renderPresentationFrame(record, generation, normalized, frame,
       artSide, shiny and "shiny" or "normal", true)
-    local image = battleArtImage(source, ba)
+    local image = battleArtImage(source, ba, record, generation, normalized,
+      artSide, shiny and "shiny" or "normal")
     if not image then return false end
     battler.sprite = image
     state.installed = image
@@ -176,7 +208,7 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame)
 
   if mod.exports then
     mod.exports.battleArtSpriteCompat = true
-    mod.exports.battleArtSpriteCompatVersion = 1
+    mod.exports.battleArtSpriteCompatVersion = 2
   end
   return M
 end

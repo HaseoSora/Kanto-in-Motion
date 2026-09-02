@@ -1,3 +1,42 @@
+## 1.3.2
+
+- Promoted the final v7 mobile 3D-BTL rebaseline into the stable public release.
+- Corrected the v1.3.1 Full Assets packaging regression: Full Assets now contains the animated Pokémon front/back/title payloads plus generated metadata required by KIM menu/status/Pokédex/evolution/title animation paths on a clean install.
+- Kept the confirmed desktop v4 Battle Art bridge, including restored PC mouse camera steering.
+- Rebased Android/iOS 3D-BTL on the confirmed v20/v25 stage-only/mobile ownership path and removed the experimental v3-v6 forced ownership/camera/scale overrides.
+- Retained only stable animated-frame anchoring on mobile and desktop so changing atlas silhouettes do not shift the whole battler.
+- Confirmed the final mobile path after testing normal and status move animations without the post-move player-presentation distortion seen during the experimental builds.
+- Retained all v1.3.1 Modern UI, Typed Move Colors, QOL EXP, party Poké Ball/HUD, Battle Art MODS MENU, PC move-menu clipping, shiny/Wilds, and Gen 2 compatibility work.
+
+## v1.3.1 mobile 3D-BTL stable rebaseline (test v7)
+
+- Rebased Android/iOS 3D-BTL presentation on the exact confirmed v20 stage-only bridge and v25 mobile sprite ownership behavior.
+- Removed the experimental v3-v6 mobile forced-MODDED ownership, forced `backPinned()` classification, player-scale wrapper, DPI resampler, and camera-update/recentre wrappers.
+- Battle Art once again keeps its normal saved `DUPLICATE FIX` ownership decision on mobile; KIM no longer changes that decision behind the user's back.
+- Added only stable-frame anchoring: Battle Art-owned animated player backs are opted into Battle Art 1.10's own `stableAnchor` decoder, while an explicitly selected MODDED/KIM back shares the neutral frame's center/feet/x0 placement metrics.
+- Mobile KRBA animation code is byte-identical to the confirmed v25 implementation.
+- Desktop/Windows keeps the confirmed v4 world-card + mouse-camera bridge byte-identical to v6.
+
+## v1.3.1 mobile 3D-BTL camera boundary test
+
+- Keeps Battle Art's mobile player-back composition pinned for every KIM 3D-BTL frame so KRBA sprite-ownership transitions cannot temporarily enable touch camera steering.
+- Recenters Battle Art's mobile camera once at the start of each KIM 3D battle, clearing angles retained by earlier experimental builds.
+- Leaves desktop v4 world-card/mouse-camera behavior unchanged.
+
+## v1.3.1 3D-BTL mobile pinned-anchor split (test v5)
+
+- Kept the confirmed v4 in-world back-card and steerable mouse camera behavior on desktop only.
+- Restored Battle Art's pinned/mobile player-back composition on Android/iOS so portrait 3D-BTL uses the contained mobile stage again.
+- Extended KIM's stable animated-frame anchor on the mobile pinned path by freezing Battle Art's `x0` clamp coordinate to the neutral frame, preventing wide animated backs from shifting sideways as their silhouette changes.
+- Desktop Battle Art sprite bridge is byte-identical to v4.
+
+## v1.3.1 3D-BTL clean-install ownership fix (test)
+
+- Fixed a clean-install regression where Battle Art 1.10.0's default `DUPLICATE FIX = BATTLE ART` prevented KIM's 3D sprite bridge from running.
+- KIM now temporarily owns battler pictures while KIM battle sprites and 3D-BTL are active, without overwriting the user's saved Battle Art preference.
+- This re-enables KIM `PLAYER PKMN SIZE` and stable animated-frame anchoring in 3D-BTL on PC and mobile.
+- 3D-BTL OFF remains unchanged.
+
 ## 1.3.1
 
 - Promoted the confirmed post-v1.3.0 compatibility work into the public **Kanto in Motion v1.3.1** release.
