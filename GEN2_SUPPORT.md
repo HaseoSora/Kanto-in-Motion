@@ -1,6 +1,6 @@
 # Gen 2 support
 
-Kanto in Motion v1.3.2 retains the Gen 2 support introduced in v1.2.0 for Gold, Silver, and Crystal on the Gen1Recomp 0.2.x architecture.
+Kanto in Motion v1.3.3 retains the Gen 2 support introduced in v1.2.0 for Gold, Silver, and Crystal on the Gen1Recomp 0.2.x architecture.
 
 ## UI ownership
 
@@ -11,7 +11,7 @@ Kanto in Motion v1.3.2 retains the Gen 2 support introduced in v1.2.0 for Gold, 
 
 ## Battle submenu
 
-The v1.3.2 standalone **KANTO IN MOTION → BATTLE** system is currently Gen 1-only. Gen 2 keeps its established native/source-owned battle presentation.
+The v1.3.3 standalone **KANTO IN MOTION → BATTLE** system is currently Gen 1-only. Gen 2 keeps its established native/source-owned battle presentation.
 
 ## Current validation
 

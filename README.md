@@ -1,23 +1,14 @@
-# Kanto in Motion v1.3.2
+# Kanto in Motion v1.3.3
 
 **Kanto in Motion** is an animated Pokémon presentation and battle overhaul for Gen1Recomp. It supports **Pokémon Red / Blue / Yellow** and retains the Gen 2 presentation support introduced in v1.2.0 for **Gold / Silver / Crystal**.
 
 The internal mod ID remains `animated_menu_pokemon`, so existing Kanto in Motion settings can carry forward when upgrading.
 
-## v1.3.2 compatibility & stability update
+## v1.3.3 fixes
 
-v1.3.2 is the corrected stable release built from the final v7 test tree. It fixes the clean-install packaging problem found after v1.3.1 and preserves the PC/mobile Battle Art 1.10.0 behavior that was re-tested separately.
-
-- **Full Assets is self-contained again.** The animated Pokémon front/back/title payloads and their generated metadata are included in the Full Assets ZIP instead of depending on files left behind by an older layered test install.
-- **PC + 3D-BTL:** keeps the confirmed player-back/world-card presentation and restores Battle Art's mouse camera steering.
-- **Mobile + 3D-BTL:** reverts to the confirmed v20/v25 stage-only ownership model rather than the experimental v3-v6 camera/ownership overrides. Battle Art owns the 3D stage, KIM owns its HUD/sprite compatibility layers, Modern UI owns the lower battle panel, and touch controls remain engine-owned.
-- **Animated 3D battlers are anchored** to stable frame metrics so idle/move animation frames do not make the whole Pokémon sway around the battlefield.
-- Restores the stable mobile move-animation handoff confirmed after testing moves such as Growl, Leer, and Peck.
-- Keeps the previously confirmed **Typed Move Colors + Modern UI**, **Quality of Life EXP**, party Poké Ball/HUD, mobile Battle Art MODS MENU, PC FIGHT-menu clipping, and KIM-owned shiny/Wilds compatibility fixes.
-- Battle Art 1.10.0, Quality of Life, Typed Move Colors, and Wilds remain external/unmodified packages.
-- Compatibility work remains targeted at Gen1Recomp 0.2.x with the declared `>=0.2.24 <0.3.0` manifest range.
-
-All v1.3.0/v1.3.1 features remain included, including the standalone Gen 1 Battle System, KRS backgrounds, integrated Kanto Rework animations, Pokéball Colorfix behavior, animated battle sprites/trainers, configurable shiny odds, Gen 2 presentation support, and the open compatibility registry.
+- Fixed PC Quality of Life EXP and already-caught indicator placement for Battle Art 3D-BTL ON and OFF.
+- Corrected the final horizontal position of the already-caught indicator on the enemy HUD.
+- Updated the integrated Modern UI for Gen1Recomp 0.2.53's revised OPTION window on both PC and mobile, including its grouped option pages and synchronized selection/input behavior.
 
 ## Animated Pokémon features
 
@@ -71,7 +62,7 @@ Open **KANTO IN MOTION** from the mod settings screen. Gen 1 also exposes a **BA
 
 ## KANTO IN MOTION → BATTLE settings
 
-The Battle submenu is currently **Gen 1 only**. These are the current v1.3.2 settings and their behavior.
+The Battle submenu is currently **Gen 1 only**. These are the current v1.3.3 settings and their behavior.
 
 | Setting | Choices | Default | What it does |
 | --- | --- | --- | --- |
@@ -115,7 +106,7 @@ Kanto in Motion includes or adapts work from several community projects. Credit 
 
 - **Kanto Rework Battle Anims + KRS battle backgrounds — Faendra**  
   https://github.com/Faendra/kanto-rework-suite  
-  KIM integrates the Kanto Rework battle-animation data/bridge lineage and KRS battle-background routing used by the v1.3.2 arena.
+  KIM integrates the Kanto Rework battle-animation data/bridge lineage and KRS battle-background routing used by the v1.3.3 arena.
 
 - **Pokéball Colorfix — keberos**  
   https://github.com/keberos/pokeball-colorfix  
@@ -137,7 +128,7 @@ Kanto in Motion does **not** claim ownership of third-party or Pokémon-derived 
 
 ## External compatibility mods are not bundled
 
-The following integrations are compatibility-only in v1.3.2. Their packages are **not copied, modified, or redistributed by Kanto in Motion**:
+The following integrations are compatibility-only in v1.3.3. Their packages are **not copied, modified, or redistributed by Kanto in Motion**:
 
 - Quality of Life
 - Typed Move Colors
@@ -176,17 +167,17 @@ Because Kanto in Motion uses `engine_internals` for UI/battle integration, large
 
 ## Release packages
 
-v1.3.2 is provided in two ZIPs. Install **one**, not both.
+v1.3.3 is provided in two ZIPs. Install **one**, not both.
 
 ### Full Assets
 
-`Kanto-in-Motion-v1.3.2-Full-Assets.zip`
+`Kanto-in-Motion-v1.3.3-Full-Assets.zip`
 
 Includes the animated Pokémon/title payloads present in the maintainer's working release build, along with the integrated battle/background/UI assets used by KIM.
 
 ### No Pokémon Assets
 
-`Kanto-in-Motion-v1.3.2-No-Pokemon-Assets.zip`
+`Kanto-in-Motion-v1.3.3-No-Pokemon-Assets.zip`
 
 Excludes the locally imported Pokémon front/back/title artwork and associated generated sprite metadata where required. The runtime code remains intact and `tools/import_assets.py` can populate compatible local sprite assets.
 
@@ -194,7 +185,7 @@ See `ASSET_NOTICES.md` for the exact packaging boundary.
 
 ## Installation
 
-1. Download **one** v1.3.2 ZIP: Full Assets or No Pokémon Assets.
+1. Download **one** v1.3.3 ZIP: Full Assets or No Pokémon Assets.
 2. Import the ZIP through Gen1Recomp's Mods interface.
 3. If using No Pokémon Assets, populate compatible local sprite art using `tools/import_assets.py` or your established local asset workflow.
 4. Enable Kanto in Motion.
@@ -202,7 +193,7 @@ See `ASSET_NOTICES.md` for the exact packaging boundary.
 
 ### Upgrading from v1.3.1
 
-Replace the previous Kanto in Motion package with one complete v1.3.2 package. The internal ID remains `animated_menu_pokemon`, so compatible saved KIM options carry forward. Do not layer the old v28 or v1.3.1 v2-v7 test patches underneath v1.3.2; their final confirmed changes are already included.
+Replace the previous Kanto in Motion package with one complete v1.3.3 package. The internal ID remains `animated_menu_pokemon`, so compatible saved KIM options carry forward. Do not layer the old v28 or v1.3.1 v2-v7 test patches underneath v1.3.3; their final confirmed changes are already included.
 
 If upgrading from the older **Animated Menu Pokémon** package, remove/disable that package first because it shares the same internal mod ID.
 

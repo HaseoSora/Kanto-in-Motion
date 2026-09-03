@@ -2144,6 +2144,28 @@ return function(mod)
 
           local ok = table.remove(result, 1)
           if not ok then error(result[1], 0) end
+
+          -- Battle Art 1.10 still runs its disabled-stage HUD snap wrapper when
+          -- the mod is installed with 3D-BTL = OFF. That wrapper can clear
+          -- dramaticShapeShot and marks Quality of Life's private snap state
+          -- false. QOL checks both values only AFTER this BattleState draw
+          -- returns, so its EXP bar and caught-Pokedex indicator otherwise fall
+          -- back to KIM's hidden 160x144 source layer and disappear.
+          --
+          -- KIM owns the fullscreen battle in this branch and already published
+          -- a valid Battle-Art-compatible flat shot in setFlatBattleWorld().
+          -- Reassert that contract after the source draw without changing either
+          -- external mod. Keep the already-confirmed mobile reconstruction path
+          -- untouched; this reassertion is desktop-only. 3D-BTL ON never reaches
+          -- this branch.
+          local flatShot = rawget(self, "_kantoInMotionFlatShot")
+          local desktopHost = not (type(mod._kantoInMotionNativeMobileHost) == "function"
+            and mod._kantoInMotionNativeMobileHost())
+          if desktopHost and type(flatShot) == "table" and flatShot.kantoInMotion2D then
+            self.dramaticShapeShot = flatShot
+            self.__qolDramaticShapeHudSnapped = true
+          end
+
           return unpack(result)
         end
       end
@@ -2555,22 +2577,37 @@ return function(mod)
     g._kantoInMotionQolXpCompat = nativeRectangle
     g.rectangle = function(mode, x, y, w, h, ...)
       local c = qolXpCompat
-      if c.active and mode == "fill" and c.canvas
+      if (c.active or c.caughtActive) and mode == "fill" and c.canvas
           and g.getCanvas and g.getCanvas() == c.canvas then
         local nx, ny, nw, nh = tonumber(x), tonumber(y), tonumber(w), tonumber(h)
-        if nx and ny and nw and nh and nx >= (c.minX or 0) then
-          -- Main QOL EXP fill: exactly 2 logical pixels tall.
-          if math.abs(ny - c.baseY) < 0.51
-              and math.abs(nh - 2 * c.scale) < 0.51 then
-            y = ny + c.shiftY
-          -- Level-up burst particles are 1 logical pixel blocks expanded by
-          -- the same scale. Shift those with the bar so the celebration stays
-          -- attached to it in SCALED/portrait compatibility mode.
-          elseif math.abs(nw - c.scale) < 0.51
+        if nx and ny and nw and nh then
+          -- Desktop KIM/3D-BTL-OFF caught indicator: QOL's voxel-compatible
+          -- path places the ball left of the enemy HUD's vertical rule. Preserve its accepted Y row and move only the tiny
+          -- icon pixels right so the ball is centered on that rule.
+          if c.caughtActive
+              and math.abs(nw - c.scale) < 0.51
               and math.abs(nh - c.scale) < 0.51
-              and ny >= c.baseY - 24 * c.scale
-              and ny <= c.baseY + 24 * c.scale then
-            y = ny + c.shiftY
+              and nx >= (c.caughtMinX or -3 * c.scale)
+              and nx <= (c.caughtMaxX or 36 * c.scale)
+              and ny >= (c.caughtMinY or -math.huge)
+              and ny <= (c.caughtMaxY or math.huge) then
+            x = nx + (c.caughtShiftX or 0)
+          end
+
+          if c.active and nx >= (c.minX or 0) then
+            -- Main QOL EXP fill: exactly 2 logical pixels tall.
+            if math.abs(ny - c.baseY) < 0.51
+                and math.abs(nh - 2 * c.scale) < 0.51 then
+              y = ny + c.shiftY
+            -- Level-up burst particles are 1 logical pixel blocks expanded by
+            -- the same scale. Shift those with the bar so the celebration stays
+            -- attached to it in SCALED/portrait compatibility mode.
+            elseif math.abs(nw - c.scale) < 0.51
+                and math.abs(nh - c.scale) < 0.51
+                and ny >= c.baseY - 24 * c.scale
+                and ny <= c.baseY + 24 * c.scale then
+              y = ny + c.shiftY
+            end
           end
         end
       end
@@ -3063,6 +3100,22 @@ return function(mod)
       qolXpCompat.baseY = qolBaseY
       qolXpCompat.shiftY = qolTargetY - qolBaseY
       qolXpCompat.minX = vw * 0.5
+
+      -- Desktop 3D-BTL OFF uses this same KIM-owned flat shot. QOL's caught
+      -- mark is already at the correct Y but its native voxel X formula lands
+      -- two HUD pixels left of KIM's enemy-band rule. Route only the 1x1-HUD
+      -- pixel cluster and leave mobile's confirmed placement untouched.
+      local qolDesktop = not (type(mod._kantoInMotionNativeMobileHost) == "function"
+        and mod._kantoInMotionNativeMobileHost())
+      qolXpCompat.caughtActive = qolDesktop
+      -- QOL's flat-shot icon coordinates are based on Battle Art's historical
+      -- left-edge snap. KIM's enemy HUD rule is 2.5 HUD pixels farther right;
+      -- use an integer final-pixel shift so the 7x7 RED/GREY ball stays crisp.
+      qolXpCompat.caughtShiftX = math.floor(2.5 * geo.hudScale + 0.5)
+      qolXpCompat.caughtMinX = 0
+      qolXpCompat.caughtMaxX = 22 * geo.hudScale
+      qolXpCompat.caughtMinY = geo.ly + 8 * geo.hudScale
+      qolXpCompat.caughtMaxY = geo.ly + 14 * geo.hudScale
     end
     return true
   end
@@ -5571,6 +5624,28 @@ return function(mod)
         mod._kantoInMotionBattleArtDesktopMenuClipFix=ballInstaller
       elseif not okBall then
         mod.log:error("Battle Art desktop move-menu clip fix failed: %s",tostring(ballInstaller))
+      end
+
+      -- Quality of Life draws its XP bar and caught-Pokedex indicator directly
+      -- onto Battle Art's dramaticShapeShot. On high-DPI Windows desktops,
+      -- Battle Art 1.10 can expose shot placement metadata in a different
+      -- coordinate space from the final framebuffer, while KIM's HP/status
+      -- bands are snapped from the final viewport. Rebase only QOL's final
+      -- rectangle primitives onto KIM's actual desktop HUD geometry.
+      okBall,ballInstaller=pcall(function()
+        local src=assert(mod:read("lib/battle_art_desktop_qol_overlay_alignment.lua"))
+        local loader=loadstring or load
+        return assert(loader(src,"@"..mod.path.."/lib/battle_art_desktop_qol_overlay_alignment.lua"))()
+      end)
+      if okBall and type(ballInstaller)=="function" then
+        okBall,ballInstaller=pcall(ballInstaller,mod,battleArt3DBattleEnabled,
+          mod._kantoInMotionNativeMobileHost,battleHudGeometry,
+          integratedModernUiEnabled)
+      end
+      if okBall and ballInstaller then
+        mod._kantoInMotionBattleArtDesktopQolOverlayAlignment=true
+      elseif not okBall then
+        mod.log:error("Battle Art desktop QOL overlay alignment failed: %s",tostring(ballInstaller))
       end
     end
 

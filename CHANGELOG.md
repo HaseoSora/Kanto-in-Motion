@@ -1,3 +1,9 @@
+## 1.3.3
+
+- Fixed PC Quality of Life EXP and already-caught indicator placement with Battle Art 3D-BTL ON.
+- Restored the PC Quality of Life EXP bar and already-caught indicator when 3D-BTL is OFF, including the final caught-indicator horizontal alignment.
+- Updated the integrated Modern UI for Gen1Recomp 0.2.53's revised OPTION window on both desktop and mobile, including grouped option pages, selection/input synchronization, and BACK handling.
+
 ## 1.3.2
 
 - Promoted the final v7 mobile 3D-BTL rebaseline into the stable public release.

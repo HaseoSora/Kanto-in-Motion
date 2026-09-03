@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -33,6 +33,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion v1.3.2. Stability release with corrected self-contained Full Assets packaging, final desktop/mobile Battle Art 1.10.0 isolation, anchored 3D-BTL battlers, restored PC mouse camera control, and retained Gen 2 support.",
+  "description": "Kanto in Motion v1.3.3. Fixes PC Quality of Life battle HUD alignment and restores Modern UI compatibility with the updated Gen1Recomp 0.2.53 OPTION window on desktop and mobile.",
   "github": "HaseoSora/Kanto-in-Motion"
 }
