@@ -1,4 +1,4 @@
--- Kanto in Motion - mobile Quality of Life EXP compatibility reconstruction.
+-- Kanto in Motion - mobile Quality of Life battle-overlay reconstruction.
 --
 -- This restores the already-approved v8.6.63 EXP geometry without altering
 -- KIM's BattleState ownership or Battle Art's staged-scene handoff.
@@ -8,10 +8,10 @@
 -- Life runs its post-battle-draw overlay. Rather than restoring that field (and
 -- thereby changing Modern UI/native-dialog ownership), this module redirects
 -- only QOL's final EXP fill pixels onto KIM's already-existing flat battle
--- canvas. With 3D-BTL ON, only portrait EXP pixels are translated from Battle
--- Art's original HUD row to the exact KIM player HUD row. Landscape remains
--- untouched.
-return function(mod, stageOnlyActive)
+-- canvas. With 3D-BTL ON, portrait EXP pixels are translated to the exact KIM
+-- player HUD row, while the already-caught icon is rebased/scaled to KIM's
+-- enemy HUD in both portrait and landscape.
+return function(mod, stageOnlyActive, battleHudGeometry)
   if not (love and love.graphics and type(stageOnlyActive) == "function") then
     return false
   end
@@ -29,13 +29,75 @@ return function(mod, stageOnlyActive)
 
   local activeBattle = nil
   local burstRoute = nil
+  local postBattleDraw = false
   local unpack = table.unpack or unpack
 
   if mod.events and type(mod.events.on) == "function" then
     mod.events:on("battle.started", function(event)
       activeBattle = event and event.battle or nil
       burstRoute = nil
+      postBattleDraw = false
     end)
+  end
+
+  -- Quality of Life wraps each battle instance and runs its overlays AFTER the
+  -- underlying BattleState:draw() returns.  Keep a frame-local marker around
+  -- that exact boundary instead of relying only on the battle.started event.
+  -- This makes the rectangle redirect deterministic on Android/iOS regardless
+  -- of mod load/event ordering: ordinary battle rendering sees false, then QOL
+  -- EXP/caught primitives see true immediately after the native/KIM draw.
+  local okBattleState, BattleState = pcall(require, "src.battle.BattleState")
+  if okBattleState and type(BattleState) == "table"
+      and type(BattleState.draw) == "function"
+      and not BattleState._kantoInMotionMobileQolPostDrawBoundary then
+    local originalBattleDraw = BattleState.draw
+    BattleState._kantoInMotionMobileQolPostDrawBoundary = originalBattleDraw
+    BattleState.draw = function(self, ...)
+      activeBattle = self
+      burstRoute = nil
+      postBattleDraw = false
+      local result = { pcall(originalBattleDraw, self, ...) }
+      postBattleDraw = true
+      local ok = table.remove(result, 1)
+      if not ok then error(result[1], 0) end
+      return unpack(result)
+    end
+  end
+
+  local qolHandle = nil
+  local function qolOption(game, key)
+    if not qolHandle and type(mod.find) == "function" then
+      local ok, handle = pcall(mod.find, "quality_of_life")
+      if ok then qolHandle = handle end
+    end
+    local exports = qolHandle and type(qolHandle.exports) == "table"
+      and qolHandle.exports or nil
+    if exports and type(exports.optionValue) == "function" then
+      local ok, value = pcall(exports.optionValue, game, key)
+      if ok then return value end
+    end
+    return nil
+  end
+
+  local function battleShake(battle)
+    local fx = battle and battle.fx
+    local sx = fx and tonumber(fx.shakeX) or 0
+    local sy = fx and tonumber(fx.shakeY) or 0
+    if sx == 0 and sy == 0 and fx and (tonumber(fx.shake) or 0) > 0 then
+      sx = ((tonumber(battle.frame) or 0) % 4 < 2) and 2 or -2
+    end
+    return sx or 0, sy or 0, fx and (tonumber(fx.hudShakeX) or 0) or 0
+  end
+
+  local function enemyNameX(battle)
+    local name = battle and battle.enemy and battle.enemy.name or ""
+    local glyphs = #tostring(name)
+    local Font = mod and mod.ui and mod.ui.Font
+    if Font and type(Font.split) == "function" then
+      local ok, parts = pcall(Font.split, tostring(name))
+      if ok and type(parts) == "table" then glyphs = #parts end
+    end
+    return 8 + (glyphs <= 2 and 16 or glyphs <= 4 and 8 or 0)
   end
 
   local function mobileTouchOrientation(game)
@@ -96,6 +158,10 @@ return function(mod, stageOnlyActive)
     local hs = s
     local okMode, mode = pcall(function() return mod.options:get("battleHudScale") end)
     if okMode and mode == "scaled" then hs = math.max(1, s - 1) end
+    local okSize, size = pcall(function() return mod.options:get("battleHudSize") end)
+    local factor = okSize and (tonumber(size) or 100) / 100 or 1
+    factor = math.max(0.60, math.min(1.00, factor))
+    hs = hs * factor
     return s, hs
   end
 
@@ -114,6 +180,35 @@ return function(mod, stageOnlyActive)
       return y, s, hs
     end
     return (tonumber(ly) or 0) + 56 * s - 8 * hs, s, hs
+  end
+
+  -- Use KIM's live HUD geometry whenever the caller can provide it.  The
+  -- duplicated v8.6.63 formula above remains as a fail-open fallback for older
+  -- trees, but HUD SIZE now changes the final band placement as well as its
+  -- scale.  Sharing the exact geometry function prevents the QOL overlay from
+  -- drifting away from the resized portrait player HUD.
+  local function targetGeometry(battle, shot)
+    local pw, ph = tonumber(shot and shot.pw), tonumber(shot and shot.ph)
+    local ly = tonumber(shot and shot.ly) or 0
+    if not (pw and ph and pw > 0 and ph > 0) then return nil end
+
+    if type(battleHudGeometry) == "function" then
+      local lift = screenLiftPx(battle and battle.game, pw, ph)
+      local ok, geo = pcall(battleHudGeometry, pw, ph, lift,
+        battle and battle.game or nil)
+      if ok and type(geo) == "table"
+          and tonumber(geo.hudScale) and tonumber(geo.hudScale) > 0 then
+        return geo, pw, ph
+      end
+    end
+
+    local bandY, _, hs = playerBandY(battle and battle.game, pw, ph, ly)
+    return {
+      hudScale = hs,
+      playerBandY = bandY,
+      enemyBandX = -6 * hs,
+      enemyBandY = ly,
+    }, pw, ph
   end
 
   local function active3D()
@@ -209,10 +304,7 @@ return function(mod, stageOnlyActive)
     end)
   end
 
-  local function route3DPortraitMain(battle, shot, nx, ny, nw, nh)
-    if mobileTouchOrientation(battle.game) ~= "portrait" then return false end
-    if type(g.getCanvas) ~= "function" or g.getCanvas() ~= shot.canvas then return false end
-
+  local function route3DMain(battle, shot, nx, ny, nw, nh)
     local baScale = tonumber(shot.scale)
     local pw, ph = tonumber(shot.pw), tonumber(shot.ph)
     local ly = tonumber(shot.ly)
@@ -220,32 +312,40 @@ return function(mod, stageOnlyActive)
 
     local baseY = ly + 89 * baScale
     if not (math.abs(nh - 2 * baScale) < 0.51
-        and math.abs(ny - baseY) < 0.51 and nx >= pw * 0.45) then
+        and math.abs(ny - baseY) < 0.51 and nx >= pw * 0.35) then
       return false
     end
 
     local px = nw / baScale
     if not (px > 0 and px <= 67.5) then return false end
-    local bandY, _, hs = playerBandY(battle.game, pw, ph, ly)
+    local geo, targetPw = targetGeometry(battle, shot)
+    if not geo then return false end
+    local hs = tonumber(geo.hudScale)
+    local bandY = tonumber(geo.playerBandY)
+    if not (hs and hs > 0 and bandY and targetPw) then return false end
+
     local targetW = px * hs
-    local targetX = pw - 13 * hs - targetW
+    local targetX = targetPw - (13 + px) * hs
     local targetY = bandY + 41 * hs
-    nativeRectangle("fill", targetX, targetY, targetW, 2 * hs)
-    burstRoute = {
-      kind = "3d", canvas = shot.canvas, hs = hs,
-      baScale = baScale,
-      sourceBaseX = pw - (13 + 67) * baScale,
-      sourceBaseY = ly + 90 * baScale,
-      targetBaseX = pw - (13 + 67) * hs,
-      targetBaseY = targetY + hs,
-    }
-    return true
+    local ok = withCanvas(shot.canvas, function()
+      nativeRectangle("fill", targetX, targetY, targetW, 2 * hs)
+    end)
+    if ok then
+      burstRoute = {
+        kind = "3d", canvas = shot.canvas, hs = hs,
+        baScale = baScale,
+        sourceBaseX = pw - (13 + 67) * baScale,
+        sourceBaseY = ly + 90 * baScale,
+        targetBaseX = targetPw - (13 + 67) * hs,
+        targetBaseY = targetY + hs,
+      }
+    end
+    return ok
   end
 
-  local function route3DPortraitBurst(nx, ny, nw, nh)
+  local function route3DBurst(nx, ny, nw, nh)
     local r = burstRoute
-    if not (r and r.kind == "3d" and type(g.getCanvas) == "function"
-        and g.getCanvas() == r.canvas
+    if not (r and r.kind == "3d"
         and math.abs(nw - r.baScale) < 0.51
         and math.abs(nh - r.baScale) < 0.51) then return false end
     if nx < r.sourceBaseX - 32 * r.baScale
@@ -254,20 +354,122 @@ return function(mod, stageOnlyActive)
         or ny > r.sourceBaseY + 32 * r.baScale then return false end
     local ux = (nx - r.sourceBaseX) / r.baScale
     local uy = (ny - r.sourceBaseY) / r.baScale
-    nativeRectangle("fill", r.targetBaseX + ux * r.hs,
-      r.targetBaseY + uy * r.hs, r.hs, r.hs)
-    return true
+    return withCanvas(r.canvas, function()
+      nativeRectangle("fill", r.targetBaseX + ux * r.hs,
+        r.targetBaseY + uy * r.hs, r.hs, r.hs)
+    end)
+  end
+
+  -- Rebase QOL's voxel-path caught ball into the same enemy HUD band KIM
+  -- renders in render.hud.  QOL's source scale remains Battle Art's stage
+  -- scale; the destination uses KIM's independently configurable HUD SIZE.
+  local function route3DCaughtPixel(battle, shot, nx, ny, nw, nh)
+    if not battle or battle.kind ~= "wild" then return false end
+    local mode = qolOption(battle.game, "qol_caught_indicator")
+    if mode ~= "gen2" and mode ~= "red" and mode ~= "grey" then return false end
+
+    local baScale = tonumber(shot.scale)
+    local sourceLy = tonumber(shot.ly)
+    if not (baScale and baScale > 0 and sourceLy) then return false end
+    if math.abs(nw - baScale) >= 0.51 or math.abs(nh - baScale) >= 0.51 then
+      return false
+    end
+
+    local sourceAnchorX = (enemyNameX(battle) - 9) * baScale
+    local sourceAnchorY = sourceLy + 7 * baScale
+    if mode == "gen2" then
+      sourceAnchorX = sourceAnchorX + 2 * baScale
+      sourceAnchorY = sourceAnchorY + 2 * baScale
+    else
+      sourceAnchorX = sourceAnchorX + baScale
+      sourceAnchorY = sourceAnchorY + baScale
+    end
+
+    local side = mode == "gen2" and 6 or 7
+    local ux = (nx - sourceAnchorX) / baScale
+    local uy = (ny - sourceAnchorY) / baScale
+    if ux < -0.01 or ux > side - 1 + 0.01
+        or uy < -0.01 or uy > side - 1 + 0.01 then return false end
+
+    local geo = targetGeometry(battle, shot)
+    if not geo then return false end
+    local hs = tonumber(geo.hudScale)
+    local enemyX = tonumber(geo.enemyBandX)
+    local enemyY = tonumber(geo.enemyBandY)
+    if not (hs and hs > 0 and enemyX and enemyY) then return false end
+
+    local targetAnchor = mode == "gen2" and 9 or 8
+    return withCanvas(shot.canvas, function()
+      nativeRectangle("fill", enemyX + (targetAnchor + ux) * hs,
+        enemyY + (targetAnchor + uy) * hs, hs, hs)
+    end)
+  end
+
+  -- With 3D-BTL OFF, Battle Art 1.10 clears dramaticShapeShot before QOL's
+  -- overlay runs, so QOL falls back to its ordinary 160x144/wide coordinates.
+  -- Those pixels land on KIM's hidden source layer. Redirect only the caught
+  -- ball's post-draw 1x1 pixels onto KIM's fullscreen flat canvas and scale
+  -- them with the live enemy HUD. This covers both portrait and landscape.
+  local function routeFlatCaughtPixel(battle, flat, nx, ny, nw, nh)
+    if not battle or battle.kind ~= "wild" then return false end
+    if math.abs(nw - 1) >= 0.51 or math.abs(nh - 1) >= 0.51 then return false end
+    local mode = qolOption(battle.game, "qol_caught_indicator")
+    if mode ~= "gen2" and mode ~= "red" and mode ~= "grey" then return false end
+
+    local wide = false
+    if type(battle.wideLayout) == "function" then
+      local ok, value = pcall(battle.wideLayout, battle)
+      wide = ok and value == true
+    end
+    local sx, sy, hudShake = battleShake(battle)
+    local sourceAnchorX, sourceAnchorY
+    if wide then
+      sourceAnchorX, sourceAnchorY = 112 + sx, 7 + sy
+      if mode == "gen2" then
+        sourceAnchorX, sourceAnchorY = sourceAnchorX + 1, sourceAnchorY + 2
+      else
+        sourceAnchorX, sourceAnchorY = sourceAnchorX + 1, sourceAnchorY + 1
+      end
+    else
+      sourceAnchorX, sourceAnchorY = 7 + sx + hudShake, 7 + sy
+      if mode == "gen2" then
+        sourceAnchorX, sourceAnchorY = sourceAnchorX + 2, sourceAnchorY + 2
+      else
+        sourceAnchorX, sourceAnchorY = sourceAnchorX + 1, sourceAnchorY + 1
+      end
+    end
+
+    local side = mode == "gen2" and 6 or 7
+    local ux, uy = nx - sourceAnchorX, ny - sourceAnchorY
+    if ux < -0.01 or ux > side - 1 + 0.01
+        or uy < -0.01 or uy > side - 1 + 0.01 then return false end
+
+    local geo = targetGeometry(battle, flat)
+    if not geo then return false end
+    local hs = tonumber(geo.hudScale)
+    local enemyX = tonumber(geo.enemyBandX)
+    local enemyY = tonumber(geo.enemyBandY)
+    if not (hs and hs > 0 and enemyX and enemyY) then return false end
+    local targetAnchor = mode == "gen2" and 9 or 8
+    return withCanvas(flat.canvas, function()
+      nativeRectangle("fill", enemyX + (targetAnchor + ux) * hs,
+        enemyY + (targetAnchor + uy) * hs, hs, hs)
+    end)
   end
 
   g.rectangle = function(mode, x, y, w, h, ...)
     local battle = activeBattle
     local nx, ny, nw, nh = tonumber(x), tonumber(y), tonumber(w), tonumber(h)
-    if battle and mode == "fill" and nx and ny and nw and nh then
+    -- Only redirect rectangles emitted after the underlying BattleState draw.
+    -- That is QOL's overlay window; it avoids ever mistaking native/KRBA battle
+    -- pixels for EXP/caught primitives.
+    if postBattleDraw and battle and mode == "fill" and nx and ny and nw and nh then
       if active3D() then
         local shot = rawget(battle, "dramaticShapeShot")
         if type(shot) == "table" and shot.canvas and not shot.kantoInMotion2D then
-          if route3DPortraitMain(battle, shot, nx, ny, nw, nh)
-              or route3DPortraitBurst(nx, ny, nw, nh) then
+          if route3DMain(battle, shot, nx, ny, nw, nh)
+              or route3DBurst(nx, ny, nw, nh)
+              or route3DCaughtPixel(battle, shot, nx, ny, nw, nh) then
             return
           end
         end
@@ -276,7 +478,8 @@ return function(mod, stageOnlyActive)
         if type(flat) == "table" and flat.canvas
             and rawget(battle, "_kantoInMotionBattleLite") == true then
           if routeFlatMain(battle, flat, nx, ny, nw, nh)
-              or routeFlatBurst(nx, ny, nw, nh) then
+              or routeFlatBurst(nx, ny, nw, nh)
+              or routeFlatCaughtPixel(battle, flat, nx, ny, nw, nh) then
             return
           end
         end

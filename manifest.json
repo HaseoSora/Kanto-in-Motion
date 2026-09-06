@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -20,7 +20,9 @@
     "gen2_clean_ui",
     "typed_move_colors",
     "overworld_wild_spawns",
-    "BATTLE_ART_VOXEL_FORK"
+    "BATTLE_ART_VOXEL_FORK",
+    "recomp-spanish",
+    "advanced_box_system"
   ],
   "conflicts": [
     "gen1_modern_ui",
@@ -33,6 +35,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion v1.3.3. Fixes PC Quality of Life battle HUD alignment and restores Modern UI compatibility with the updated Gen1Recomp 0.2.53 OPTION window on desktop and mobile.",
+  "description": "Kanto in Motion v1.3.4. Improves PC/mobile battle-system stability, adds battle UI and HUD size/opacity controls, and expands compatibility with localization and storage mods.",
   "github": "HaseoSora/Kanto-in-Motion"
 }

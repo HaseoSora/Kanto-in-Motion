@@ -10,6 +10,48 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame)
   local installedUpdate = nil
   local warnedOld = false
 
+  -- Gen1Recomp 0.2.56 changed the final renderer/presentation pipeline. Keep a
+  -- KIM-owned identity/metric side channel on Battle Art itself so a KIM frame
+  -- remains recognisable even if another provider hands Battle Art the source
+  -- Canvas instead of the prepared Image, or Battle Art rebuilds its private
+  -- weak registries between update and draw. This does not alter Battle Art
+  -- ownership for any non-KIM image.
+  local function installIdentityFallback(ba)
+    if type(ba) ~= "table" then return nil, nil end
+    local owned = rawget(ba, "_kantoInMotionExternalImages")
+    if type(owned) ~= "table" then
+      owned = setmetatable({}, { __mode = "k" })
+      ba._kantoInMotionExternalImages = owned
+    end
+    local fallbackMetrics = rawget(ba, "_kantoInMotionExternalMetrics")
+    if type(fallbackMetrics) ~= "table" then
+      fallbackMetrics = setmetatable({}, { __mode = "k" })
+      ba._kantoInMotionExternalMetrics = fallbackMetrics
+    end
+
+    if not ba._kantoInMotionExternalIdentityHook then
+      local innerExternal = ba.isExternal
+      local innerMetrics = ba.metrics
+      if type(innerExternal) == "function" then
+        ba.isExternal = function(img, ...)
+          local map = rawget(ba, "_kantoInMotionExternalImages")
+          if type(map) == "table" and img and map[img] then return true end
+          return innerExternal(img, ...)
+        end
+      end
+      if type(innerMetrics) == "function" then
+        ba.metrics = function(img, ...)
+          local metric = innerMetrics(img, ...)
+          if metric ~= nil then return metric end
+          local map = rawget(ba, "_kantoInMotionExternalMetrics")
+          return type(map) == "table" and img and map[img] or nil
+        end
+      end
+      ba._kantoInMotionExternalIdentityHook = true
+    end
+    return owned, fallbackMetrics
+  end
+
   local function handle()
     if not (mod and type(mod.find) == "function") then return nil end
     local ok, hit = pcall(mod.find, mod, BA_ID)
@@ -58,18 +100,74 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame)
 
   local function preparedImage(source, ba)
     if not (source and ba) then return nil end
+    installIdentityFallback(ba)
     local mode = ""
     if type(ba.displayMode) == "function" then
       local ok, got = pcall(ba.displayMode)
       if ok then mode = tostring(got or "") end
     end
     local byMode = prepared[source]
-    if byMode and byMode[mode] then return byMode[mode] end
+    local cached = byMode and byMode[mode] or nil
+    if cached then
+      -- Battle Art invalidates its own weak external/metric registries whenever
+      -- the render pipeline is rebuilt. KIM's frame cache lives independently,
+      -- so an Image can still be alive here after Battle Art has forgotten that
+      -- it is authored external art. Reusing that stale Image makes Battle Art
+      -- treat it like a ROM picture (filling transparent holes) and also drops
+      -- the opaque-bound metrics that keep padded shiny frames on the ground.
+      -- Re-prepare only when that registration has actually been lost.
+      local registered = true
+      if type(ba.isExternal) == "function" then
+        local okExternal, external = pcall(ba.isExternal, cached)
+        registered = okExternal and external == true
+      end
+      if registered and type(ba.metrics) == "function" then
+        local okMetric, metric = pcall(ba.metrics, cached)
+        registered = okMetric and type(metric) == "table"
+      end
+      if registered then
+        local owned, fallbackMetrics = installIdentityFallback(ba)
+        local metric = type(ba.metrics) == "function" and ba.metrics(cached) or nil
+        if type(owned) == "table" then owned[cached], owned[source] = true, true end
+        if type(fallbackMetrics) == "table" and type(metric) == "table" then
+          fallbackMetrics[cached], fallbackMetrics[source] = metric, metric
+        end
+        return cached
+      end
+
+      -- A lost Battle Art registration means its placement registry was reset
+      -- too. Forget any world-card anchor captured from the stale metric set so
+      -- the freshly prepared image establishes the correct feet/centre again.
+      for _, state in pairs(states) do
+        if type(state) == "table" then
+          state.worldCardAx, state.worldCardAy = nil, nil
+        end
+      end
+      byMode[mode] = nil
+    end
     if type(source.newImageData) ~= "function" then return nil end
     local okData, data = pcall(source.newImageData, source)
     if not okData or not data then return nil end
     local okImage, image = pcall(ba.prepareData, data, mode)
     if not okImage or not image then return nil end
+
+    -- Register BOTH objects. Under normal Battle Art 1.10 operation the
+    -- prepared Image is what reaches sideTexture. If a post-update sprite
+    -- provider restores KIM's stable source Canvas before draw, treating that
+    -- Canvas as the same authored external frame prevents BattlePics from
+    -- filling its transparent holes with battle paper and preserves the same
+    -- opaque-bounds anchor.
+    local owned, fallbackMetrics = installIdentityFallback(ba)
+    local metric = type(ba.metrics) == "function" and ba.metrics(image) or nil
+    if type(owned) == "table" then
+      owned[image] = true
+      owned[source] = true
+    end
+    if type(fallbackMetrics) == "table" and type(metric) == "table" then
+      fallbackMetrics[image] = metric
+      fallbackMetrics[source] = metric
+    end
+
     byMode = byMode or {}
     byMode[mode] = image
     prepared[source] = byMode
@@ -208,7 +306,7 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame)
 
   if mod.exports then
     mod.exports.battleArtSpriteCompat = true
-    mod.exports.battleArtSpriteCompatVersion = 2
+    mod.exports.battleArtSpriteCompatVersion = 4
   end
   return M
 end

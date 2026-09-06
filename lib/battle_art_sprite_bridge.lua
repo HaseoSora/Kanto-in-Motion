@@ -1,14 +1,35 @@
 -- Kanto in Motion -> Battle Art 1.10+ sprite compatibility bridge.
--- Battle Art remains the 3D scene owner. When Battle Art's DUPLICATE FIX is
--- MODDED, this bridge supplies KIM's selected animated Pokemon pictures without
--- copying or changing any Battle Art code/assets.
-return function(mod, battleRecord, renderPresentationFrame, currentFrame)
+--
+-- Gen1Recomp 0.2.56 exposed a hard difference between Battle Art's native
+-- AnimatedBattleArt path and KIM's older external-image/world-card bridge:
+-- with KIM BATTLE SPRITES disabled the exact same Gen 5 atlas renders with
+-- correct alpha/placement, while enabling the external bridge can make keyed
+-- regions opaque and can change the player card's scale/metric ownership.
+--
+-- Do not rebuild the same PNG through a second capture path. While KIM owns
+-- BATTLE SPRITES inside a 3D-BTL scene, route KIM's generation choices through
+-- Battle Art's own AnimatedBattleArt decoder/prepareData/world-card path. KIM
+-- and Battle Art ship byte-identical Gen 5 atlas/data files in the current
+-- stack, so this preserves the selected artwork while using the renderer path
+-- already proven correct on 0.2.56. Outside that exact condition Battle Art's
+-- saved settings and normal ownership are untouched.
+return function(mod, battleRecord, renderPresentationFrame, currentFrame,
+    renderPresentationData)
   local M = {}
   local BA_ID = "BATTLE_ART_VOXEL_FORK"
-  local prepared = setmetatable({}, { __mode = "k" })
-  local states = setmetatable({}, { __mode = "k" })
-  local installedUpdate = nil
   local warnedOld = false
+
+  local hookedBa = nil
+  local hookedStage = nil
+  local hookedAnimated = nil
+  local originalPrefersModded = nil
+  local originalBattleArtGet = nil
+  local originalFrontGet = nil
+  local originalBackGet = nil
+  local originalViewGet = nil
+  local originalAnimatedUpdate = nil
+  local originalSideTexture = nil
+  local lastNativeDelegateActive = nil
 
   local function handle()
     if not (mod and type(mod.find) == "function") then return nil end
@@ -22,406 +43,224 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame)
     local exports = hit and hit.exports
     local lib = type(exports) == "table" and exports.lib or nil
     if type(lib) ~= "table" or type(lib.require) ~= "function" then return nil end
-    local ok, ba = pcall(lib.require, "BattleArt")
-    if not ok or type(ba) ~= "table" then return nil end
-    return ba, exports
+    local okBa, ba = pcall(lib.require, "BattleArt")
+    local okStage, stage = pcall(lib.require, "OverworldBattle")
+    local okAnimated, animated = pcall(lib.require, "AnimatedBattleArt")
+    if not okBa or type(ba) ~= "table" then return nil end
+    if not okStage or type(stage) ~= "table" then stage = nil end
+    if not okAnimated or type(animated) ~= "table" then animated = nil end
+    return ba, exports, stage, animated
   end
 
-  local function compatible(ba, exports)
-    if not (ba and type(ba.prepareData) == "function"
-        and type(ba.prefersModded) == "function") then return false end
+  local function compatible(ba, exports, stage, animated)
+    if not (ba and stage and animated
+        and type(ba.prefersModded) == "function"
+        and type(ba.ownsSpeciesArt) == "function"
+        and type(stage.enabled) == "function"
+        and type(animated.update) == "function") then
+      return false
+    end
     local version = type(exports) == "table" and tostring(exports.version or "") or ""
     local major, minor = version:match("^(%d+)%.(%d+)")
     major, minor = tonumber(major), tonumber(minor)
-    if major and (major > 1 or (major == 1 and (minor or 0) >= 10)) then return true end
-    -- Feature-test instead of hard-failing custom/future builds that expose the
-    -- 1.10 MODDED ownership API without a conventional version string.
-    return type(ba.ownsSpeciesArt) == "function" and type(ba.displayMode) == "function"
-  end
-
-  -- KIM is the Pokemon-picture owner whenever its battle sprite system is
-  -- active inside Battle Art's 3D stage. A fresh Battle Art install defaults
-  -- DUPLICATE FIX to BATTLE ART, while older layered test installs often had
-  -- MODDED persisted already. Depending on that saved external preference made
-  -- KIM's 3D sprite bridge, PLAYER PKMN SIZE and stable-frame anchor appear to
-  -- work only on those layered installs.
-  --
-  -- Override only the live ownership decision; do NOT write Battle Art's
-  -- option. As soon as KIM battle sprites or 3D-BTL are off, the original
-  -- prefersModded() result is used again and the user's saved BA setting is
-  -- untouched.
-  local function installOwnershipHook()
-    local ba, exports = runtime()
-    if not compatible(ba, exports) then return false end
-    if ba._kantoInMotionPrefersModdedHook then return true end
-
-    local originalPrefersModded = ba.prefersModded
-    local lib = type(exports) == "table" and exports.lib or nil
-    local OverworldBattle
-    if type(lib) == "table" and type(lib.require) == "function" then
-      local okStage, stage = pcall(lib.require, "OverworldBattle")
-      if okStage and type(stage) == "table" then OverworldBattle = stage end
-    end
-
-    local function kimOwns3DBattlers()
-      if not (mod and mod.options) then return false end
-      if mod.options:get("enabled") == false
-          or mod.options:get("battleSprites") == false then
-        return false
-      end
-      if not (OverworldBattle and type(OverworldBattle.enabled) == "function") then
-        return false
-      end
-      local okEnabled, enabled = pcall(OverworldBattle.enabled)
-      return okEnabled and enabled == true
-    end
-
-    ba.prefersModded = function(...)
-      if kimOwns3DBattlers() then return true end
-      return originalPrefersModded(...)
-    end
-    ba._kantoInMotionPrefersModdedHook = true
-    ba._kantoInMotionOriginalPrefersModded = originalPrefersModded
-    return true
-  end
-
-  -- Battle Art 1.10 decides whether a player BACK sprite is a world card by
-  -- asking its own AnimatedBattleArt manager. KIM's animated backs are external
-  -- to that manager, so BA misclassifies them as classic/pinned UI backs. That
-  -- has three side effects at once: the player bypasses world-card scale,
-  -- per-frame opaque metrics can move the pinned picture, and BattleCam marks
-  -- the shot non-steerable (which disables mouse/right-stick orbit on PC).
-  --
-  -- A KIM-installed Pokemon back is already full-display battle art and belongs
-  -- in the staged world. Override only that live classification; trainer backs,
-  -- ROM fallback, and every non-KIM path retain Battle Art's original answer.
-  local function installWorldBackClassificationHook()
-    local ba, exports = runtime()
-    if not compatible(ba, exports) then return false end
-    local lib = type(exports) == "table" and exports.lib or nil
-    if type(lib) ~= "table" or type(lib.require) ~= "function" then return false end
-    local okStage, OverworldBattle = pcall(lib.require, "OverworldBattle")
-    if not okStage or type(OverworldBattle) ~= "table"
-        or type(OverworldBattle.backPinned) ~= "function" then return false end
-    if OverworldBattle._kantoInMotionWorldBackClassificationHook then return true end
-
-    local originalBackPinned = OverworldBattle.backPinned
-    local function kimWorldBackActive()
-      local battle = type(OverworldBattle.battle) == "function"
-        and OverworldBattle.battle() or nil
-      if not (battle and battle.player and not battle.showPlayerBack) then return false end
-      local state = states[battle.player]
-      if not (state and state.installed and battle.player.sprite == state.installed) then
-        return false
-      end
-      if not (mod and mod.options) then return false end
-      return mod.options:get("enabled") ~= false
-        and mod.options:get("battleSprites") ~= false
-    end
-
-    local function backPinned(...)
-      if kimWorldBackActive() then return false end
-      return originalBackPinned(...)
-    end
-    OverworldBattle.backPinned = backPinned
-    OverworldBattle._kantoInMotionWorldBackClassificationHook = backPinned
-    OverworldBattle._kantoInMotionOriginalBackPinned = originalBackPinned
-    return true
-  end
-
-  local function active()
-    if not (mod and mod.options) then return false end
-    if mod.options:get("enabled") == false or mod.options:get("battleSprites") == false then
-      return false
-    end
-    local ba, exports = runtime()
-    if not compatible(ba, exports) then
-      if handle() and not warnedOld and mod.log and type(mod.log.warn) == "function" then
-        warnedOld = true
-        mod.log:warn("Battle Art sprite bridge needs Battle Art 1.10.0+; leaving Battle Art's Pokemon art unchanged")
-      end
-      return false
-    end
-    -- DUPLICATE FIX = MODDED only delegates Pokemon art while Battle Art is
-    -- actually staging the fight. If 3D-BTL is OFF, KIM owns the complete 2D
-    -- battle and this bridge must stay dormant.
-    local lib = type(exports) == "table" and exports.lib or nil
-    if type(lib) == "table" and type(lib.require) == "function" then
-      local okStage, OverworldBattle = pcall(lib.require, "OverworldBattle")
-      if okStage and type(OverworldBattle) == "table"
-          and type(OverworldBattle.enabled) == "function" then
-        local okEnabled, enabled = pcall(OverworldBattle.enabled)
-        if okEnabled and not enabled then return false end
-      end
-    end
-    local ok, modded = pcall(ba.prefersModded)
-    return ok and modded == true, ba
-  end
-
-  local function preparedImage(source, ba)
-    if not (source and ba) then return nil end
-    local mode = ""
-    if type(ba.displayMode) == "function" then
-      local ok, got = pcall(ba.displayMode)
-      if ok then mode = tostring(got or "") end
-    end
-    local byMode = prepared[source]
-    if byMode and byMode[mode] then return byMode[mode] end
-    if type(source.newImageData) ~= "function" then return nil end
-    local okData, data = pcall(source.newImageData, source)
-    if not okData or not data then return nil end
-
-    -- KIM's stable animation frames are Canvases. On high-DPI Android/iOS a
-    -- Canvas can carry physical pixels at the device DPI while still
-    -- representing the same logical atlas cell. Battle Art deliberately uses
-    -- dpiscale=1 for sprite readback for this exact reason. Normalize KIM's
-    -- handoff before prepareData so a 98x83 Charizard cell cannot become a
-    -- ~270x228 billboard texture merely because the phone is 2.75x DPI.
-    local dpi = 1
-    if type(source.getDPIScale) == "function" then
-      local okDpi, gotDpi = pcall(source.getDPIScale, source)
-      gotDpi = okDpi and tonumber(gotDpi) or nil
-      if gotDpi and gotDpi > 1 then dpi = gotDpi end
-    end
-    if dpi > 1.001 and love and love.image and type(love.image.newImageData) == "function" then
-      local pw, ph = data:getDimensions()
-      local lw = math.max(1, math.floor(pw / dpi + 0.5))
-      local lh = math.max(1, math.floor(ph / dpi + 0.5))
-      if lw < pw or lh < ph then
-        local okNorm, normalized = pcall(love.image.newImageData, lw, lh)
-        if okNorm and normalized then
-          for y = 0, lh - 1 do
-            local sy = math.min(ph - 1, math.floor(y * ph / lh))
-            for x = 0, lw - 1 do
-              local sx = math.min(pw - 1, math.floor(x * pw / lw))
-              normalized:setPixel(x, y, data:getPixel(sx, sy))
-            end
-          end
-          data = normalized
-        end
-      end
-    end
-
-    local okImage, image = pcall(ba.prepareData, data, mode)
-    if not okImage or not image then return nil end
-    byMode = byMode or {}
-    byMode[mode] = image
-    prepared[source] = byMode
-    return image
-  end
-
-  -- Battle Art normally derives the billboard centre/feet from each prepared
-  -- image's opaque bounds. Animated KIM atlases use one fixed logical canvas,
-  -- so doing that independently on every frame turns harmless wing/tail/body
-  -- motion into whole-Pokemon side-to-side/up-down drift in 3D-BTL.
-  --
-  -- Battle Art 1.10 already exposes the same stable-anchor helper used by its
-  -- own animated sprite provider. Anchor every KIM frame to the animation's
-  -- neutral final frame while leaving the pixels inside the canvas untouched.
-  -- This preserves authored animation but keeps the Pokemon's ground contact
-  -- and billboard centre fixed.
-  local function battleArtImage(source, ba, record, generation, species, side, variant)
-    local image = preparedImage(source, ba)
-    if not image then return nil end
-    local frames = math.max(1, math.floor(tonumber(record and record.frames) or 1))
-    if frames <= 1 or type(ba.shareFrameAnchor) ~= "function" then return image end
-
-    local refSource = renderPresentationFrame(record, generation, species, frames,
-      side, variant or "normal", true)
-    local refImage = preparedImage(refSource, ba)
-    if refImage then
-      -- shareFrameAnchor validates equal logical frame dimensions itself and
-      -- fails closed if a future provider returns incompatible frame sizes.
-      pcall(ba.shareFrameAnchor, { image, refImage }, 2)
-    end
-    return image
-  end
-
-  local function speciesFor(ba, battler)
-    if ba and type(ba.speciesFor) == "function" then
-      local ok, value = pcall(ba.speciesFor, battler)
-      if ok and value then return value end
-    end
-    return battler and battler.mon and battler.mon.species or nil
-  end
-
-  local function safeToShow(battle, battler, side)
-    if not (battle and battler and battler.mon) or battler.fainted then return false end
-    if side == "enemy" then
-      return not battle.showEnemyTrainer and not battle.enemyHidden
-        and not battle.enemySendingOut
-    end
-    return not battle.showPlayerBack and not battle.playerHidden
-      and not battle.sendingOut and not battle.safari and not battle.demo
-  end
-
-  local function installSide(battle, battler, side, ba)
-    if not safeToShow(battle, battler, side) then return false end
-    local artSide = side == "enemy" and "front" or "back"
-    if side == "player" and type(ba.playerSide) == "function" then
-      local ok, got = pcall(ba.playerSide)
-      if ok and got == "front" then artSide = "front" end
-    end
-    local species = speciesFor(ba, battler)
-    if not species then return false end
-
-    local record, generation, normalized, shiny = battleRecord(species, artSide, battler.mon)
-    if not record then return false end
-
-    local state = states[battler]
-    local identity = table.concat({ tostring(species), artSide,
-      tostring(generation), tostring(normalized), shiny and "shiny" or "normal" }, ":")
-    if not state or state.identity ~= identity then
-      state = { identity = identity, original = battler.sprite, installed = nil }
-      states[battler] = state
-    elseif battler.sprite ~= state.installed and battler.sprite ~= state.original then
-      -- A move/Transform/other battle effect temporarily owns this sprite.
-      -- Do not stomp it; resume when the engine restores the ordinary picture.
-      return false
-    end
-
-    local frame = currentFrame(record)
-    local source = renderPresentationFrame(record, generation, normalized, frame,
-      artSide, shiny and "shiny" or "normal", true)
-    local image = battleArtImage(source, ba, record, generation, normalized,
-      artSide, shiny and "shiny" or "normal")
-    if not image then return false end
-    battler.sprite = image
-    state.installed = image
-    return true
-  end
-
-  local function apply(battle)
-    local on, ba = active()
-    if not on or type(battle) ~= "table" then return false end
-    local any = false
-    if battle.enemy then any = installSide(battle, battle.enemy, "enemy", ba) or any end
-    if battle.player then any = installSide(battle, battle.player, "player", ba) or any end
-    return any
-  end
-
-  -- Let PLAYER PKMN SIZE control Battle Art's WORLD card rather than
-  -- resampling the sprite into its intermediate texture. Battle Art 1.10's
-  -- presentationScale is explicitly applied about the reported foot anchor,
-  -- so changing this value keeps the Pokemon planted while scaling cleanly.
-  local function installPlayerScaleHook()
-    local ba, exports = runtime()
-    if not compatible(ba, exports) then return false end
-    local lib = type(exports) == "table" and exports.lib or nil
-    if type(lib) ~= "table" or type(lib.require) ~= "function" then return false end
-    local okStage, OverworldBattle = pcall(lib.require, "OverworldBattle")
-    if not okStage or type(OverworldBattle) ~= "table"
-        or type(OverworldBattle.sideTexture) ~= "function" then return false end
-
-    if OverworldBattle._kantoInMotionPlayerScaleHook then
+    if major and (major > 1 or (major == 1 and (minor or 0) >= 10)) then
       return true
     end
-    local innerSideTexture = OverworldBattle.sideTexture
-    local function sideTexture(battle, side)
-      local tex = innerSideTexture(battle, side)
-      if side == "player" and type(tex) == "table" and battle
-          and not battle.showPlayerBack then
-        local on = active()
-        if on then
-          local pct = tonumber(mod.options:get("battlePlayerSize")) or 125
-          pct = math.max(50, math.min(200, pct))
-          -- KIM's long-standing player-size default is 125%. Treat that
-          -- existing default as the neutral Battle Art world-card size so
-          -- installing this compatibility fix does not suddenly enlarge every
-          -- current 3D battle. Values below/above 125 now shrink/grow the card
-          -- predictably while the non-3D path keeps its established semantics.
-          tex.presentationScale = (tonumber(tex.presentationScale) or 1) * pct / 125
-        end
-      end
-      return tex
-    end
-    OverworldBattle.sideTexture = sideTexture
-    OverworldBattle._kantoInMotionPlayerScaleHook = sideTexture
-    return true
+    return type(ba.frontAnimationSetting) == "table"
+       and type(ba.backAnimationSetting) == "table"
+       and type(ba.setting) == "table"
   end
 
-  -- Freeze the exact world-card anchor chosen on the first KIM frame of each
-  -- battler identity. This is intentionally applied at Battle Art's sideTexture
-  -- handoff -- the last place before the 3D card matrix is built -- so later
-  -- opaque-bounds analysis cannot turn wing/tail/body motion into whole-card
-  -- drift. Transform/species/generation changes create a new state and thus a
-  -- new anchor naturally.
-  local function installStableWorldCardAnchorHook()
-    local ba, exports = runtime()
-    if not compatible(ba, exports) then return false end
-    local lib = type(exports) == "table" and exports.lib or nil
-    if type(lib) ~= "table" or type(lib.require) ~= "function" then return false end
-    local okStage, OverworldBattle = pcall(lib.require, "OverworldBattle")
-    if not okStage or type(OverworldBattle) ~= "table"
-        or type(OverworldBattle.sideTexture) ~= "function" then return false end
-    if OverworldBattle._kantoInMotionStableWorldCardAnchorHook then return true end
+  local function kimEnabled(stage)
+    if not (mod and mod.options and stage) then return false end
+    if mod.options:get("enabled") == false
+        or mod.options:get("battleSystem") == false
+        or mod.options:get("battleSprites") == false then
+      return false
+    end
+    local ok, value = pcall(stage.enabled)
+    return ok and value == true
+  end
 
-    local innerSideTexture = OverworldBattle.sideTexture
-    local function sideTexture(battle, side)
-      local tex = innerSideTexture(battle, side)
-      if type(tex) ~= "table" or not battle then return tex end
-      local battler = side == "enemy" and battle.enemy or battle.player
-      local state = battler and states[battler] or nil
-      if not (state and state.installed and battler.sprite == state.installed) then
+  local function frontGeneration()
+    local value = mod and mod.options and mod.options:get("battleFrontGeneration") or nil
+    if value == nil or value == "menu" then
+      value = mod and mod.options and mod.options:get("generation") or nil
+    end
+    if value == "gen2" or value == "gen3" or value == "gen4" or value == "gen5" then
+      return value
+    end
+    return "gen5"
+  end
+
+  local function backGeneration()
+    local value = mod and mod.options and mod.options:get("battleBackGeneration") or nil
+    -- AnimatedBattleArt deliberately treats an unknown generation as no
+    -- replacement. Using the literal "rom" therefore preserves KIM's ROM
+    -- choice while the opponent can still use an animated front collection.
+    if value == "rom" then return "rom" end
+    if value == "gen3" or value == "gen5" then return value end
+    return "gen5"
+  end
+
+  local function restoreStable(def, had, value)
+    if type(def) ~= "table" then return end
+    if had then def.stableAnchor = value else def.stableAnchor = nil end
+  end
+
+  local function installNativeDelegate()
+    local ba, exports, stage, animated = runtime()
+    if not compatible(ba, exports, stage, animated) then
+      if handle() and not warnedOld and mod.log and type(mod.log.warn) == "function" then
+        warnedOld = true
+        mod.log:warn("Battle Art native sprite handoff needs Battle Art 1.10.0+; leaving Battle Art unchanged")
+      end
+      return false
+    end
+
+    if hookedBa == ba and hookedStage == stage and hookedAnimated == animated then
+      return true
+    end
+
+    -- A rebuilt Battle Art module means its old tables/functions are no longer
+    -- live. Install onto the new module objects rather than stacking wrappers.
+    hookedBa, hookedStage, hookedAnimated = ba, stage, animated
+
+    originalPrefersModded = ba.prefersModded
+    originalBattleArtGet = ba.setting and ba.setting.get or nil
+    originalFrontGet = ba.frontAnimationSetting and ba.frontAnimationSetting.get or nil
+    originalBackGet = ba.backAnimationSetting and ba.backAnimationSetting.get or nil
+    originalViewGet = ba.viewSetting and ba.viewSetting.get or nil
+
+    if type(originalPrefersModded) == "function" then
+      ba.prefersModded = function(...)
+        if kimEnabled(stage) then return false end
+        return originalPrefersModded(...)
+      end
+    end
+
+    if ba.setting and type(originalBattleArtGet) == "function" then
+      ba.setting.get = function(self, ...)
+        if kimEnabled(stage) then return "animated" end
+        return originalBattleArtGet(self, ...)
+      end
+    end
+
+    if ba.frontAnimationSetting and type(originalFrontGet) == "function" then
+      ba.frontAnimationSetting.get = function(self, ...)
+        if kimEnabled(stage) then return frontGeneration() end
+        return originalFrontGet(self, ...)
+      end
+    end
+
+    if ba.backAnimationSetting and type(originalBackGet) == "function" then
+      ba.backAnimationSetting.get = function(self, ...)
+        if kimEnabled(stage) then return backGeneration() end
+        return originalBackGet(self, ...)
+      end
+    end
+
+    -- KIM's player battle art is a back sprite when enabled. This also lets
+    -- Battle Art's own hasWorldBack()/backPinned() decision own the plane,
+    -- instead of classifying a KIM-prepared Image through a parallel hook.
+    if ba.viewSetting and type(originalViewGet) == "function" then
+      ba.viewSetting.get = function(self, ...)
+        if kimEnabled(stage) then return "back" end
+        return originalViewGet(self, ...)
+      end
+    end
+
+    originalAnimatedUpdate = animated.update
+    animated.update = function(battle, dt, ...)
+      local active = kimEnabled(stage)
+
+      -- If the user flips BATTLE SPRITES while a fight is live, throw away the
+      -- manager's cached frame ownership at the boundary so OFF returns to the
+      -- exact Battle Art configuration it had before KIM delegated to it.
+      if lastNativeDelegateActive ~= nil and lastNativeDelegateActive ~= active then
+        if type(animated.finish) == "function" then pcall(animated.finish, battle) end
+        if type(animated.invalidate) == "function" then pcall(animated.invalidate) end
+      end
+      lastNativeDelegateActive = active
+
+      if not active or type(battle) ~= "table"
+          or type(animated.definitionFor) ~= "function" then
+        return originalAnimatedUpdate(battle, dt, ...)
+      end
+
+      -- KIM's established 3D-BTL behavior anchors every animation to a stable
+      -- logical footprint. Set the flag only while the native decoder builds
+      -- the selected front/back frame sets, then restore Battle Art's data
+      -- descriptors immediately. The resulting prepared Images stay entirely
+      -- inside Battle Art's own alpha/metric registry.
+      local enemyDef = battle.enemy and animated.definitionFor(battle.enemy, "front") or nil
+      local playerDef = battle.player and animated.definitionFor(battle.player, "back") or nil
+      local enemyHad = type(enemyDef) == "table" and enemyDef.stableAnchor ~= nil or false
+      local playerHad = type(playerDef) == "table" and playerDef.stableAnchor ~= nil or false
+      local enemyStable = type(enemyDef) == "table" and enemyDef.stableAnchor or nil
+      local playerStable = type(playerDef) == "table" and playerDef.stableAnchor or nil
+      if type(enemyDef) == "table" then enemyDef.stableAnchor = true end
+      if type(playerDef) == "table" then playerDef.stableAnchor = true end
+
+      local results = { pcall(originalAnimatedUpdate, battle, dt, ...) }
+
+      restoreStable(enemyDef, enemyHad, enemyStable)
+      if playerDef ~= enemyDef then restoreStable(playerDef, playerHad, playerStable) end
+
+      if not results[1] then error(results[2], 0) end
+      table.remove(results, 1)
+      return unpack(results)
+    end
+
+    -- PLAYER PKMN SIZE remains a KIM control, but apply it only after Battle
+    -- Art has produced its known-good native world card. No sprite/canvas is
+    -- resampled and the foot anchor is unchanged.
+    if type(stage.sideTexture) == "function" then
+      originalSideTexture = stage.sideTexture
+      stage.sideTexture = function(battle, side)
+        local tex = originalSideTexture(battle, side)
+        if side == "player" and type(tex) == "table" and battle
+            and not battle.showPlayerBack and kimEnabled(stage)
+            and backGeneration() ~= "rom" then
+          local pct = tonumber(mod.options:get("battlePlayerSize")) or 125
+          pct = math.max(50, math.min(200, pct))
+          tex.presentationScale = (tonumber(tex.presentationScale) or 1) * pct / 100
+        end
         return tex
       end
-      local ax, ay = tonumber(tex.ax), tonumber(tex.ay)
-      if not (state.worldCardAx and state.worldCardAy) and ax and ay then
-        state.worldCardAx, state.worldCardAy = ax, ay
-      end
-      if state.worldCardAx and state.worldCardAy then
-        tex.ax, tex.ay = state.worldCardAx, state.worldCardAy
-      end
-      return tex
+      stage._kantoInMotionNativeSpriteScaleHook = stage.sideTexture
     end
-    OverworldBattle.sideTexture = sideTexture
-    OverworldBattle._kantoInMotionStableWorldCardAnchorHook = sideTexture
+
+    ba._kantoInMotionNativeSpriteDelegate = true
     return true
   end
 
   function M:install()
-    installOwnershipHook()
-    installWorldBackClassificationHook()
-    installPlayerScaleHook()
-    installStableWorldCardAnchorHook()
-    local okState, BattleState = pcall(require, "src.battle.BattleState")
-    if not okState or type(BattleState) ~= "table" or type(BattleState.update) ~= "function" then
-      return false
-    end
-    if BattleState.update == installedUpdate then return true end
-    local inner = BattleState.update
-    local function update(self, dt, ...)
-      local results = { inner(self, dt, ...) }
-      apply(self)
-      return unpack(results)
-    end
-    installedUpdate = update
-    BattleState.update = update
-    BattleState.kantoInMotionBattleArtSpriteBridge = true
-    return true
+    return installNativeDelegate()
   end
 
   function M:isActive()
-    local on = active()
-    return on and true or false
+    local _, _, stage = runtime()
+    return stage and kimEnabled(stage) or false
   end
 
-  function M:apply(battle)
-    return apply(battle)
+  -- Kept for the existing main.lua contract. Native AnimatedBattleArt runs
+  -- from Battle Art's own OverworldBattle update, so no per-battler KIM image
+  -- assignment is needed here.
+  function M:apply(_battle)
+    return false
   end
 
   M:install()
   if mod.events and type(mod.events.on) == "function" then
     mod.events:on("mods.loaded", function() M:install() end)
-    mod.events:on("battle.started", function(payload)
-      M:install()
-      apply(payload and payload.battle)
-    end)
+    mod.events:on("battle.started", function() M:install() end)
   end
 
   if mod.exports then
     mod.exports.battleArtSpriteCompat = true
-    mod.exports.battleArtSpriteCompatVersion = 3
+    mod.exports.battleArtSpriteCompatVersion = 8
+    mod.exports.battleArtSpriteCompatMode = "native_animated_delegate"
   end
   return M
 end

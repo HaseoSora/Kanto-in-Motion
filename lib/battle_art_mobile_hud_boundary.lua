@@ -8,7 +8,7 @@
 -- protected draw fails. Guard BOTH sides of render.hud: normalize entry for
 -- Modern UI/KIM, then normalize exit before GameViewport.finish and the next
 -- Battle Art frame. No love.graphics function is replaced or monkeypatched.
-return function(mod, stageOnlyActive)
+return function(mod, stageOnlyActive, battleHudGeometry)
   if not (love and love.graphics and type(stageOnlyActive) == "function") then
     return false
   end
@@ -37,7 +37,7 @@ return function(mod, stageOnlyActive)
   if mod._kantoInMotionBattleArtMobileHudBoundaryInstalled then return true end
   mod._kantoInMotionBattleArtMobileHudBoundaryInstalled = true
 
-  -- Reinstall the already-approved v8.6.63 QOL EXP geometry through a narrow
+  -- Reinstall the mobile QOL overlay geometry through a narrow
   -- mobile-only bridge. Unlike the abandoned v27 experiment, this helper never
   -- wraps BattleState.draw and never restores dramaticShapeShot; Modern UI and
   -- native-dialog ownership therefore remain exactly as in the working v25
@@ -48,12 +48,12 @@ return function(mod, stageOnlyActive)
     return assert(loader(src, "@" .. mod.path .. "/lib/mobile_qol_exp_reconstruction.lua"))()
   end)
   if okXp and type(xpInstaller) == "function" then
-    local okRun, result = pcall(xpInstaller, mod, stageOnlyActive)
+    local okRun, result = pcall(xpInstaller, mod, stageOnlyActive, battleHudGeometry)
     if not okRun and mod and mod.log and type(mod.log.warn) == "function" then
-      mod.log:warn("mobile QOL EXP reconstruction failed: %s", tostring(result))
+      mod.log:warn("mobile QOL overlay reconstruction failed: %s", tostring(result))
     end
   elseif not okXp and mod and mod.log and type(mod.log.warn) == "function" then
-    mod.log:warn("mobile QOL EXP reconstruction unavailable: %s", tostring(xpInstaller))
+    mod.log:warn("mobile QOL overlay reconstruction unavailable: %s", tostring(xpInstaller))
   end
 
   local unpack = table.unpack or unpack

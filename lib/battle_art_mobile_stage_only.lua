@@ -70,11 +70,23 @@ return function(mod, battleSystemEnabled, battleArt3DBattleEnabled)
       local originalUpdate = AnimatedBattleArt.update
       AnimatedBattleArt._kantoInMotionMobileStableAnchor = originalUpdate
       AnimatedBattleArt.update = function(battle, dt, ...)
-        if active() and type(battle) == "table" and battle.player then
-          local okDef, def = pcall(AnimatedBattleArt.definitionFor,
-                                   battle.player, "back")
-          if okDef and type(def) == "table" then
-            def.stableAnchor = true
+        if active() and type(battle) == "table" then
+          -- Set the metadata before Battle Art decodes the atlas.  Do not
+          -- finish/invalidate live playback here: doing that inside update can
+          -- tear down the staged shot and expose the native mobile battle UI.
+          if battle.enemy then
+            local okEnemy, enemyDef = pcall(AnimatedBattleArt.definitionFor,
+                                            battle.enemy, "front")
+            if okEnemy and type(enemyDef) == "table" then
+              enemyDef.stableAnchor = true
+            end
+          end
+          if battle.player then
+            local okPlayer, playerDef = pcall(AnimatedBattleArt.definitionFor,
+                                              battle.player, "back")
+            if okPlayer and type(playerDef) == "table" then
+              playerDef.stableAnchor = true
+            end
           end
         end
         return originalUpdate(battle, dt, ...)
@@ -134,7 +146,7 @@ return function(mod, battleSystemEnabled, battleArt3DBattleEnabled)
   function M:refresh() return patchRuntime() end
   if mod.exports then
     mod.exports.battleArtMobileStageOnly = true
-    mod.exports.battleArtMobileStageOnlyVersion = 4
+    mod.exports.battleArtMobileStageOnlyVersion = 5
   end
   return M
 end

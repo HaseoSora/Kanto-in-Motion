@@ -283,7 +283,37 @@ return function(mod)
     { key = "battleHudScale", label = "HUD SCALE", type = "choice",
       default = "og", choices = {
         { "OG", "og" }, { "SCALED", "scaled" },
-      }, description = "Battle Art HUD SCALE. OG follows the normal window-fit scale; SCALED uses Battle Art's one-rung-smaller compact HUD." },
+      }, description = "Battle Art HUD SCALE preset. OG follows the normal window-fit rung; SCALED uses Battle Art's one-rung-smaller compact rung. HUD SIZE can fine-tune either preset." },
+    { key = "battleHudSize", label = "HUD SIZE", type = "choice",
+      default = "100", choices = {
+        { "60%", "60" }, { "65%", "65" }, { "70%", "70" },
+        { "75%", "75" }, { "80%", "80" }, { "85%", "85" },
+        { "90%", "90" }, { "95%", "95" }, { "100%", "100" },
+      }, description = "Fine-tune the Battle Art-style enemy/player HP/status HUD size after the OG/SCALED preset. Quality of Life EXP placement follows the resized player HUD." },
+    { key = "battleHudOpacity", label = "HUD OPACITY", type = "choice",
+      default = "100", choices = {
+        { "25%", "25" }, { "30%", "30" }, { "35%", "35" },
+        { "40%", "40" }, { "45%", "45" }, { "50%", "50" },
+        { "55%", "55" }, { "60%", "60" }, { "65%", "65" },
+        { "70%", "70" }, { "75%", "75" }, { "80%", "80" },
+        { "85%", "85" }, { "90%", "90" }, { "95%", "95" },
+        { "100%", "100" },
+      }, description = "Adjust the opacity of Kanto in Motion's enemy/player HP/status HUD, including its party Pokeball layer. This does not fade the lower command/message panel." },
+    { key = "battleUiSize", label = "BATTLE UI SIZE", type = "choice",
+      default = "100", choices = {
+        { "60%", "60" }, { "65%", "65" }, { "70%", "70" },
+        { "75%", "75" }, { "80%", "80" }, { "85%", "85" },
+        { "90%", "90" }, { "95%", "95" }, { "100%", "100" },
+      }, description = "Reduce the height of Kanto in Motion's lower battle command/move/message panel while keeping it anchored to the bottom of the screen. Text size remains independent." },
+    { key = "battleUiOpacity", label = "BATTLE UI OPACITY", type = "choice",
+      default = "100", choices = {
+        { "25%", "25" }, { "30%", "30" }, { "35%", "35" },
+        { "40%", "40" }, { "45%", "45" }, { "50%", "50" },
+        { "55%", "55" }, { "60%", "60" }, { "65%", "65" },
+        { "70%", "70" }, { "75%", "75" }, { "80%", "80" },
+        { "85%", "85" }, { "90%", "90" }, { "95%", "95" },
+        { "100%", "100" },
+      }, description = "Adjust only the lower battle panel/background/frame opacity. Battle text and selected controls are not faded by this setting." },
     { key = "battleTextScale", label = "BATTLE TEXT SIZE", type = "choice",
       default = "150", choices = {
         { "100%", "100" }, { "125%", "125" }, { "150%", "150" },
@@ -291,7 +321,7 @@ return function(mod)
         { "250%", "250" }, { "275%", "275" }, { "300%", "300" },
         { "325%", "325" }, { "350%", "350" }, { "375%", "375" },
         { "400%", "400" },
-      }, description = "Scale only Modern UI's lower battle command, move and message text. Panel size and the Battle Art HP/status + Quality of Life EXP HUD are unaffected." },
+      }, description = "Scale only Modern UI's lower battle command, move and message text. Lower-panel size/opacity and HP/status HUD size/opacity remain independent." },
     { key = "battleMoveLayout", label = "MOVE LAYOUT", type = "choice",
       default = "grid", choices = {
         { "GRID", "grid" }, { "VERTICAL", "vertical" },
@@ -775,9 +805,17 @@ return function(mod)
     love.graphics.push("all")
     love.graphics.setCanvas(entry.canvas)
     love.graphics.origin()
-    love.graphics.clear(0, 0, 0, 0)
-    love.graphics.setColor(1, 1, 1, 1)
+    -- Gen1Recomp 0.2.56 can leave a battle/UI scissor active at the end of
+    -- the desktop frame. KIM renders animation cells from BattleState:update,
+    -- so inheriting that scissor here clips BOTH the transparent clear and the
+    -- atlas draw before Battle Art ever sees the frame. Reset all draw state
+    -- that can affect this private sprite canvas; push/pop restores the host
+    -- state immediately afterwards.
+    love.graphics.setScissor()
     love.graphics.setShader()
+    love.graphics.setBlendMode("alpha")
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.clear(0, 0, 0, 0)
     love.graphics.draw(entry.atlas, quad, 0, 0)
     if previousCanvas then love.graphics.setCanvas(previousCanvas) else love.graphics.setCanvas() end
     love.graphics.pop()
@@ -807,9 +845,15 @@ return function(mod)
     love.graphics.push("all")
     love.graphics.setCanvas(canvas)
     love.graphics.origin()
-    love.graphics.clear(0, 0, 0, 0)
-    love.graphics.setColor(1, 1, 1, 1)
+    -- Stable Battle Art frames must be built from the whole atlas cell, not
+    -- from whatever clip rectangle the previous desktop pass happened to
+    -- leave active. This is earlier than Battle Art's sideTexture() capture,
+    -- so clearing the scissor there (the v12 experiment) was too late.
+    love.graphics.setScissor()
     love.graphics.setShader()
+    love.graphics.setBlendMode("alpha")
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.clear(0, 0, 0, 0)
     love.graphics.draw(entry.atlas, quad, 0, 0)
     if previousCanvas then love.graphics.setCanvas(previousCanvas) else love.graphics.setCanvas() end
     love.graphics.pop()
@@ -893,9 +937,11 @@ return function(mod)
     love.graphics.push("all")
     love.graphics.setCanvas(slot.canvas)
     love.graphics.origin()
-    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setScissor()
     love.graphics.setShader()
+    love.graphics.setBlendMode("alpha")
     love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.clear(0, 0, 0, 0)
     if entry.atlas.setFilter then pcall(entry.atlas.setFilter, entry.atlas, "nearest", "nearest") end
     love.graphics.draw(entry.atlas, quad, dx, dy, 0, scale, scale)
     if previousCanvas then love.graphics.setCanvas(previousCanvas) else love.graphics.setCanvas() end
@@ -903,6 +949,158 @@ return function(mod)
     slot.lastFrame = frame
     return slot.canvas
   end
+
+
+  -- Gen1Recomp 0.2.56 desktop 3D-BTL compatibility provider. Keep this in a
+  -- nested factory assigned directly to the mod instead of adding more locals
+  -- to main.lua's already-near-limit outer scope.
+  mod._kantoInMotionBattleArtCpuPresentationData = (function()
+    local atlasCache = {}
+    local frameDataCache = {}
+    local presentationDataCache = {}
+
+    local function cpuAtlas(path)
+      local hit = atlasCache[path]
+      if hit == false then return nil end
+      if hit then return hit end
+      if not (love.image and type(love.image.newImageData) == "function"
+          and mod.assets and type(mod.assets.path) == "function") then
+        atlasCache[path] = false
+        return nil
+      end
+      local okPath, fullPath = pcall(mod.assets.path, mod.assets, path)
+      if not okPath or not fullPath then
+        atlasCache[path] = false
+        return nil
+      end
+      local okData, data = pcall(love.image.newImageData, fullPath)
+      if not okData or not data then
+        atlasCache[path] = false
+        return nil
+      end
+      atlasCache[path] = data
+      return data
+    end
+
+    local function cpuFrame(front, generation, species, forcedFrame)
+      if type(front) ~= "table" or type(front.image) ~= "string" then return nil end
+      local width = math.max(1, math.floor(tonumber(front.width) or 1))
+      local height = math.max(1, math.floor(tonumber(front.height) or 1))
+      local columns = math.max(1, math.floor(tonumber(front.columns) or 1))
+      local frames = math.max(1, math.floor(tonumber(front.frames) or 1))
+      local frame = tonumber(forcedFrame) or currentFrame(front)
+      frame = math.max(1, math.min(math.floor(frame), frames))
+      local key = table.concat({ generation, species, tostring(front.image),
+        tostring(width), tostring(height), tostring(columns), tostring(frames),
+        tostring(frame) }, ":")
+      local cached = frameDataCache[key]
+      if cached == false then return nil end
+      if cached then return cached end
+
+      local atlas = cpuAtlas(front.image)
+      if not atlas or not (love.image and type(love.image.newImageData) == "function") then
+        frameDataCache[key] = false
+        return nil
+      end
+      local iw, ih = atlas:getDimensions()
+      local expectedW = columns * width
+      local expectedH = math.ceil(frames / columns) * height
+      if iw ~= expectedW or ih ~= expectedH then
+        frameDataCache[key] = false
+        return nil
+      end
+
+      local ok, cell = pcall(love.image.newImageData, width, height)
+      if not ok or not cell then
+        frameDataCache[key] = false
+        return nil
+      end
+      local index = frame - 1
+      local col, row = index % columns, math.floor(index / columns)
+      local pasted = pcall(cell.paste, cell, atlas, 0, 0,
+        col * width, row * height, width, height)
+      if not pasted then
+        frameDataCache[key] = false
+        return nil
+      end
+      frameDataCache[key] = cell
+      return cell
+    end
+
+    return function(front, generation, species, forcedFrame, side, variant)
+      side = side or "front"
+      variant = variant or "normal"
+      if generation == "gen5" then
+        return cpuFrame(front, generation, species, forcedFrame)
+      end
+
+      local src = visualBoundsFor(generation, variant, side, species)
+        or visualBoundsFor(generation, "normal", side, species)
+      local ref = visualBoundsFor("gen5", "normal", side, species)
+      local refRecord = gen5ReferenceRecord(species, side)
+      if not (src and ref and type(refRecord) == "table") then
+        return cpuFrame(front, generation, species, forcedFrame)
+      end
+
+      local frameCount = math.max(1, math.floor(tonumber(front.frames) or 1))
+      local frame = tonumber(forcedFrame) or currentFrame(front)
+      frame = math.max(1, math.min(math.floor(frame), frameCount))
+      local outW = math.max(1, math.floor(tonumber(refRecord.width) or 1))
+      local outH = math.max(1, math.floor(tonumber(refRecord.height) or 1))
+      local key = table.concat({ generation, variant, side, species,
+        tostring(front.image), tostring(frame), tostring(outW), tostring(outH),
+        tostring(src.x), tostring(src.y), tostring(src.w), tostring(src.h),
+        tostring(ref.x), tostring(ref.y), tostring(ref.w), tostring(ref.h) }, ":")
+      local cached = presentationDataCache[key]
+      if cached == false then return nil end
+      if cached then return cached end
+
+      local cell = cpuFrame(front, generation, species, frame)
+      if not cell or not (love.image and type(love.image.newImageData) == "function") then
+        presentationDataCache[key] = false
+        return nil
+      end
+      local okOut, out = pcall(love.image.newImageData, outW, outH)
+      if not okOut or not out then
+        presentationDataCache[key] = false
+        return nil
+      end
+
+      local srcW = math.max(1, math.floor(tonumber(src.w) or 1))
+      local srcH = math.max(1, math.floor(tonumber(src.h) or 1))
+      local scale = math.min(ref.w / srcW, ref.h / srcH)
+      local drawW = math.max(1, math.floor(srcW * scale + 0.5))
+      local drawH = math.max(1, math.floor(srcH * scale + 0.5))
+      local destX = math.floor(ref.x + (ref.w - drawW) * 0.5 + 0.5)
+      local destY = math.floor(ref.y + ref.h - drawH + 0.5)
+      local srcX = math.floor(tonumber(src.x) or 0)
+      local srcY = math.floor(tonumber(src.y) or 0)
+      local cellW, cellH = cell:getDimensions()
+
+      local okMap = pcall(function()
+        for dy = 0, drawH - 1 do
+          local sy = srcY + math.min(srcH - 1, math.floor(dy * srcH / drawH))
+          local oy = destY + dy
+          if oy >= 0 and oy < outH and sy >= 0 and sy < cellH then
+            for dx = 0, drawW - 1 do
+              local sx = srcX + math.min(srcW - 1, math.floor(dx * srcW / drawW))
+              local ox = destX + dx
+              if ox >= 0 and ox < outW and sx >= 0 and sx < cellW then
+                local r, g, b, a = cell:getPixel(sx, sy)
+                out:setPixel(ox, oy, r, g, b, a)
+              end
+            end
+          end
+        end
+      end)
+      if not okMap then
+        presentationDataCache[key] = false
+        return nil
+      end
+      presentationDataCache[key] = out
+      return out
+    end
+  end)()
 
   local function getSprite(species, opts)
     if not mod.options:get("enabled") then return nil end
@@ -2704,8 +2902,11 @@ return function(mod)
     local s = math.max(1, math.floor(math.min(vw / 160, vh / 144)))
     -- Mirror Battle Art 1.9.8 OverworldBattle.snapRects exactly:
     -- OG uses the window-fit rung; SCALED is one integer rung smaller.
-    local hs = (mod.options:get("battleHudScale") == "scaled")
+    local baseHs = (mod.options:get("battleHudScale") == "scaled")
       and math.max(1, s - 1) or s
+    local hudSize = math.max(0.60, math.min(1.00,
+      (tonumber(mod.options:get("battleHudSize")) or 100) / 100))
+    local hs = baseHs * hudSize
     local lx = math.floor((vw - 160 * s) * 0.5)
     local ly = math.floor((vh - 144 * s) * 0.5) - math.floor(tonumber(liftPx) or 0)
     local enemyRect = { 8, 0, 80, 32 }
@@ -3092,8 +3293,7 @@ return function(mod)
       local qolBaseY = geo.ly + 89 * geo.hudScale
       local qolTargetY = geo.playerBandY + 41 * geo.hudScale
       local qolPortrait = geo.portraitStage ~= nil
-      local qolScaled = mod.options:get("battleHudScale") == "scaled"
-        and geo.battleScale > geo.hudScale
+      local qolScaled = geo.battleScale > geo.hudScale + 0.001
       qolXpCompat.active = qolPortrait or qolScaled
       qolXpCompat.canvas = flatBattleWorldCanvas
       qolXpCompat.scale = geo.hudScale
@@ -3885,11 +4085,13 @@ return function(mod)
     local playerBandY = oy + geo.playerBandY/dpiY
     local inverted = (mod.options:get("battleArenaFill") ~= "white"
       and mod.options:get("battleHudColor") == "inverted") and 1 or 0
+    local hudOpacity = math.max(0.25, math.min(1.00,
+      (tonumber(mod.options:get("battleHudOpacity")) or 100) / 100))
     local shader, shadow = getBattleHudShaders()
     local g = love.graphics
     g.push("all")
     g.origin()
-    g.setColor(1, 1, 1, 1)
+    g.setColor(1, 1, 1, hudOpacity)
     if shadow then
       g.setShader(shadow)
       pcall(shadow.send, shadow, "inverted", inverted)
@@ -3910,7 +4112,7 @@ return function(mod)
     -- INVERTED from turning the balls' dark artwork outlines into white ink.
     g.setShader()
     if partyBalls then
-      g.setColor(1, 1, 1, 1)
+      g.setColor(1, 1, 1, hudOpacity)
       g.draw(partyBalls, quads.enemy, enemyBandX, enemyBandY, 0, hsX, hsY)
       g.draw(partyBalls, quads.player, playerBandX, playerBandY, 0, hsX, hsY)
     end
@@ -4194,6 +4396,7 @@ return function(mod)
       pcall(syncBattleArtHudColor)
       local battle = currentBattleState(game)
       local active = battle and battleLiteFullScreenActive() or false
+      local battleArt3DActive = battle and battleArt3DBattleEnabled() or false
       local mobileBattleArtStageOnly = battle and mod._kantoInMotionMobileBattleArtStageOnlyActive() or false
       if not battle or not battleSystemEnabled() or externalBattleSceneOwnerRegistered() then
         restoreBattleLayout(game)
@@ -4202,6 +4405,7 @@ return function(mod)
       end
       if battle then
         battle._kantoInMotionBattleLite = (active or mobileBattleArtStageOnly) and true or nil
+        battle._kantoInMotion3DBattle = battleArt3DActive and true or nil
       end
       if game then
         game._kantoInMotionFullscreenBattle = (active or mobileBattleArtStageOnly) and true or nil
@@ -4309,6 +4513,7 @@ return function(mod)
       if battle then
         battle._kantoInMotionMobileDialogRect = nil
         battle._kantoInMotionMobileStageRect = nil
+        battle._kantoInMotion3DBattle = nil
       end
       if battle and not (active or mobileBattleArtStageOnly) then
         battle._kantoInMotionBattleLite = nil
@@ -5594,12 +5799,14 @@ return function(mod)
     end)
     if okBall and type(ballInstaller)=="function" then
       okBall,ballInstaller=pcall(ballInstaller,mod,battleRecord,
-        renderPresentationFrame,currentFrame)
+        renderPresentationFrame,currentFrame,
+        (mod._kantoInMotionNativeMobileHost and mod._kantoInMotionNativeMobileHost())
+          and nil or mod._kantoInMotionBattleArtCpuPresentationData)
     end
     if okBall and type(ballInstaller)=="table" then
       mod._kantoInMotionBattleArtSpriteBridge=ballInstaller
       mod._kantoInMotionBattleArtBridgePlatform=mod._kantoInMotionNativeMobileHost()
-        and "mobile_stage_stable" or "desktop_canvas"
+        and "mobile_stage_stable" or "desktop_cpu_atlas"
     elseif not okBall then
       mod.log:error("Battle Art sprite compatibility bridge failed: %s",tostring(ballInstaller))
     end
@@ -5624,6 +5831,25 @@ return function(mod)
         mod._kantoInMotionBattleArtDesktopMenuClipFix=ballInstaller
       elseif not okBall then
         mod.log:error("Battle Art desktop move-menu clip fix failed: %s",tostring(ballInstaller))
+      end
+
+      -- Windows keeps Battle Art's own snapped HP/status HUD while 3D-BTL is
+      -- active. Apply KIM's HUD SCALE, HUD SIZE and HUD OPACITY directly at
+      -- Battle Art's public snap/texture seams so there is still only one HUD
+      -- owner. Android/iOS keep the independently tested stage-only renderer.
+      okBall,ballInstaller=pcall(function()
+        local src=assert(mod:read("lib/battle_art_desktop_hud_geometry.lua"))
+        local loader=loadstring or load
+        return assert(loader(src,"@"..mod.path.."/lib/battle_art_desktop_hud_geometry.lua"))()
+      end)
+      if okBall and type(ballInstaller)=="function" then
+        okBall,ballInstaller=pcall(ballInstaller,mod,battleSystemEnabled,
+          battleArt3DBattleEnabled,mod._kantoInMotionNativeMobileHost)
+      end
+      if okBall and ballInstaller then
+        mod._kantoInMotionBattleArtDesktopHudGeometry=true
+      elseif not okBall then
+        mod.log:error("Battle Art desktop HUD geometry bridge failed: %s",tostring(ballInstaller))
       end
 
       -- Quality of Life draws its XP bar and caught-Pokedex indicator directly
@@ -5682,7 +5908,7 @@ return function(mod)
         end)
         if okBall and type(ballInstaller)=="function" then
           okBall,ballInstaller=pcall(ballInstaller,mod,
-            mod._kantoInMotionMobileBattleArtStageOnlyActive)
+            mod._kantoInMotionMobileBattleArtStageOnlyActive,battleHudGeometry)
         end
         if okBall and ballInstaller then
           mod._kantoInMotionBattleArtMobileHudBoundary=true

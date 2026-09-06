@@ -449,6 +449,13 @@ local function titleFor(Strings, state, kind)
     LinkState = "LINK",
   }
   local title = state and state.title or names[state and state.screenId]
+  -- Some content/localization mods reach the stock mart through the direct
+  -- ShopMenu constructor, so no Screens.push screenId is stamped. Once the
+  -- structural mart probe below recognizes that state, preserve the normal
+  -- Modern UI shop title without depending on translated BUY/SELL/QUIT text.
+  if not title and state and state._kantoInMotionShopMenu == true then
+    title = names.ShopMenu
+  end
   if state and state._gen1ModMenus and not state.title then
     title = "MOD MENUS"
   end
@@ -2606,7 +2613,13 @@ return function(mod)
         or kind == "box_mon_list" then
       return tostring(state.items)
     elseif kind == "options" or kind == "mod_options" then
-      return tostring(state.rows)
+      -- Gen1Recomp 0.2.53 keeps the full flat descriptor list in `rows`,
+      -- but the live OPTION screen now drives its grouped top-level/submenu
+      -- model through `view`. Track the list the native cursor actually owns
+      -- so pointer captures and redraw invalidation stay on the same model.
+      local activeRows = kind == "options" and type(state.view) == "table"
+        and state.view or state.rows
+      return tostring(activeRows)
     end
     return safeText(state.screenId or kind)
   end
@@ -4790,7 +4803,8 @@ return function(mod)
     battleSystem = "kanto", battleSprites = "kanto",
     battleFrontGeneration = "kanto", battleBackGeneration = "kanto",
     battleArenaFill = "kanto",
-    battleHudScale = "kanto", battleTextScale = "kanto",
+    battleHudScale = "kanto", battleHudSize = "kanto", battleHudOpacity = "kanto", battleTextScale = "kanto",
+    battleUiSize = "kanto", battleUiOpacity = "kanto",
     battleMoveLayout = "kanto", battleMoveInfo = "kanto", battleHudColor = "kanto",
     theme = "appearance", frameStyle = "appearance", frameAsset = "appearance",
     frameScale = "appearance",
@@ -5130,6 +5144,35 @@ return function(mod)
     if not (state and inherits(classOf(state), listClass)
         and type(state.items) == "table") then return nil end
     local game = state.game
+
+    -- Advanced Box System v1.1.0 deliberately exposes its browser as a live
+    -- ListMenu and marks the state with absAdvancedBox. Consume that public
+    -- state shape directly instead of depending on English row labels or on
+    -- the root Bill's-PC cursor being in a particular translated position.
+    -- Advanced Box System keeps ownership of all storage/input logic; KIM
+    -- supplies presentation only.
+    if state.absAdvancedBox == true and game and game.save then
+      local mode = state.absMode
+      local source, action
+      if mode == "deposit" or mode == "swap_party" then
+        source, action = game.save.party, "DEPOSIT"
+      else
+        local boxes = game.save.boxes
+        source = type(boxes) == "table" and boxes[game.save.currentBox or 1] or nil
+        action = mode == "release" and "RELEASE" or "WITHDRAW"
+      end
+      if type(source) == "table" and #state.items == #source then
+        local valid = true
+        for index, item in ipairs(state.items) do
+          if type(source[index]) ~= "table" or source[index].species == nil
+              or type(item) ~= "table" or item.value ~= index then
+            valid = false
+            break
+          end
+        end
+        if valid then return source, action end
+      end
+    end
     local root
     local stack = game and game.stack and game.stack.states
     if type(stack) == "table" then
@@ -5396,8 +5439,11 @@ return function(mod)
       return "pokedex"
     end
     if id == "BagMenu" and inherits(class, listClass) then return "bag" end
-    if id == "OptionsMenu" and optionsClass
-        and inherits(class, optionsClass) then return "options" end
+    -- Gen1Recomp 0.2.53 OPTION category pages are pushed directly with
+    -- OptionsMenu.new(...), so those child states do not receive the
+    -- `screenId = "OptionsMenu"` stamp that Screens.push gives the root.
+    -- The class is the stable contract for both root and grouped pages.
+    if optionsClass and inherits(class, optionsClass) then return "options" end
     -- Several released callers (Day Care, Name Rater, scripted pickers) push
     -- PartyMenu directly rather than through Screens, so the stable class is
     -- authoritative even when no screenId was stamped.
@@ -6166,6 +6212,36 @@ return function(mod)
   -- would silently lose UI. Only audited structural adapters are exceptions:
   -- Modern Bag delegates to live ListMenu rows, Useful Dex exposes its vanilla
   -- entry plus public page model, and Gen 3 Box exposes its complete grid model.
+  -- The Gen 1 mart root is a Menu instance with its own draw function.
+  -- Normally Screens.push stamps screenId = "ShopMenu", but direct mart
+  -- callers and content/localization wrappers can legitimately leave that id
+  -- unset. Detect the stock mart by its stable structure instead of English
+  -- labels so translated COMPRAR/VENDER/SALIR rows remain Modern UI-owned.
+  runtime.isGen1MartMenu = function(state)
+    if type(state) ~= "table" then return false end
+    if state.screenId == "ShopMenu" or state._kantoInMotionShopMenu == true then
+      return true
+    end
+    if not inherits(classOf(state), menuClass) then return false end
+    local items = state.items
+    if type(items) ~= "table" or #items ~= 3 then return false end
+    local first, second, third = items[1], items[2], items[3]
+    if type(first) ~= "table" or type(second) ~= "table"
+        or type(third) ~= "table" then return false end
+    -- ShopMenu.new uses the fixed 0,0 / 7-row shell and keeps BUY + SELL
+    -- open while QUIT closes. Label text is intentionally ignored.
+    if tonumber(state.tx) ~= 0 or tonumber(state.ty) ~= 0
+        or tonumber(state.th) ~= 7 then return false end
+    if first.keepOpen ~= true or second.keepOpen ~= true
+        or third.keepOpen == true then return false end
+    if type(first.onSelect) ~= "function" or type(second.onSelect) ~= "function"
+        or type(third.onSelect) ~= "function"
+        or type(state.onCancel) ~= "function" then return false end
+    if type(state.footer) ~= "string" then return false end
+    state._kantoInMotionShopMenu = true
+    return true
+  end
+
   runtime.customDrawModeled = function(state, kind)
     if kind == "ui_gallery" or state and state._gen1UiGalleryPreview then
       return true
@@ -6211,8 +6287,7 @@ return function(mod)
     -- child is an ordinary dialogue ListMenu classified as shop_list below.
     -- Treat the audited ShopMenu override as modeled so the stack proof does
     -- not fall back to the classic UI when a mart list is opened.
-    if kind == "menu" and state and state.screenId == "ShopMenu"
-        and inherits(classOf(state), menuClass) then return true end
+    if kind == "menu" and runtime.isGen1MartMenu(state) then return true end
     if kind == "menu" and state._gen1ModernTitleMenu == true
         and rawget(state, "draw") == state._gen1ModernTitleDraw then return true end
     return false
@@ -7121,7 +7196,8 @@ return function(mod)
     if type(mon) ~= "table" or type(mon.species) ~= "string"
         or type(mod.find) ~= "function" then return nil end
     if kind ~= "party" and kind ~= "summary" and kind ~= "dex"
-        and kind ~= "dex_entry" and kind ~= "evolution" then return nil end
+        and kind ~= "dex_entry" and kind ~= "evolution"
+        and kind ~= "box" and kind ~= "box_mon_list" then return nil end
     local exports = type(mod.exports) == "table" and mod.exports or nil
     if not (type(exports) == "table" and type(exports.getSprite) == "function") then
       local okHandle, handle = pcall(mod.find, "animated_menu_pokemon")
@@ -7192,13 +7268,26 @@ return function(mod)
     elseif kind == "mod_manager" then
       return managerRowsFor(game, state)
     elseif kind == "options" or kind == "mod_options" then
-      for _, row in ipairs(state.rows or {}) do
+      -- 0.2.53 groups the Gen 1 OPTION window after ui.options.rows runs.
+      -- `state.rows` intentionally remains the old flat hook-facing list,
+      -- while `state.view` is what OptionsMenu:update/draw actually indexes.
+      -- Render the live view so the Modern highlight, A/Left/Right actions,
+      -- scrolling and the native index all refer to the same row. Older
+      -- Gen1Recomp builds have no `view`, so they naturally fall back.
+      local optionRows = state.rows or {}
+      if kind == "options" and type(state.view) == "table" then
+        optionRows = state.view
+      end
+      for _, row in ipairs(optionRows) do
         rows[#rows + 1] = {
           label = row.label, value = runtime.optionValue(game, row),
           enabled = row.enabled, image = imageCandidate(row), source = row,
         }
       end
-      rows[#rows + 1] = { label = Strings("CANCEL"), source = false }
+      rows[#rows + 1] = {
+        label = Strings(kind == "options" and "BACK" or "CANCEL"),
+        source = false,
+      }
     elseif kind == "party" then
       if state.submenu and type(state.subItems) == "table" then
         selected = state.subIndex or 1
@@ -7942,7 +8031,8 @@ return function(mod)
         ih - sourceSlice * 2
       local centerDestW, centerDestH = assetFw - destinationCornerX * 2,
         assetFh - destinationCornerY * 2
-      setColor({ 1, 1, 1, 1 })
+      setColor({ 1, 1, 1,
+        tonumber(theme._kantoBattlePanelOpacity) or 1 })
       drawSlice(0, 0, sourceSlice, sourceSlice,
         assetFx, assetFy, destinationCornerX, destinationCornerY)
       drawTiledX(sourceSlice, 0, centerSourceW, sourceSlice,
@@ -13587,6 +13677,67 @@ return function(mod)
     return out
   end
 
+  -- Kanto in Motion battle-only lower-panel presentation controls. These are
+  -- deliberately separate from Modern UI's global PANEL OPACITY/UI SCALE so
+  -- a player can compact the battle commands without changing menus, dialogue,
+  -- status, or any other Modern UI screen.
+  function battleRuntime.lowerPanelSizeScale()
+    local percent = tonumber(runtime.option("battleUiSize", "100")) or 100
+    return clamp(percent, 60, 100) / 100
+  end
+
+  function battleRuntime.lowerPanelVisualTheme(theme)
+    local percent = tonumber(runtime.option("battleUiOpacity", "100")) or 100
+    local alpha = clamp(percent, 25, 100) / 100
+    local out = copy(theme)
+    out.colors = copy(theme.colors or {})
+    -- KIM's lower battle surface was intentionally opaque before this option
+    -- existed. Make BATTLE UI OPACITY authoritative for those two fills rather
+    -- than multiplying Modern UI's unrelated global PANEL OPACITY setting.
+    for _, key in ipairs({ "surface", "surfaceRaised" }) do
+      local source = out.colors[key]
+      if type(source) == "table" then
+        local color = copy(source)
+        color[4] = alpha
+        out.colors[key] = color
+      end
+    end
+    -- Borders/dividers keep any authored/global foreground alpha, then the
+    -- battle-only setting attenuates them further.
+    for _, key in ipairs({ "frame", "frameShadow", "divider", "accent" }) do
+      local source = out.colors[key]
+      if type(source) == "table" then
+        local color = copy(source)
+        color[4] = (tonumber(color[4]) or 1) * alpha
+        out.colors[key] = color
+      end
+    end
+    out._kantoBattlePanelOpacity = alpha
+    return out
+  end
+
+  function battleRuntime.lowerPanelMinimumHeight(game, layoutTheme, textTheme,
+      isMove)
+    local spacing = layoutTheme.spacing
+    local bodyFont = font(fontCache, textTheme.typography.body)
+    local captionFont = font(fontCache, textTheme.typography.caption)
+    local rows = 2
+    if isMove and safeText(runtime.option("battleMoveLayout", "grid")):lower()
+        == "vertical" then
+      rows = 4
+    end
+    local touchMin = touchBattleControlsVisible(game) and 44 or 30
+    local rowH = math.max(touchMin, textHeight(bodyFont) + spacing.xs * 2,
+      textHeight(captionFont) + spacing.xs * 2)
+    if isMove then
+      return spacing.sm * 2 + textHeight(captionFont) + spacing.xs
+        + rowH * rows
+    end
+    -- drawBattleActionPanel reserves two md paddings plus one md row gap and
+    -- a 26px command/message allowance before splitting its two command rows.
+    return spacing.md * 3 + 26 + rowH * 2
+  end
+
   -- Typed Move Colors compatibility. Kanto in Motion's outer battle draw
   -- wrapper suppresses Typed's overlapping battle presenter for that frame but
   -- exposes its live option snapshot here. Menus outside this Modern battle
@@ -13739,15 +13890,17 @@ return function(mod)
     love.graphics.pop()
   end
 
-  runtime.drawBattleActionPanel = function(game, state, theme, x, y, w, h)
+  runtime.drawBattleActionPanel = function(game, state, theme, x, y, w, h,
+      visualTheme)
     local spacing = theme.spacing
+    visualTheme = visualTheme or theme
     local inputState = battleRuntime.inputState(state)
     local contentH = math.max(1, h - spacing.md * 2 - 26)
-    setColor(battleRuntime.opaque(theme.colors.surfaceRaised
-      or theme.colors.surface))
+    setColor(visualTheme.colors.surfaceRaised or visualTheme.colors.surface)
     love.graphics.rectangle("fill", x, y, w, h, theme.radii.md)
-    runtime.drawPanelFrame(theme, x, y, w, h, theme.radii.md)
-    runtime.drawPanelAccent(theme, x, y, w, theme.radii.md, 3)
+    runtime.drawPanelFrame(visualTheme, x, y, w, h, theme.radii.md,
+      visualTheme._kantoBattlePanelOpacity < 0.999 and false or nil)
+    runtime.drawPanelAccent(visualTheme, x, y, w, theme.radii.md, 3)
     local phase = state.phase
     if phase == "menu" then
       local labels
@@ -13954,8 +14107,9 @@ return function(mod)
   -- VERTICAL preserves the classic top-to-bottom move order while retaining
   -- the same full-width bottom panel and right-side information block.
   runtime.drawBattleKimMoves = function(game, state, layoutTheme, textTheme,
-      x, y, w, h)
+      x, y, w, h, visualTheme)
     local spacing = layoutTheme.spacing
+    visualTheme = visualTheme or layoutTheme
     local moves, selected, move, definition, maximum, inputState =
       battleRuntime.moveSelection(game, state)
     local bodyFont = font(fontCache, textTheme.typography.body)
@@ -13964,11 +14118,11 @@ return function(mod)
     local layout = safeText(runtime.option("battleMoveLayout", "grid")):lower()
     if layout ~= "vertical" then layout = "grid" end
 
-    setColor(battleRuntime.opaque(layoutTheme.colors.surfaceRaised
-      or layoutTheme.colors.surface))
+    setColor(visualTheme.colors.surfaceRaised or visualTheme.colors.surface)
     love.graphics.rectangle("fill", x, y, w, h, layoutTheme.radii.md)
-    runtime.drawPanelFrame(layoutTheme, x, y, w, h, layoutTheme.radii.md)
-    runtime.drawPanelAccent(layoutTheme, x, y, w, layoutTheme.radii.md, 3)
+    runtime.drawPanelFrame(visualTheme, x, y, w, h, layoutTheme.radii.md,
+      visualTheme._kantoBattlePanelOpacity < 0.999 and false or nil)
+    runtime.drawPanelAccent(visualTheme, x, y, w, layoutTheme.radii.md, 3)
     runtime.recordLayoutRect("battle-move-panel", { x=x, y=y, w=w, h=h })
 
     -- MOVE INFO is optional. It defaults OFF so portrait/mobile gets the full
@@ -13991,10 +14145,10 @@ return function(mod)
     if showMoveInfo then
       -- MOVE INFO stays on the right for both GRID and VERTICAL so switching
       -- move layouts never moves the information column across the screen.
-      setColor(battleRuntime.opaque(layoutTheme.colors.surface))
+      setColor(visualTheme.colors.surface)
       love.graphics.rectangle("fill", detailX, y, detailW, h,
         0, layoutTheme.radii.md, 0, layoutTheme.radii.md)
-      setColor(layoutTheme.colors.divider)
+      setColor(visualTheme.colors.divider)
       love.graphics.rectangle("fill", detailX, y + spacing.sm, 1,
         h - spacing.sm * 2)
     end
@@ -14050,12 +14204,12 @@ return function(mod)
           4, math.max(1, rowH - 4))
       end
       if col > 0 then
-        setColor(layoutTheme.colors.divider)
+        setColor(visualTheme.colors.divider)
         love.graphics.rectangle("fill", cellX, cellY + spacing.xs,
           1, math.max(1, rowH - spacing.xs * 2))
       end
       if row > 0 then
-        setColor(layoutTheme.colors.divider)
+        setColor(visualTheme.colors.divider)
         love.graphics.rectangle("fill", cellX + spacing.sm, cellY,
           math.max(1, cellW - spacing.sm * 2), 1)
       end
@@ -15530,6 +15684,10 @@ return function(mod)
       or (game and game._kantoInMotionFullscreenBattle == true)
     local fullscreenLowerPanel = kimFullscreen
       or options.fullscreenLowerPanel == true
+    local kim3DBattle = (source and source._kantoInMotion3DBattle == true)
+      or (native and native._kantoInMotion3DBattle == true)
+      or (state and state._kantoInMotion3DBattle == true)
+    local kim2DBattle = kimFullscreen and not kim3DBattle
     local fullX, fullY, fullW, fullH = fullViewportRect(viewport)
 
     love.graphics.push("all")
@@ -15665,7 +15823,8 @@ return function(mod)
         (source and source._kantoInMotionMobileStageRect)
         or (native and native._kantoInMotionMobileStageRect)
         or (state and state._kantoInMotionMobileStageRect)) or nil
-      if mobileTouch and orientation == "portrait" and type(mobileStage)=="table" then
+      if not kim2DBattle and mobileTouch and orientation == "portrait"
+          and type(mobileStage)=="table" then
         local windowW, windowH = love.graphics.getDimensions()
         local stageTop = clamp(tonumber(mobileStage.y) or 0, 0, windowH)
         local stageBottom = clamp(tonumber(mobileStage.bottom)
@@ -15688,7 +15847,7 @@ return function(mod)
       -- intentional Modern UI footer rather than exposing the renderer's black
       -- clear colour. The edge comes from main.lua's live KRS transform, so the
       -- band automatically adapts to 16:9, 4:3 and ultrawide windows.
-      local krsFooterTop = kimFullscreen and (
+      local krsFooterTop = (kimFullscreen and not kim2DBattle) and (
         tonumber(source and source._kantoInMotionKrsFooterTop)
         or tonumber(native and native._kantoInMotionKrsFooterTop)
         or tonumber(state and state._kantoInMotionKrsFooterTop)) or nil
@@ -15778,14 +15937,25 @@ return function(mod)
           math.max(1, fullY + fullH - mockBottomInset - panelY))
       end
 
+      local lowerPanelScale = battleRuntime.lowerPanelSizeScale()
+      if lowerPanelScale < 0.999 then
+        local panelBottom = panelY + panelH
+        local minPanelH = battleRuntime.lowerPanelMinimumHeight(
+          game, theme, textTheme, isMove)
+        local targetPanelH = math.max(minPanelH, panelH * lowerPanelScale)
+        panelH = math.min(panelH, targetPanelH)
+        panelY = panelBottom - panelH
+      end
+      local lowerPanelVisualTheme = battleRuntime.lowerPanelVisualTheme(theme)
+
       if isMove then
         -- MOVE LAYOUT selects between the 2x2 GRID and classic four-row
         -- VERTICAL list. Both use exactly the same full-width bottom panel.
         runtime.drawBattleKimMoves(game, source, theme, textTheme,
-          panelX, panelY, panelW, panelH)
+          panelX, panelY, panelW, panelH, lowerPanelVisualTheme)
       elseif phase == "menu" then
         runtime.drawBattleActionPanel(game, source, textTheme,
-          panelX, panelY, panelW, panelH)
+          panelX, panelY, panelW, panelH, lowerPanelVisualTheme)
       else
         local message = runtime.battleMessage(source)
         if source and type(source) == "table"
@@ -15798,7 +15968,7 @@ return function(mod)
           -- drawBattle2dMessage(), whose content-sized behavior intentionally
           -- creates the small centered bubble seen in the v8.0 screenshots.
           runtime.drawBattleActionPanel(game, source, textTheme,
-            panelX, panelY, panelW, panelH)
+            panelX, panelY, panelW, panelH, lowerPanelVisualTheme)
         end
       end
     elseif isTop then
