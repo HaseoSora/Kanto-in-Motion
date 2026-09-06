@@ -1,16 +1,14 @@
-# Kanto in Motion v1.3.4
+# Kanto in Motion v1.3.3
 
 **Kanto in Motion** is an animated Pokémon presentation and battle overhaul for Gen1Recomp. It supports **Pokémon Red / Blue / Yellow** and retains the Gen 2 presentation support introduced in v1.2.0 for **Gold / Silver / Crystal**.
 
 The internal mod ID remains `animated_menu_pokemon`, so existing Kanto in Motion settings can carry forward when upgrading.
 
-## v1.3.4 highlights
+## v1.3.3 fixes
 
-- Improved battle-system stability across PC and mobile.
-- Added independent size and opacity controls for the lower battle UI and HP/status HUD.
-- Updated compatible Quality of Life EXP and already-caught overlays to follow resized HUD geometry across desktop and mobile layouts.
-- Added localization-safe Modern UI Poké Mart compatibility for the Spanish translation mod without modifying it.
-- Added Advanced Box System animated selected-Pokémon preview compatibility without modifying Advanced Box System.
+- Fixed PC Quality of Life EXP and already-caught indicator placement for Battle Art 3D-BTL ON and OFF.
+- Corrected the final horizontal position of the already-caught indicator on the enemy HUD.
+- Updated the integrated Modern UI for Gen1Recomp 0.2.53's revised OPTION window on both PC and mobile, including its grouped option pages and synchronized selection/input behavior.
 
 ## Animated Pokémon features
 
@@ -64,7 +62,7 @@ Open **KANTO IN MOTION** from the mod settings screen. Gen 1 also exposes a **BA
 
 ## KANTO IN MOTION → BATTLE settings
 
-The Battle submenu is currently **Gen 1 only**. These are the current v1.3.4 settings and their behavior.
+The Battle submenu is currently **Gen 1 only**. These are the current v1.3.3 settings and their behavior.
 
 | Setting | Choices | Default | What it does |
 | --- | --- | --- | --- |
@@ -77,10 +75,6 @@ The Battle submenu is currently **Gen 1 only**. These are the current v1.3.4 set
 | **PLAYER TRAINER** | DEFAULT / ROM, PNG, GEN 1–5, ASH, GARY, RED, ASH FRONT, MISTY FRONT, BROCK FRONT, BULMA FRONT, GARY FRONT, BOY, LASS, HILBERT | DEFAULT / ROM | Chooses the player trainer shown during the battle intro/send-out. When a five-frame atlas exists, the global **ANIMATION** setting controls whether it animates. Static-only choices remain static. DEFAULT / ROM yields to the game or another trainer provider. |
 | **PLAYER PKMN SIZE** | 50%–200% in 5% steps | 125% | Scales only the player-side Pokémon around its normal KIM battle anchor. Enemy size is independent. |
 | **HUD SCALE** | OG / SCALED | OG | Battle Art-style HUD scale. OG uses the normal window-fit integer scale; SCALED uses the one-rung-smaller compact HUD. Compatible Quality of Life EXP placement follows the selected HUD geometry. |
-| **HUD SIZE** | 60%–100% in 5% steps | 100% | Fine-tunes the HP/status HUD size after the OG/SCALED preset. Compatible EXP/caught overlays follow the same geometry. |
-| **HUD OPACITY** | 25%–100% in 5% steps | 100% | Controls the opacity of the battle HP/status HUD while keeping its geometry and overlay alignment intact. |
-| **BATTLE UI SIZE** | 60%–100% in 5% steps | 100% | Changes the height/footprint of KIM's lower command, move, and message panel while keeping it bottom-anchored. |
-| **BATTLE UI OPACITY** | 25%–100% in 5% steps | 100% | Controls the lower battle panel/frame opacity while keeping battle text readable. |
 | **BATTLE TEXT SIZE** | 100%–400% in 25% steps | 150% | Scales only the integrated Modern UI's battle command, move, and message text. It does not resize the lower panel, HP/status HUD, or Quality of Life EXP bar. When Modern UI is OFF, vanilla text remains vanilla-owned. |
 | **MOVE LAYOUT** | GRID / VERTICAL | GRID | GRID uses a 2×2 move grid. VERTICAL lists the four moves top-to-bottom. |
 | **MOVE INFO** | ON / OFF | OFF | Shows the selected move's type, PP, power, and accuracy beside the move list. OFF gives move names the full panel width. |
@@ -102,14 +96,6 @@ When compatible `overworld_wild_spawns` / Wilds is installed, KIM assigns the pe
 
 KIM does not modify Quality of Life. Its battle EXP/caught overlays remain source-owned. KIM only supplies the geometry needed to keep those overlays aligned with KIM's battle HUD, including the mobile portrait EXP-bar correction.
 
-### Spanish translation compatibility
-
-KIM does not modify the external Spanish translation mod. Modern UI identifies the Gen 1 Poké Mart by its stable menu structure rather than English BUY/SELL/QUIT text, allowing translated shop labels and dialogue to remain translation-owned.
-
-### Advanced Box System compatibility
-
-KIM does not modify Advanced Box System. When its Advanced Box browser is active, KIM can supply animated front-sprite presentation for the selected Pokémon preview while Advanced Box System continues to own storage operations, list state, and input.
-
 ## Credits and acknowledgements
 
 Kanto in Motion includes or adapts work from several community projects. Credit for those original projects belongs to their authors.
@@ -120,7 +106,7 @@ Kanto in Motion includes or adapts work from several community projects. Credit 
 
 - **Kanto Rework Battle Anims + KRS battle backgrounds — Faendra**  
   https://github.com/Faendra/kanto-rework-suite  
-  KIM integrates the Kanto Rework battle-animation data/bridge lineage and KRS battle-background routing used by the v1.3.4 arena.
+  KIM integrates the Kanto Rework battle-animation data/bridge lineage and KRS battle-background routing used by the v1.3.3 arena.
 
 - **Pokéball Colorfix — keberos**  
   https://github.com/keberos/pokeball-colorfix  
@@ -142,15 +128,13 @@ Kanto in Motion does **not** claim ownership of third-party or Pokémon-derived 
 
 ## External compatibility mods are not bundled
 
-The following integrations are compatibility-only in v1.3.4. Their packages are **not copied, modified, or redistributed by Kanto in Motion**:
+The following integrations are compatibility-only in v1.3.3. Their packages are **not copied, modified, or redistributed by Kanto in Motion**:
 
 - Quality of Life
 - Typed Move Colors
 - Overworld Wild Spawns / Wilds of Kanto
 - Gen2 Clean UI
 - Useful Bag
-- Spanish translation (`recomp-spanish`)
-- Advanced Box System
 - other UI/battle mods using KIM's compatibility API
 
 ## Compatibility
@@ -183,17 +167,17 @@ Because Kanto in Motion uses `engine_internals` for UI/battle integration, large
 
 ## Release packages
 
-v1.3.4 is provided in two ZIPs. Install **one**, not both.
+v1.3.3 is provided in two ZIPs. Install **one**, not both.
 
 ### Full Assets
 
-`Kanto-in-Motion-v1.3.4-Full-Assets.zip`
+`Kanto-in-Motion-v1.3.3-Full-Assets.zip`
 
 Includes the animated Pokémon/title payloads present in the maintainer's working release build, along with the integrated battle/background/UI assets used by KIM.
 
 ### No Pokémon Assets
 
-`Kanto-in-Motion-v1.3.4-No-Pokemon-Assets.zip`
+`Kanto-in-Motion-v1.3.3-No-Pokemon-Assets.zip`
 
 Excludes the locally imported Pokémon front/back/title artwork and associated generated sprite metadata where required. The runtime code remains intact and `tools/import_assets.py` can populate compatible local sprite assets.
 
@@ -201,15 +185,15 @@ See `ASSET_NOTICES.md` for the exact packaging boundary.
 
 ## Installation
 
-1. Download **one** v1.3.4 ZIP: Full Assets or No Pokémon Assets.
+1. Download **one** v1.3.3 ZIP: Full Assets or No Pokémon Assets.
 2. Import the ZIP through Gen1Recomp's Mods interface.
 3. If using No Pokémon Assets, populate compatible local sprite art using `tools/import_assets.py` or your established local asset workflow.
 4. Enable Kanto in Motion.
 5. Do not enable a separate Gen1 Modern UI / Gen1 Clean UI at the same time as KIM's integrated Gen 1 UI unless you intentionally disable/yield the overlapping presenter.
 
-### Upgrading from an earlier Kanto in Motion release
+### Upgrading from v1.3.1
 
-Replace the previous Kanto in Motion package with one complete v1.3.4 package. The internal ID remains `animated_menu_pokemon`, so compatible saved KIM options carry forward. Do not layer the old v28 or v1.3.1 v2-v7 test patches underneath v1.3.4; their final confirmed changes are already included.
+Replace the previous Kanto in Motion package with one complete v1.3.3 package. The internal ID remains `animated_menu_pokemon`, so compatible saved KIM options carry forward. Do not layer the old v28 or v1.3.1 v2-v7 test patches underneath v1.3.3; their final confirmed changes are already included.
 
 If upgrading from the older **Animated Menu Pokémon** package, remove/disable that package first because it shares the same internal mod ID.
 

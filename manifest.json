@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.3.4",
+  "version": "1.3.3",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -35,6 +35,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion v1.3.4. Improves PC/mobile battle-system stability, adds battle UI and HUD size/opacity controls, and expands compatibility with localization and storage mods.",
+  "description": "Kanto in Motion v1.3.3. Adds Advanced Box System animated front-sprite compatibility while preserving Spanish translation, Battle Art, mobile, and Modern UI compatibility.",
   "github": "HaseoSora/Kanto-in-Motion"
 }

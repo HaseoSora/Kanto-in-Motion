@@ -1,14 +1,3 @@
-## 1.3.4
-
-- Improved battle-system stability across PC and mobile, including the animated battler handoff used with external battle rendering.
-- Added **BATTLE UI SIZE** (60%–100%) and **BATTLE UI OPACITY** (25%–100%) controls for KIM's lower battle panel.
-- Added **HUD SIZE** (60%–100%) and **HUD OPACITY** (25%–100%) controls for the HP/status HUD while preserving the existing OG/SCALED HUD preset.
-- Reworked Quality of Life EXP and already-caught overlay geometry so those overlays follow the resized KIM/Battle Art HUD on desktop and mobile, including portrait and landscape layouts.
-- Removed the extra lower-field void-cover filler from KIM's 2D battle path when 3D-BTL is OFF.
-- Added localization-safe Poké Mart detection so KIM Modern UI can coexist with the Spanish translation mod without depending on English BUY/SELL/QUIT labels or modifying the translation package.
-- Added Advanced Box System presentation compatibility so the selected Pokémon preview can use KIM's animated front sprites while Advanced Box System keeps ownership of storage and input logic.
-- Added `recomp-spanish` and `advanced_box_system` as optional compatibility dependencies; neither external mod is bundled or modified.
-
 ## 1.3.3
 
 - Fixed PC Quality of Life EXP and already-caught indicator placement with Battle Art 3D-BTL ON.
