@@ -230,7 +230,10 @@ return function(mod)
   local battleOptionSchema = {
     { key = "battleSystem", label = "BATTLE SYSTEM", type = "toggle",
       default = true,
-      description = "Master switch for Kanto in Motion battle presentation. OFF yields the battle scene to vanilla or another battle mod." },
+      description = "Master switch for Kanto in Motion battle presentation. OFF yields the battle scene to vanilla or another battle mod and disables KIM's move-animation takeover, so the active battle provider uses its own animations." },
+    { key = "battleUiWip", label = "MODERN BATTLE UI", type = "toggle",
+      default = true,
+      description = "Use Kanto in Motion's integrated Modern UI for battle commands, move selection, battle messages, and supported battle menu screens. OFF keeps KIM's battle system, animated sprites, move animations, shiny effects, and battle HUD available, but yields the battle UI/dialog layer to vanilla or another battle UI mod." },
     { key = "battleSprites", label = "BATTLE SPRITES", type = "toggle",
       default = true,
       description = "Animate battle Pokemon without enabling voxel rendering." },
@@ -246,7 +249,7 @@ return function(mod)
       }, description = "Wild shiny encounter odds. NATIVE leaves Gen 1 DVs untouched (the canonical Gen 2 shiny pattern occurs naturally at 1/8192). Other choices roll exact Kanto in Motion shiny odds when a wild Pokemon is created. Shiny DVs are stored on the Pokemon, so a caught shiny stays shiny." },
     { key = "battleAnimations", label = "MOVE ANIMATIONS", type = "toggle",
       default = true,
-      description = "Use the integrated Kanto Rework / Pokemon Essentials animations for all 165 Gen 1 moves. OFF falls back to Gen1Recomp's native move animations." },
+      description = "Use the integrated Kanto Rework / Pokemon Essentials animations for all 165 Gen 1 moves while KIM BATTLE SYSTEM is ON. OFF falls back to the active battle provider's native move animations. BATTLE SYSTEM OFF always disables KIM move animations." },
     { key = "battleFrontGeneration", label = "FRONT SET", type = "choice",
       default = "menu", choices = {
         { "SAME AS MENU", "menu" }, { "GEN 2", "gen2" },
@@ -304,7 +307,7 @@ return function(mod)
         { "60%", "60" }, { "65%", "65" }, { "70%", "70" },
         { "75%", "75" }, { "80%", "80" }, { "85%", "85" },
         { "90%", "90" }, { "95%", "95" }, { "100%", "100" },
-      }, description = "Reduce the height of Kanto in Motion's lower battle command/move/message panel while keeping it anchored to the bottom of the screen. Text size remains independent." },
+      }, description = "Adjust the lower battle command/move/message panel footprint while keeping it bottom-anchored. Desktop layouts can grow upward when a large pixel font needs more room; mobile keeps its authored battle-dialog footprint at 100%." },
     { key = "battleUiOpacity", label = "BATTLE UI OPACITY", type = "choice",
       default = "100", choices = {
         { "25%", "25" }, { "30%", "30" }, { "35%", "35" },
@@ -313,7 +316,7 @@ return function(mod)
         { "70%", "70" }, { "75%", "75" }, { "80%", "80" },
         { "85%", "85" }, { "90%", "90" }, { "95%", "95" },
         { "100%", "100" },
-      }, description = "Adjust only the lower battle panel/background/frame opacity. Battle text and selected controls are not faded by this setting." },
+      }, description = "Adjust only the lower battle panel background opacity. The pixel frame, borders, dividers, text, and selected controls remain fully opaque for readability." },
     { key = "battleTextScale", label = "BATTLE TEXT SIZE", type = "choice",
       default = "150", choices = {
         { "100%", "100" }, { "125%", "125" }, { "150%", "150" },

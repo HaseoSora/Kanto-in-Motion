@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.3.3",
+  "version": "1.3.5",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -22,7 +22,8 @@
     "overworld_wild_spawns",
     "BATTLE_ART_VOXEL_FORK",
     "recomp-spanish",
-    "advanced_box_system"
+    "advanced_box_system",
+    "weather_fx"
   ],
   "conflicts": [
     "gen1_modern_ui",
@@ -35,6 +36,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion v1.3.3. Adds Advanced Box System animated front-sprite compatibility while preserving Spanish translation, Battle Art, mobile, and Modern UI compatibility.",
+  "description": "Kanto in Motion v1.3.5. Adds battle UI ownership controls, Modern UI polish, mobile battle readability fixes, and expanded external settings compatibility.",
   "github": "HaseoSora/Kanto-in-Motion"
 }

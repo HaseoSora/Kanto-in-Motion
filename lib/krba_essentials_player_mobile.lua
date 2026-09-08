@@ -938,6 +938,14 @@ return function(mod, DATA)
   end
 
   local function kantoReworkEnabled()
+    -- BATTLE SYSTEM is KIM's master ownership switch. When it is OFF, KIM must
+    -- not intercept AnimPlayer at all: vanilla or the active external battle
+    -- provider owns move animations just like it owns the rest of the battle.
+    if mod and mod.options and type(mod.options.get) == "function" then
+      local okSystem, systemEnabled = pcall(mod.options.get, mod.options, "battleSystem")
+      if okSystem and systemEnabled == false then return false end
+    end
+
     -- Cooperative external battle scene owners receive a clean animation lane
     -- by default. A source mod may explicitly opt back into KIM/KRBA effects
     -- with allowKIMAnimations=true in its battle compatibility registration.

@@ -4806,6 +4806,8 @@ return function(mod)
     desktopFloating = "advanced", __reset = "advanced",
   }
 
+
+
   runtime.ensureOptionCategories = function(state)
     if not (state and state.screen == "options" and state.currentMod
         and state.currentMod.id == MOD_ID and type(state.optionRows) == "table") then
@@ -4963,7 +4965,9 @@ return function(mod)
     end
     if not runtime.pendingPress(input, "select") then return end
     local row = state.optionRows[state.cursor]
-    local description = row and (runtime.optionDescription(row.id) or row.description)
+    local description = row and (runtime.optionDescription(row.id) or row.description or row.help
+      or (type(row.option) == "table" and (row.option.description or row.option.help))
+      or (type(row.schema) == "table" and (row.schema.description or row.schema.help)))
     if not description or description == "" then return end
     state._gen1OptionDescription = {
       title = row.label or row.id,
@@ -5221,6 +5225,14 @@ return function(mod)
   -- cursor, update method, and draw method. The suffix rule covers future
   -- option screen names while the Quality of Life id is retained for that
   -- mod's established public contract.
+  runtime.isWeatherFxSettingsState = function(state)
+    if type(state) ~= "table" or type(state.screenId) ~= "string" then
+      return false
+    end
+    return state.screenId == "WeatherFXSettingsRoot"
+      or state.screenId:match("^WeatherFXSettingsGroup_") ~= nil
+  end
+
   runtime.isOptionRowsScreen = function(state)
     if type(state) ~= "table" or type(state.screenId) ~= "string"
         or type(state.rows) ~= "table" or type(state.index) ~= "number"
@@ -5229,7 +5241,8 @@ return function(mod)
     end
     local id = state.screenId
     if id == "OptionsMenu" then return false end
-    return id == "RunModeOptions" or id == "ShinyPokemonOptions"
+    return runtime.isWeatherFxSettingsState(state)
+      or id == "RunModeOptions" or id == "ShinyPokemonOptions"
       or id == "QualityOfLife" or id:match("Options$") ~= nil
       or id:match("Settings$") ~= nil
   end
@@ -7196,6 +7209,22 @@ return function(mod)
     local scroll = state.scroll or 0
     local title = titleFor(Strings, state, kind)
     local footer
+    if runtime.isWeatherFxSettingsState(state) then
+      local id = safeText(state.screenId)
+      if id == "WeatherFXSettingsRoot" then
+        title = "WEATHER FX"
+      else
+        local group = id:match("^WeatherFXSettingsGroup_(.+)$") or "SETTINGS"
+        local labels = {
+          weather="WEATHER", precipitation="PRECIPITATION",
+          world="WORLD & CLOUDS", behavior="WEATHER BEHAVIOR",
+          storms="STORMS & TORNADO", skytime="SKY & SEASONS",
+          sound="SOUND", wild="WILD POKEMON", battle="BATTLES",
+          performance="PERFORMANCE", testing="TESTING",
+        }
+        title = labels[group] or group:upper():gsub("_", " ")
+      end
+    end
 
     if kind == "external" then
       local model = runtime.externalModelFor(game, state)
@@ -7252,6 +7281,11 @@ return function(mod)
         label = Strings(kind == "options" and "BACK" or "CANCEL"),
         source = false,
       }
+      if runtime.isWeatherFxSettingsState(state) then
+        footer = state.root == true
+          and "A  OPEN   SELECT  HELP   B  BACK"
+          or "LEFT/RIGHT  CHANGE   SELECT  HELP   B  BACK"
+      end
     elseif kind == "party" then
       if state.submenu and type(state.subItems) == "table" then
         selected = state.subIndex or 1
@@ -7996,7 +8030,7 @@ return function(mod)
       local centerDestW, centerDestH = assetFw - destinationCornerX * 2,
         assetFh - destinationCornerY * 2
       setColor({ 1, 1, 1,
-        tonumber(theme._kantoBattlePanelOpacity) or 1 })
+        tonumber(theme._kantoBattleFrameOpacity) or 1 })
       drawSlice(0, 0, sourceSlice, sourceSlice,
         assetFx, assetFy, destinationCornerX, destinationCornerY)
       drawTiledX(sourceSlice, 0, centerSourceW, sourceSlice,
@@ -8993,6 +9027,16 @@ return function(mod)
 
   runtime.drawManagerOptionHelp = function(theme, layout, state, viewport)
     local help = state._gen1OptionDescription
+    local weatherFxHelp = false
+    if not help and runtime.isWeatherFxSettingsState(state)
+        and type(state.helpRow) == "table" then
+      help = {
+        title = state.helpRow.label or "WEATHER FX",
+        text = state.helpRow.help or state.helpRow.description
+          or state.helpRow.desc or "No description available.",
+      }
+      weatherFxHelp = true
+    end
     if not help then return end
     runtime.drawPresenterBackdrop(theme, viewport)
     runtime.drawModalScrim(theme, viewport)
@@ -9006,12 +9050,31 @@ return function(mod)
     local titleFont = font(fontCache, theme.typography.title * 0.82)
     love.graphics.setFont(body)
     local maxTextW = math.max(120, layout.w - spacing.lg * 4)
-    local lines = wrappedLines(help.text, maxTextW)
-    local maxLines = 6
-    if #lines > maxLines then
-      while #lines > maxLines do table.remove(lines) end
-      local last = lines[#lines] or ""
-      lines[#lines] = truncate(last, maxTextW)
+    local allLines = wrappedLines(help.text, maxTextW)
+    local lines = {}
+    local pageCount, page = 1, 1
+    if weatherFxHelp then
+      -- Weather FX already uses LEFT/RIGHT paging while helpRow is active.
+      -- Mirror that state in the Modern UI modal so the complete description
+      -- remains available instead of truncating it to the manager's six-line
+      -- quick-help card.
+      local lineHeightProbe = textHeight(body) + spacing.xs
+      local available = math.max(lineHeightProbe * 4,
+        layout.h - spacing.lg * 4 - textHeight(titleFont)
+          - textHeight(body) - spacing.md * 2)
+      local maxLines = math.max(4, math.floor(available / lineHeightProbe))
+      pageCount = math.max(1, math.ceil(#allLines / maxLines))
+      page = clamp(math.floor(tonumber(state.helpPage) or 1), 1, pageCount)
+      state.helpPage = page
+      local first = (page - 1) * maxLines + 1
+      local last = math.min(#allLines, first + maxLines - 1)
+      for index = first, last do lines[#lines + 1] = allLines[index] end
+    else
+      for index = 1, math.min(6, #allLines) do lines[#lines + 1] = allLines[index] end
+      if #allLines > 6 then
+        local last = lines[#lines] or ""
+        lines[#lines] = truncate(last, maxTextW)
+      end
     end
     local title = safeText(help.title or "SETTING")
     local titleW = titleFont:getWidth(title)
@@ -9048,7 +9111,10 @@ return function(mod)
       my + modalH - footerH, modalW - spacing.lg * 2,
       runtime.themeMetric(theme, "divider", 1))
     setColor(theme.colors.textMuted)
-    runtime.drawHintIfUseful(theme, "SELECT / A / B  CLOSE", mx + spacing.lg,
+    local helpFooter = weatherFxHelp and pageCount > 1
+      and ("LEFT/RIGHT  PAGE %d/%d   A/B/SELECT  CLOSE"):format(page, pageCount)
+      or "SELECT / A / B  CLOSE"
+    runtime.drawHintIfUseful(theme, helpFooter, mx + spacing.lg,
       my + modalH - footerH + spacing.xs, modalW - spacing.lg * 2)
   end
 
@@ -13655,9 +13721,11 @@ return function(mod)
     local alpha = clamp(percent, 25, 100) / 100
     local out = copy(theme)
     out.colors = copy(theme.colors or {})
-    -- KIM's lower battle surface was intentionally opaque before this option
-    -- existed. Make BATTLE UI OPACITY authoritative for those two fills rather
-    -- than multiplying Modern UI's unrelated global PANEL OPACITY setting.
+    -- BATTLE UI OPACITY is a glass/background control. Only the two panel
+    -- fills become translucent; the ornamental frame, divider lines, accent
+    -- rail, labels and text retain their authored opacity. This matches the
+    -- rest of Modern UI (Party/Bag/etc.), where glass lives inside a crisp
+    -- frame instead of fading the frame with the panel.
     for _, key in ipairs({ "surface", "surfaceRaised" }) do
       local source = out.colors[key]
       if type(source) == "table" then
@@ -13666,17 +13734,11 @@ return function(mod)
         out.colors[key] = color
       end
     end
-    -- Borders/dividers keep any authored/global foreground alpha, then the
-    -- battle-only setting attenuates them further.
-    for _, key in ipairs({ "frame", "frameShadow", "divider", "accent" }) do
-      local source = out.colors[key]
-      if type(source) == "table" then
-        local color = copy(source)
-        color[4] = (tonumber(color[4]) or 1) * alpha
-        out.colors[key] = color
-      end
-    end
+    -- Keep the historical field as the fill/"frame only" signal used by the
+    -- lower-panel renderers, but publish a separate frame alpha so asset-backed
+    -- pixel frames stay fully opaque when the background is translucent.
     out._kantoBattlePanelOpacity = alpha
+    out._kantoBattleFrameOpacity = 1
     return out
   end
 
@@ -13694,8 +13756,19 @@ return function(mod)
     local rowH = math.max(touchMin, textHeight(bodyFont) + spacing.xs * 2,
       textHeight(captionFont) + spacing.xs * 2)
     if isMove then
-      return spacing.sm * 2 + textHeight(captionFont) + spacing.xs
+      local listMinimum = spacing.sm * 2 + textHeight(captionFont) + spacing.xs
         + rowH * rows
+      if runtime.option("battleMoveInfo", false) == true then
+        -- The right-side card has a caption header, a move-name line and four
+        -- stat rows. At large Plain Pixel steps this column can need more room
+        -- than the 2x2 move grid, so size the shared panel for whichever side
+        -- is taller instead of clipping POW/ACC off the bottom.
+        local infoLineH = textHeight(captionFont) + spacing.xs
+        local infoMinimum = spacing.sm * 2 + textHeight(captionFont)
+          + spacing.xs + textHeight(bodyFont) + spacing.sm + infoLineH * 4
+        return math.max(listMinimum, infoMinimum)
+      end
+      return listMinimum
     end
     -- drawBattleActionPanel reserves two md paddings plus one md row gap and
     -- a 26px command/message allowance before splitting its two command rows.
@@ -13781,6 +13854,19 @@ return function(mod)
   -- without Battle Art.
   function battleRuntime.movePpColor(typedStyle, selected, theme)
     local colors = theme and theme.colors or {}
+
+    -- Selected move tiles deliberately invert their main label to the selected
+    -- foreground (Typed Move Colors publishes that as typedStyle.text). PP is
+    -- part of the same selected row, so it must follow the same foreground
+    -- instead of re-running the background-luma rule. The old luma threshold
+    -- left bright types such as ELECTRIC with dark PP even though the selected
+    -- move name had inverted to white.
+    if selected then
+      if typedStyle and type(typedStyle.text) == "table" then
+        return typedStyle.text
+      end
+      return colors.text or { 1, 1, 1, 1 }
+    end
     local bg = typedStyle and not typedStyle.textOnly and typedStyle.face
       or (selected and colors.selected or colors.surfaceRaised or colors.surface)
     if type(bg) == "table" then
@@ -14099,7 +14185,12 @@ return function(mod)
       if touchBattleControlsVisible(game) then
         detailW = clamp(w * 0.18, 90, math.max(90, w * 0.21))
       else
-        detailW = clamp(w * 0.24, 190, math.max(190, w * 0.28))
+        local baseDetailW = clamp(w * 0.24, 190, math.max(190, w * 0.28))
+        local textDetailW = math.max(
+          captionFont:getWidth("TYPE  PSYCHIC") + spacing.md * 2,
+          bodyFont:getWidth("THUNDERBOLT") + spacing.md * 2)
+        detailW = clamp(math.max(baseDetailW, textDetailW),
+          190, math.max(190, w * 0.40))
       end
     end
     local listW = math.max(1, w - detailW)
@@ -15842,12 +15933,20 @@ return function(mod)
       end
 
       local lowerPanelScale = battleRuntime.lowerPanelSizeScale()
-      if lowerPanelScale < 0.999 then
+      do
+        -- Font scale is allowed to enlarge the lower UI when necessary. The
+        -- old path enforced minimum content height only while BATTLE UI SIZE
+        -- was below 100%, so a 2X/3X pixel font could outgrow a nominal 100%
+        -- panel: highlights looked detached from their labels and MOVE INFO
+        -- silently lost its lower rows. Keep the bottom anchor fixed, apply the
+        -- requested size, then grow upward just enough to fit the live text.
         local panelBottom = panelY + panelH
         local minPanelH = battleRuntime.lowerPanelMinimumHeight(
           game, theme, textTheme, isMove)
-        local targetPanelH = math.max(minPanelH, panelH * lowerPanelScale)
-        panelH = math.min(panelH, targetPanelH)
+        local requestedPanelH = panelH * lowerPanelScale
+        local targetPanelH = math.max(minPanelH, requestedPanelH)
+        local maxPanelH = math.max(1, panelBottom - (fullY + spacing.md))
+        panelH = math.min(targetPanelH, maxPanelH)
         panelY = panelBottom - panelH
       end
       local lowerPanelVisualTheme = battleRuntime.lowerPanelVisualTheme(theme)
@@ -18241,6 +18340,10 @@ return function(mod)
       mod._gen1ModernSpecialPresenters.drawStartMenuQuickView(
         game, state, viewport, theme, layout)
     end
+    if kind == "mod_options" and runtime.isWeatherFxSettingsState(state)
+        and type(state.helpRow) == "table" then
+      runtime.drawManagerOptionHelp(theme, layout, state, viewport)
+    end
     love.graphics.pop()
   end
 
@@ -18880,6 +18983,12 @@ return function(mod)
     if region.pointerCommand == "dismiss_help" then
       if region.state and region.state._gen1OptionDescription then
         region.state._gen1OptionDescription = nil
+        return true
+      end
+      if region.state and runtime.isWeatherFxSettingsState(region.state)
+          and region.state.helpRow then
+        region.state.helpRow = nil
+        region.state.helpPage = 1
         return true
       end
       return false
