@@ -1,3 +1,26 @@
+# Kanto in Motion v1.3.6
+
+v1.3.6 is a focused battle-animation and Pokédex Modern UI update built on the v1.3.5 release.
+
+## Highlights
+
+- Fixed **KRS / GEN6 attack-animation targeting** so effects use KIM's actual rendered battler positions instead of legacy wide-stage target coordinates.
+- Target-local effects such as **Slash** and **Gust** now stay attached to the opponent, while travelling attacks follow the live attacker-to-target line.
+- Effect anchors now follow the same species-aware center, scale, shake, and lunge transforms used by KIM's animated battlers.
+- Fixed the **Pokédex entry submenu** so selecting a known Pokémon stays inside Modern UI instead of revealing the classic Pokédex.
+- DATA / CRY / AREA / QUIT remain source-functional while being presented through Modern UI; Yellow's PRNT row is also supported.
+- Pokédex submenu recognition does not depend on English labels, preserving localization compatibility.
+- Retains all v1.3.5 battle UI ownership, opacity, font fitting, mobile dialog/PP, and Weather FX compatibility changes.
+
+## Packages
+
+- **Kanto-in-Motion-v1.3.6-Full-Assets.zip**
+- **Kanto-in-Motion-v1.3.6-No-Pokemon-Assets.zip**
+
+Install **one** package only. Replace the previous Kanto in Motion package rather than layering old test patches underneath it.
+
+---
+
 # Kanto in Motion v1.3.5
 
 v1.3.5 focuses on battle UI ownership, Modern UI polish, mobile readability, and external settings compatibility.

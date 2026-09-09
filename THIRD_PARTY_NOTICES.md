@@ -1,6 +1,6 @@
 # Third-party notices
 
-Kanto in Motion v1.3.5 includes, adapts, or redistributes portions of third-party community work. Attribution does not imply endorsement and does not transfer ownership of the original work to Kanto in Motion.
+Kanto in Motion v1.3.6 includes, adapts, or redistributes portions of third-party community work. Attribution does not imply endorsement and does not transfer ownership of the original work to Kanto in Motion.
 
 ## Battle Art / DramaticShapeVoxelMod
 

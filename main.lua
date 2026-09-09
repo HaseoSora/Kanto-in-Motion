@@ -3180,48 +3180,29 @@ return function(mod)
     -- above the enemy. Provide local-stage battler centers to the integrated
     -- KRBA player so selected moves can follow the same anchors as KIM's art.
     local krbaWideAnchors=nil
-    if krba and wideTransform then
+    if krba and wideTransform and (fill=="krs" or fill=="gen6") then
       local stageScale=tonumber(wideTransform.scale) or 1
       if not (stageScale>0) then stageScale=1 end
-      local EFFECT_HALF_BOX=95
-      if fill=="krs" and backdrop
-          and type(krsArenaRouter.groundAnchors)=="function" then
-        local a=krsArenaRouter.groundAnchors(backdrop)
-        if type(a)=="table" and a.player and a.enemy then
-          local portraitTouch=touchBattleOrientation(game)=="portrait"
-          local compScale=portraitTouch and math.min(1,stageScale) or 1
-          local enemyShift=portraitTouch and 0 or krsEnemyNarrowShift(vw,vh)
-          krbaWideAnchors={
-            player={
-              x=tonumber(a.player.x) or 630,
-              y=(tonumber(a.player.y) or 704)
-                + (KRS_PLAYER_Y_COMPENSATE_PX*compScale)/stageScale - EFFECT_HALF_BOX,
-            },
-            enemy={
-              x=(tonumber(a.enemy.x) or 1400)-enemyShift/stageScale,
-              y=(tonumber(a.enemy.y) or 484)
-                - (KRS_ENEMY_EXTRA_LIFT_PX*compScale)/stageScale - EFFECT_HALF_BOX,
-            },
-          }
-        end
-      elseif fill=="gen6" then
-        local geo=directStageGeometry(vw,vh,game,battle)
-        local tx,ty=wideTransform.x or 0,wideTransform.y or 0
-        -- GEN6 has no authored stance metadata. Aim battler-centric KRBA cels
-        -- at the actual final-resolution animated sprite centers instead of a
-        -- fixed distance above the ground anchor. This automatically follows
-        -- species height, shiny padding correction and PLAYER PKMN SIZE.
-        local pm=directSideMetrics(battle,"player",geo)
-        local em=directSideMetrics(battle,"enemy",geo)
-        local pcx=pm and pm.centerX or (geo.playerX or 0)
-        local pcy=pm and pm.centerY or ((geo.playerY or 0)-EFFECT_HALF_BOX*stageScale)
-        local ecx=em and em.centerX or (geo.enemyX or 0)
-        local ecy=em and em.centerY or ((geo.enemyY or 0)-EFFECT_HALF_BOX*stageScale)
-        krbaWideAnchors={
-          player={x=(pcx-tx)/stageScale,y=(pcy-ty)/stageScale},
-          enemy={x=(ecx-tx)/stageScale,y=(ecy-ty)/stageScale},
-        }
-      end
+      local geo=directStageGeometry(vw,vh,game,battle)
+      local tx,ty=wideTransform.x or 0,wideTransform.y or 0
+
+      -- Use the same species-aware centers that are used to draw KIM's actual
+      -- front/back sprites.  The older KRS path aimed effects at a generic
+      -- 190px battler box (ground - 95), which is close for large Pokemon but
+      -- visibly wrong for small targets such as Rattata.  GEN6 already used
+      -- directSideMetrics; sharing that exact rule makes KRS/GEN6 consistent.
+      local pm=directSideMetrics(battle,"player",geo)
+      local em=directSideMetrics(battle,"enemy",geo)
+      local fallbackHalf=95*stageScale
+      local pcx=pm and pm.centerX or (geo.playerX or 0)
+      local pcy=pm and pm.centerY or ((geo.playerY or 0)-fallbackHalf)
+      local ecx=em and em.centerX or (geo.enemyX or 0)
+      local ecy=em and em.centerY or ((geo.enemyY or 0)-fallbackHalf)
+
+      krbaWideAnchors={
+        player={x=(pcx-tx)/stageScale,y=(pcy-ty)/stageScale},
+        enemy={x=(ecx-tx)/stageScale,y=(ecy-ty)/stageScale},
+      }
     end
     if krba and wideTransform and type(krba.drawWideBack)=="function" then
       pcall(krba.drawWideBack,krba,wideTransform,krbaWideAnchors)

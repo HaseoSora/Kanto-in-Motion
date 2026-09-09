@@ -1,17 +1,16 @@
-# Kanto in Motion v1.3.5
+# Kanto in Motion v1.3.6
 
 **Kanto in Motion** is an animated Pokémon presentation and battle overhaul for Gen1Recomp. It supports **Pokémon Red / Blue / Yellow** and retains the Gen 2 presentation support introduced in v1.2.0 for **Gold / Silver / Crystal**.
 
 The internal mod ID remains `animated_menu_pokemon`, so existing Kanto in Motion settings can carry forward when upgrading.
 
-## v1.3.5 highlights
+## v1.3.6 highlights
 
-- Added **MODERN BATTLE UI** directly to KIM's Battle settings so the battle command/move/dialog layer can be yielded without disabling KIM's sprites, HUD, shiny effects, or battle system.
-- Refined **BATTLE UI OPACITY** so it fades only the panel background; the pixel frame, borders, dividers, text, and selected controls stay fully opaque.
-- Improved large Pixel Art Font battle layouts so desktop panels and MOVE INFO reserve enough space for larger text instead of clipping or misaligning selectors.
-- Restored the established mobile battle-dialog footprint for both 3D-BTL ON and OFF.
-- Improved mobile move PP readability and selected-move inversion, including bright Typed Move Colors tiles such as Electric moves.
-- Added Modern UI compatibility for **Weather FX** settings screens, including source-authored help text and live overworld visibility while changing weather options.
+- Fixed **KRS and GEN6 move-animation targeting** so Slash, Gust, Tackle/Quick Attack, travelling effects, and other battler-centered animations follow the Pokémon's actual rendered position instead of an old wide-stage coordinate.
+- KRS and GEN6 now use the same **species-aware live battler centers** used to draw KIM's animated Pokémon, including animation shake/lunge transforms and player-size changes.
+- Fixed the **Pokédex entry submenu** so selecting a known Pokémon no longer drops back to the classic Pokédex. DATA / CRY / AREA / QUIT now stay inside Modern UI.
+- Pokédex submenu detection is structural rather than label-based, preserving compatibility with translated UI text.
+- Retains v1.3.5's **MODERN BATTLE UI ON/OFF**, battle UI opacity improvements, large-font layout fixes, mobile dialog/PP fixes, and Weather FX Modern UI compatibility.
 
 ## Animated Pokémon features
 
@@ -65,7 +64,7 @@ Open **KANTO IN MOTION** from the mod settings screen. Gen 1 also exposes a **BA
 
 ## KANTO IN MOTION → BATTLE settings
 
-The Battle submenu is currently **Gen 1 only**. These are the current v1.3.5 settings and their behavior.
+The Battle submenu is currently **Gen 1 only**. These are the current v1.3.6 settings and their behavior.
 
 | Setting | Choices | Default | What it does |
 | --- | --- | --- | --- |

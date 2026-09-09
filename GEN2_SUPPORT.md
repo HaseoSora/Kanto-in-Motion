@@ -1,6 +1,6 @@
 # Gen 2 support
 
-Kanto in Motion v1.3.5 retains the Gen 2 support introduced in v1.2.0 for Gold, Silver, and Crystal on the Gen1Recomp 0.2.x architecture.
+Kanto in Motion v1.3.6 retains the Gen 2 support introduced in v1.2.0 for Gold, Silver, and Crystal on the Gen1Recomp 0.2.x architecture.
 
 ## UI ownership
 

@@ -1,3 +1,12 @@
+## 1.3.6
+
+- Fixed KRS/GEN6 move-animation targeting so ordinary target-local, user-local, and travelling KRBA effects use KIM's live rendered battler anchors.
+- KRS now uses the same species-aware `directSideMetrics()` centers as GEN6 instead of a generic ground-minus-half-box target point.
+- Wide target/user-local offsets now scale with their effect artwork and follow live PBAnimation battler shake/lunge transforms.
+- User testing confirmed the reported attack-animation alignment issue was corrected after the live-battler targeting update.
+- Added Modern UI handling for Gen 1's Pokédex DATA/CRY/AREA/QUIT side submenu so selecting a known Pokémon no longer exposes the classic Pokédex.
+- Pokédex submenu recognition is structural and label-independent for localization compatibility.
+
 ## 1.3.5
 
 - Added **MODERN BATTLE UI** to the KIM Battle submenu so battle UI/dialog ownership can be yielded independently from KIM's battle system, sprites, HUD, shiny effects, and move animations.

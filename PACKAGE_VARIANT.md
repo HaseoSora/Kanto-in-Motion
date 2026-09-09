@@ -1,6 +1,6 @@
 # Package variant: No Pokémon Assets
 
-This is the **Kanto in Motion v1.3.5 No Pokémon Assets** package.
+This is the **Kanto in Motion v1.3.6 No Pokémon Assets** package.
 
 It contains KIM's runtime code, integrated UI/battle/background assets, compatibility bridges, trainer presentation, and local import tooling, but excludes the locally imported/generated Pokémon front/back/title artwork and the generated metadata that directly depends on those payloads.
 
