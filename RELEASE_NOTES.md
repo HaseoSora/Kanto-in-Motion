@@ -1,3 +1,27 @@
+# Kanto in Motion v1.3.7
+
+v1.3.7 is a major compatibility update centered on **PotatoVoxel PC/mobile support** and cleaner ownership handoffs between Kanto in Motion and external presentation mods.
+
+## Highlights
+
+- Added confirmed **PotatoVoxel compatibility on desktop and mobile**. PotatoVoxel keeps the 3D arena/camera while KIM can provide animated battlers, KRBA move animations, HP/status HUD, Modern Battle UI, and compatible overlays.
+- Fixed **Typed Move Colors + Modern Battle UI** with PotatoVoxel so only one move selector is shown while KIM still uses Typed Move Colors' colors/effectiveness information.
+- Restored **Quality of Life EXP and already-caught indicators** on the PotatoVoxel path, including mobile portrait/landscape handling and correct desktop placement for short Pokémon names.
+- Fixed the **mobile trainer intro** when `BATTLE SYSTEM = OFF` + `MODERN BATTLE UI = OFF`, including the PotatoVoxel pinned/BACK SPRITES path.
+- Fixed **mobile portrait player-Pokémon placement** when KIM sprites are used with PotatoVoxel.
+- Added KIM's **shiny encounter sparkle and audio** to PotatoVoxel battles on both desktop and mobile.
+- Included the **Useful Bag compatibility fix** so KIM suppresses the duplicate standalone bag presenter while Useful Bag keeps ownership of its pockets, sorting, capacity, controls, callbacks, and inventory behavior.
+- All compatibility work remains **KIM-side**: PotatoVoxel, Typed Move Colors, Quality of Life, Useful Bag, Battle Art, and other external packages are not modified or bundled.
+
+## Packages
+
+- **Kanto-in-Motion-v1.3.7-Full-Assets.zip**
+- **Kanto-in-Motion-v1.3.7-No-Pokemon-Assets.zip**
+
+Install **one** package only. Replace the previous Kanto in Motion package instead of layering older test patches underneath it.
+
+---
+
 # Kanto in Motion v1.3.6
 
 v1.3.6 is a focused battle-animation and Pokédex Modern UI update built on the v1.3.5 release.

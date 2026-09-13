@@ -71,6 +71,37 @@ return function(mod, battleArt3DEnabled, isMobileHost, battleHudGeometry,
   end
 
   local battleArtStage = nil
+  local qolHandle = nil
+
+  -- Quality of Life deliberately shifts short enemy names to the right in the
+  -- native HUD. Its caught-ball source primitive follows that shifted name X.
+  -- Decode the source cluster relative to that dynamic anchor, then replay it
+  -- at one fixed HUD-local anchor so ABRA, MEW, MANKEY, etc. all line up.
+  local function qolOption(game, key)
+    if not qolHandle and type(mod.find) == "function" then
+      local ok, handle = pcall(mod.find, mod, "quality_of_life")
+      if not ok or not handle then ok, handle = pcall(mod.find, "quality_of_life") end
+      if ok then qolHandle = handle end
+    end
+    local exports = qolHandle and type(qolHandle.exports) == "table"
+      and qolHandle.exports or nil
+    if exports and type(exports.optionValue) == "function" then
+      local ok, value = pcall(exports.optionValue, game, key)
+      if ok then return value end
+    end
+    return nil
+  end
+
+  local function enemyNameX(battle)
+    local name = battle and battle.enemy and battle.enemy.name or ""
+    local glyphs = #tostring(name)
+    local Font = mod and mod.ui and mod.ui.Font
+    if Font and type(Font.split) == "function" then
+      local ok, parts = pcall(Font.split, tostring(name))
+      if ok and type(parts) == "table" then glyphs = #parts end
+    end
+    return 8 + (glyphs <= 2 and 16 or glyphs <= 4 and 8 or 0)
+  end
 
   local function resolveBattleArtStage()
     if battleArtStage then return battleArtStage end
@@ -229,11 +260,15 @@ return function(mod, battleArt3DEnabled, isMobileHost, battleHudGeometry,
   end
 
   -- QOL's caught indicator is a 6x6 or 7x7 cluster of shot.scale-square
-  -- rectangles in the snapped enemy HUD.  Its voxel path assumes Battle Art's
-  -- enemy band starts at -8*scale.  KIM's final band uses its own snap origin;
-  -- preserve the icon's native HUD-local coordinate and rebase it there.
+  -- rectangles. The SOURCE X is name-relative: short enemy names are centered
+  -- farther right, so copying absolute sourceLocalX makes ABRA's icon drift.
+  -- Decode each pixel relative to QOL's own name-dependent source anchor, then
+  -- replay that local pixel at a fixed enemy-HUD anchor.
   local function routeCaughtPixel(battle, shot, nx, ny, nw, nh)
     if battle.kind ~= "wild" or g.getCanvas() ~= shot.canvas then return false end
+    local mode = qolOption(battle.game, "qol_caught_indicator")
+    if mode ~= "gen2" and mode ~= "red" and mode ~= "grey" then return false end
+
     local baScale = tonumber(shot.scale)
     local sourceLy = tonumber(shot.ly)
     if not (baScale and baScale > 0 and sourceLy) then return false end
@@ -241,15 +276,21 @@ return function(mod, battleArt3DEnabled, isMobileHost, battleHudGeometry,
       return false
     end
 
-    -- All QOL caught-indicator modes live in this very small source window.
-    -- The bounds include short-name centering and the RED/GREY +1px offset,
-    -- while excluding the enemy HP gauge and ordinary battle FX.
-    local sourceLocalX = nx / baScale
-    local sourceLocalY = (ny - sourceLy) / baScale
-    if sourceLocalX < -3 or sourceLocalX > 36
-        or sourceLocalY < 6 or sourceLocalY > 18 then
-      return false
+    local sourceAnchorX = (enemyNameX(battle) - 9) * baScale
+    local sourceAnchorY = sourceLy + 7 * baScale
+    if mode == "gen2" then
+      sourceAnchorX = sourceAnchorX + 2 * baScale
+      sourceAnchorY = sourceAnchorY + 2 * baScale
+    else
+      sourceAnchorX = sourceAnchorX + baScale
+      sourceAnchorY = sourceAnchorY + baScale
     end
+
+    local side = mode == "gen2" and 6 or 7
+    local ux = (nx - sourceAnchorX) / baScale
+    local uy = (ny - sourceAnchorY) / baScale
+    if ux < -0.01 or ux > side - 1 + 0.01
+        or uy < -0.01 or uy > side - 1 + 0.01 then return false end
 
     local geo, _, _, hs = targetGeometry(battle, shot)
     if not geo then return false end
@@ -257,13 +298,11 @@ return function(mod, battleArt3DEnabled, isMobileHost, battleHudGeometry,
     local enemyBandY = tonumber(geo.enemyBandY)
     if not (enemyBandX and enemyBandY) then return false end
 
-    -- Recover the native HUD-space pixel from Battle Art's historical snapped
-    -- enemy-band origin (-8*scale), then place the same pixel inside KIM's
-    -- actual enemy band.  This automatically preserves every QOL icon style.
-    local nativeX = sourceLocalX + 8
-    local nativeY = sourceLocalY
-    innerRectangle("fill", enemyBandX + nativeX * hs,
-      enemyBandY + nativeY * hs, hs, hs)
+    -- Fixed destination anchor matches the already-confirmed mobile mapping.
+    -- Only the source name position varies; the final caught icon never does.
+    local targetAnchor = mode == "gen2" and 9 or 8
+    innerRectangle("fill", enemyBandX + (targetAnchor + ux) * hs,
+      enemyBandY + (targetAnchor + uy) * hs, hs, hs)
     return true
   end
 

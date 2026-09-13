@@ -22,6 +22,23 @@ return function(mod, battleSystemEnabled, battleArt3DBattleEnabled)
     return okK and kim and okB and ba
   end
 
+  -- Sprite ownership is an independent KIM feature lane.  The full KIM battle
+  -- system / Modern UI may be OFF while Battle Art still owns the 3D stage; in
+  -- that case BATTLE SPRITES and PLAYER PKMN SIZE must keep working.
+  local function spriteActive()
+    if not (mod and mod.options) then return false end
+    if mod.options:get("enabled") == false
+        or mod.options:get("battleSprites") == false then return false end
+    local okB, ba = pcall(battleArt3DBattleEnabled)
+    return okB and ba == true
+  end
+
+  local function playerScalePercent()
+    local pct = mod and mod.options
+      and tonumber(mod.options:get("battlePlayerSize")) or 100
+    return math.max(50, math.min(200, pct))
+  end
+
   local function battleArtRuntime()
     if type(mod.find) ~= "function" then return nil end
     local ok, handle = pcall(mod.find, "BATTLE_ART_VOXEL_FORK")
@@ -36,11 +53,14 @@ return function(mod, battleSystemEnabled, battleArt3DBattleEnabled)
     local AnimatedBattleArt = nil
     local okA, animated = pcall(lib.require, "AnimatedBattleArt")
     if okA and type(animated) == "table" then AnimatedBattleArt = animated end
-    return OverworldBattle, AnimatedBattleArt
+    local BattleArt = nil
+    local okB, battleArt = pcall(lib.require, "BattleArt")
+    if okB and type(battleArt) == "table" then BattleArt = battleArt end
+    return OverworldBattle, AnimatedBattleArt, BattleArt
   end
 
   local function patchRuntime()
-    local OverworldBattle, AnimatedBattleArt = battleArtRuntime()
+    local OverworldBattle, AnimatedBattleArt, BattleArt = battleArtRuntime()
     if not OverworldBattle then return false end
 
     -- Battle Art already skips snapHUDs on iOS because its scratch
@@ -70,7 +90,7 @@ return function(mod, battleSystemEnabled, battleArt3DBattleEnabled)
       local originalUpdate = AnimatedBattleArt.update
       AnimatedBattleArt._kantoInMotionMobileStableAnchor = originalUpdate
       AnimatedBattleArt.update = function(battle, dt, ...)
-        if active() and type(battle) == "table" then
+        if spriteActive() and type(battle) == "table" then
           -- Set the metadata before Battle Art decodes the atlas.  Do not
           -- finish/invalidate live playback here: doing that inside update can
           -- tear down the staged shot and expose the native mobile battle UI.
@@ -90,6 +110,92 @@ return function(mod, battleSystemEnabled, battleArt3DBattleEnabled)
           end
         end
         return originalUpdate(battle, dt, ...)
+      end
+    end
+
+    -- PLAYER PKMN SIZE is also independent from the master battle-system
+    -- toggle.  Apply it at Battle Art's final player-card scale seam.  This is
+    -- deliberately separate from the stable prepared-image bridge above: no
+    -- art setting, camera, stage ownership or HUD ownership is changed here.
+    -- 100% is the native authored 1.00x size.
+    if type(OverworldBattle.textures) == "function"
+        and not OverworldBattle._kantoInMotionMobilePlayerScaleTexturesV79 then
+      local originalTextures = OverworldBattle.textures
+      OverworldBattle._kantoInMotionMobilePlayerScaleTexturesV79 = originalTextures
+      OverworldBattle.textures = function(battle, ...)
+        local out = originalTextures(battle, ...)
+        if spriteActive() and type(out) == "table"
+            and type(out.player) == "table" and type(battle) == "table"
+            and not battle.showPlayerBack then
+          local pinned = false
+          if type(OverworldBattle.backPinned) == "function" then
+            local okPinned, value = pcall(OverworldBattle.backPinned)
+            pinned = okPinned and value == true
+          end
+          if not pinned then
+            out.player.presentationScale = playerScalePercent() / 100
+          end
+        end
+        return out
+      end
+    end
+
+    if type(OverworldBattle.sideTexture) == "function"
+        and not OverworldBattle._kantoInMotionMobilePlayerScaleSideV79 then
+      local originalSideTexture = OverworldBattle.sideTexture
+      OverworldBattle._kantoInMotionMobilePlayerScaleSideV79 = originalSideTexture
+      OverworldBattle.sideTexture = function(battle, side)
+        local tex = originalSideTexture(battle, side)
+        if spriteActive() and side == "player" and type(tex) == "table"
+            and type(battle) == "table" and not battle.showPlayerBack then
+          local pinned = false
+          if type(OverworldBattle.backPinned) == "function" then
+            local okPinned, value = pcall(OverworldBattle.backPinned)
+            pinned = okPinned and value == true
+          end
+          if not pinned then
+            tex.presentationScale = playerScalePercent() / 100
+          end
+        end
+        return tex
+      end
+    end
+
+    -- Battle Art can pin an animated external back sprite into Gen1Recomp's
+    -- classic 2D back-pic slot.  That path bypasses the world-card scale above,
+    -- so scale the engine back-pic only when the live sprite is Battle Art
+    -- external art. ROM backs retain Gen1Recomp's native 2x rule.
+    local okState, BattleState = pcall(require, "src.battle.BattleState")
+    if okState and type(BattleState) == "table"
+        and type(BattleState.resolveBattleScale) == "function"
+        and not BattleState._kantoInMotionBattleArtMobilePlayerScaleV79 then
+      local originalResolve = BattleState.resolveBattleScale
+      BattleState._kantoInMotionBattleArtMobilePlayerScaleV79 = originalResolve
+      BattleState.resolveBattleScale = function(data, side, path, species)
+        local base = originalResolve(data, side, path, species)
+        if side ~= "back" or not spriteActive() then return base end
+
+        local liveStage, _, liveBattleArt = battleArtRuntime()
+        local live = liveStage and type(liveStage.battle) == "function"
+          and liveStage.battle() or nil
+        local pinned = false
+        if live and type(liveStage.backPinned) == "function" then
+          local okPinned, value = pcall(liveStage.backPinned)
+          pinned = okPinned and value == true
+        end
+        if not (live and pinned and not live.showPlayerBack and live.player) then
+          return base
+        end
+
+        local image = live.player.sprite
+        local external = false
+        if liveBattleArt and type(liveBattleArt.isExternal) == "function"
+            and image then
+          local okExternal, value = pcall(liveBattleArt.isExternal, image)
+          external = okExternal and value == true
+        end
+        if external then return playerScalePercent() / 100 end
+        return base
       end
     end
 
@@ -146,7 +252,7 @@ return function(mod, battleSystemEnabled, battleArt3DBattleEnabled)
   function M:refresh() return patchRuntime() end
   if mod.exports then
     mod.exports.battleArtMobileStageOnly = true
-    mod.exports.battleArtMobileStageOnlyVersion = 5
+    mod.exports.battleArtMobileStageOnlyVersion = 6
   end
   return M
 end

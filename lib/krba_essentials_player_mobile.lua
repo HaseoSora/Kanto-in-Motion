@@ -30,12 +30,22 @@ return function(mod, DATA)
   -- the same visual relationship to the KRS battler art at the 1920x1080 base.
   local WIDE_EFFECT_SCALE = 190 / 128
   local activeSession = nil
+  -- Live external-stage battles may need to bind KIM's patched AnimPlayer
+  -- methods directly onto the already-created battle instance. Keep a weak
+  -- owner map so that instance can resolve its BattleState even when mod.game
+  -- is not populated by the engine sandbox.
+  local boundBattleByPlayer = setmetatable({}, { __mode = "k" })
 
   -- Resolve the BattleState that owns a given AnimPlayer. KRBA replaces the
   -- engine subanimation player, so GROWL/ROAR would otherwise bypass
   -- BattleState:playAnimSound, which is where Gen1Recomp normally substitutes
   -- the attacking Pokemon's cry for these two move sounds.
   local function battleForAnimPlayer(animPlayer)
+    if type(animPlayer) == "table" then
+      local direct = boundBattleByPlayer[animPlayer]
+        or rawget(animPlayer, "_kantoInMotionBattle")
+      if type(direct) == "table" then return direct end
+    end
     local game = mod and mod.game
     local stack = game and game.stack
     local states = stack and stack.states
@@ -232,6 +242,11 @@ return function(mod, DATA)
   local function withFieldScissor(fn, stage)
     local g = love.graphics
     if not (g and g.getScissor and g.intersectScissor and g.setScissor) then return fn() end
+    -- Potato's final render.hud bridge already maps the complete 160x144
+    -- logical battle surface into the real window. LOVE scissors are not
+    -- transformed by graphics.scale(), so intersecting a logical 160x96 rect
+    -- here would clip the final-screen effect to a tiny corner.
+    if stage and stage._kantoInMotionPotatoFinal then return fn() end
     local x,y,w,h = g.getScissor()
 
     if stage and stage.layerTransform then
@@ -495,6 +510,50 @@ return function(mod, DATA)
       }
     end
 
+
+    -- Return every authored USER/TARGET picture cell for one physical battler.
+    -- Some Essentials moves (notably Quick Attack) use several copies of the
+    -- semantic USER cell with descending opacity to create the swoosh/trail.
+    -- battlerTransform() intentionally returns only the primary copy; staged
+    -- renderers that draw the Pokemon themselves need the complete list.
+    function s:battlerTransforms(side)
+      if side ~= "player" and side ~= "enemy" then return {} end
+      local roleUser = ((side == "player") == (self.attackerIsPlayer == true))
+      if USER_ONLY_BATTLER_TRANSFORMS[norm(self.moveId)] and not roleUser then
+        return {}
+      end
+      local pattern, srcx, srcy
+      if self.opponentVariant then
+        if roleUser then
+          pattern, srcx, srcy = -2, SRC_TARGET_X, SRC_TARGET_Y
+        else
+          pattern, srcx, srcy = -1, SRC_USER_X, SRC_USER_Y
+        end
+      else
+        if roleUser then
+          pattern, srcx, srcy = -1, SRC_USER_X, SRC_USER_Y
+        else
+          pattern, srcx, srcy = -2, SRC_TARGET_X, SRC_TARGET_Y
+        end
+      end
+      local out={}
+      for _,c in ipairs(self:currentCells()) do
+        if c[9] == pattern then
+          out[#out+1] = {
+            visible = c[8] == 1 and (c[10] or 255) > 0,
+            dx = ((c[1] or srcx) - srcx) * SCALE,
+            dy = ((c[2] or srcy) - srcy) * SCALE,
+            scaleX = (c[3] or 100) / 100,
+            scaleY = (c[4] or 100) / 100,
+            rotation = math.rad(c[5] or 0),
+            mirror = (c[6] or 0) ~= 0,
+            opacity = math.max(0, math.min(1, (c[10] or 255) / 255)),
+          }
+        end
+      end
+      return out
+    end
+
     local function blendMode(v)
       if v==1 then return "add" end
       if v==2 then return "subtract" end
@@ -529,7 +588,9 @@ return function(mod, DATA)
       if (c[6] or 0)~=0 then sx=-sx end
       local cx,cy=(c[1] or 0),(c[2] or 0)
       if self.enemyFallbackMode then cx,cy=enemyFallbackPoint(self.enemyFallbackMode,cx,cy) end
-      if stage then cx,cy=battleArtParticlePoint(self.moveId,self.attackerIsPlayer,cx,cy) end
+      if stage and not stage._kantoInMotionPotato then
+        cx,cy=battleArtParticlePoint(self.moveId,self.attackerIsPlayer,cx,cy)
+      end
       g.draw(img,q,cx*SCALE,cy*SCALE,math.rad(c[5] or 0),sx,sy,96,96)
       if sh then g.setShader() end
       g.setColor(1,1,1,1)
@@ -544,6 +605,91 @@ return function(mod, DATA)
           if (pass=="back" and back) or (pass=="front" and not back) then self:drawCell(c,stage) end
         end
       end, stage)
+    end
+
+    -- PotatoVoxel final-screen particle mapper.  Unlike the old midpoint-only
+    -- transform, this pins Essentials' semantic USER/TARGET anchors directly
+    -- onto Potato's live projected battler centres. Target-local effects such
+    -- as Slash therefore stay on the opponent, while travelling effects such
+    -- as Ember still span the complete user->target line as the camera moves.
+    function s:drawCellPotato(c, stage)
+      local pattern=c[9]; if pattern<0 or c[8]~=1 or (c[10] or 0)<=0 then return end
+      if not (stage and type(stage.playerCenter)=="table" and type(stage.enemyCenter)=="table") then
+        return self:drawCell(c,stage)
+      end
+      local img=self:image(self.anim.graphic); local q=img and self:quad(self.anim.graphic,pattern)
+      if not (img and q) then return end
+      local g=love.graphics
+      local oldMode,oldAlpha=g.getBlendMode()
+      local celBlend=blendMode(c[7])
+      -- The final Potato carrier is transparent; preserve visibility of
+      -- additive/subtractive Essentials art (Ember in particular) by carrying
+      -- it as straight alpha, matching the existing staged-surface fallback.
+      if celBlend~="alpha" then celBlend="alpha" end
+      pcall(g.setBlendMode,celBlend,"alphamultiply")
+      local sh=getShader(); if sh then
+        g.setShader(sh)
+        pcall(sh.send,sh,"krs_overlay",{(c[11] or 0)/255,(c[12] or 0)/255,(c[13] or 0)/255,(c[14] or 0)/255})
+        pcall(sh.send,sh,"krs_tone",{(c[15] or 0)/255,(c[16] or 0)/255,(c[17] or 0)/255,(c[18] or 0)/255})
+        pcall(sh.send,sh,"krs_hue",math.rad(self.anim.hue or 0))
+      end
+      g.setColor(1,1,1,(c[10] or 255)/255)
+
+      local effectScale=tonumber(stage.effectScale) or tonumber(stage.scale) or 1
+      if not (effectScale>0) or effectScale~=effectScale then effectScale=1 end
+      effectScale=math.max(0.5,math.min(2.0,effectScale))
+      local sx=(c[3] or 100)/100*SCALE*effectScale
+      local sy=(c[4] or 100)/100*SCALE*effectScale
+      if (c[6] or 0)~=0 then sx=-sx end
+
+      local player=stage.playerCenter
+      local enemy=stage.enemyCenter
+      local user=self.attackerIsPlayer and player or enemy
+      local target=self.attackerIsPlayer and enemy or player
+      local cx,cy=(c[1] or 0),(c[2] or 0)
+      local mode=self.wideAnchorMode or "reflect"
+      local function mapAxis(v,s0,s1,d0,d1)
+        local span=s1-s0
+        if math.abs(span)<1e-9 then return d0 end
+        return d0+(v-s0)*(d1-d0)/span
+      end
+      local px,py
+      if self.opponentVariant then
+        -- A hand-authored opponent animation already uses the upper-right
+        -- screen slot as the attacker and the lower-left slot as the target.
+        -- Keep that fixed-slot authorship and only project those two slots to
+        -- Potato's live centres; do not semantically swap it a second time.
+        px=mapAxis(cx,SRC_USER_X,SRC_TARGET_X,player[1] or DST_USER_X,enemy[1] or DST_TARGET_X)
+        py=mapAxis(cy,SRC_USER_Y,SRC_TARGET_Y,player[2] or DST_USER_Y,enemy[2] or DST_TARGET_Y)
+      elseif mode=="target" then
+        px=(target[1] or DST_TARGET_X)+(cx*SCALE-DST_TARGET_X)*effectScale
+        py=(target[2] or DST_TARGET_Y)+(cy*SCALE-DST_TARGET_Y)*effectScale
+      elseif mode=="user" then
+        px=(user[1] or DST_USER_X)+(cx*SCALE-DST_USER_X)*effectScale
+        py=(user[2] or DST_USER_Y)+(cy*SCALE-DST_USER_Y)*effectScale
+      else
+        -- Generated enemy fallbacks and normal travelling player attacks map
+        -- semantic USER/TARGET exactly onto the live pair.
+        px=mapAxis(cx,SRC_USER_X,SRC_TARGET_X,user[1] or DST_USER_X,target[1] or DST_TARGET_X)
+        py=mapAxis(cy,SRC_USER_Y,SRC_TARGET_Y,user[2] or DST_USER_Y,target[2] or DST_TARGET_Y)
+      end
+      g.draw(img,q,px,py,math.rad(c[5] or 0),sx,sy,96,96)
+      if sh then g.setShader() end
+      g.setColor(1,1,1,1)
+      pcall(g.setBlendMode,oldMode,oldAlpha)
+    end
+
+    function s:drawParticlesPotato(pass, stage)
+      -- render.hud has already supplied window-space clipping; avoid reusing
+      -- the native 160x96 scissor here because LOVE scissors are not affected
+      -- by the outer graphics scale/translation.
+      for _,c in ipairs(self:currentCells()) do
+        local pr=c[20] or 1
+        local back=(pr==0 or pr==2)
+        if (pass=="back" and back) or (pass=="front" and not back) then
+          self:drawCellPotato(c,stage)
+        end
+      end
     end
 
     -- Apply exactly the layer projection described by Battle Art's public
@@ -977,13 +1123,39 @@ return function(mod, DATA)
     return ok and value==true
   end
 
-  local function kantoReworkEnabled()
-    -- BATTLE SYSTEM is KIM's master ownership switch. When it is OFF, KIM must
-    -- not intercept AnimPlayer at all: vanilla or the active external battle
-    -- provider owns move animations just like it owns the rest of the battle.
+  local function kantoReworkEnabled(animPlayer)
+    -- Standalone KIM still uses BATTLE SYSTEM as its presentation master, but
+    -- a cooperative external scene may explicitly request KIM's animation
+    -- lane independently. Battle Art 3D-BTL and PotatoVoxel use this so MOVE
+    -- ANIMATIONS=ON keeps KRBA while KIM Battle System is OFF.
     if mod and mod.options and type(mod.options.get) == "function" then
       local okSystem, systemEnabled = pcall(mod.options.get, mod.options, "battleSystem")
-      if okSystem and systemEnabled == false then return false end
+      if okSystem and systemEnabled == false then
+        -- A cooperative external renderer can bind the real live AnimPlayer
+        -- before the engine starts the queued move. PotatoVoxel uses this
+        -- marker so MOVE ANIMATIONS remains independent from KIM's full
+        -- Battle System without depending on shot construction timing.
+        local allowed = type(animPlayer) == "table"
+          and rawget(animPlayer, "_kantoInMotionPotatoKRBA") == true
+        if not allowed then
+          local probe = mod._kantoInMotionExternalStageAllowsKimAnimations
+          if type(probe) == "function" then
+            local okAllow, valueAllow = pcall(probe, battleForAnimPlayer(animPlayer))
+            allowed = okAllow and valueAllow == true
+          end
+        end
+        -- Battle Art is a known staged-scene owner rather than an interop
+        -- registration. Keep MOVE ANIMATIONS independent from BATTLE SYSTEM
+        -- while its real 3D-BTL stage is active on Android/iOS too.
+        if not allowed then
+          local battleArtProbe = mod._kantoInMotionBattleArt3DBattleEnabled
+          if type(battleArtProbe) == "function" then
+            local okBattleArt, valueBattleArt = pcall(battleArtProbe)
+            allowed = okBattleArt and valueBattleArt == true
+          end
+        end
+        if not allowed then return false end
+      end
     end
 
     -- Cooperative external battle scene owners receive a clean animation lane
@@ -999,11 +1171,11 @@ return function(mod, DATA)
     return not ok or value ~= false
   end
 
-  function AnimPlayer:start(moveId, attackerIsPlayer, opts)
-    if not kantoReworkEnabled() then
-      self._krs=nil
-      return original.start(self,moveId,attackerIsPlayer,opts)
-    end
+  -- Start only the integrated Essentials/KRBA session.  This is split from
+  -- AnimPlayer:start so a cooperative external scene can explicitly invoke
+  -- KIM's animation provider at the engine's real queue boundary without
+  -- depending on which mod last replaced the AnimPlayer.start method.
+  local function startKrsDirect(self,moveId,attackerIsPlayer,opts)
     local rec=DATA.moves[norm(moveId)]
     if rec then
       local anim=(not attackerIsPlayer and rec.opp) or rec.player
@@ -1017,10 +1189,19 @@ return function(mod, DATA)
         activeSession=self._krs
         self.steps,self.events={},{}
         self.stepIndex,self.stepLeft,self.elapsed,self.eventCursor=1,0,0,1
-        return
+        return true
       end
     end
     self._krs=nil
+    return false
+  end
+
+  function AnimPlayer:start(moveId, attackerIsPlayer, opts)
+    if not kantoReworkEnabled(self) then
+      self._krs=nil
+      return original.start(self,moveId,attackerIsPlayer,opts)
+    end
+    if startKrsDirect(self,moveId,attackerIsPlayer,opts) then return end
     return original.start(self,moveId,attackerIsPlayer,opts)
   end
 
@@ -1057,7 +1238,49 @@ return function(mod, DATA)
       if activeSession==self._krs then activeSession=nil end
       self._krs:release(); self._krs=nil
     end
+    boundBattleByPlayer[self] = nil
     return original.release(self)
+  end
+
+  -- The engine creates one AnimPlayer per BattleState.  Most battles inherit
+  -- these methods through AnimPlayer.__index, but an external battle renderer
+  -- can hold a live instance across its own module boundary.  Binding the
+  -- patched methods directly to that instance makes the KIM/KRBA provider
+  -- authoritative without modifying the external mod.
+  local boundMethods = {
+    start = AnimPlayer.start, update = AnimPlayer.update,
+    isDone = AnimPlayer.isDone, pollEffects = AnimPlayer.pollEffects,
+    draw = AnimPlayer.draw, finalSprites = AnimPlayer.finalSprites,
+    release = AnimPlayer.release,
+  }
+  mod.exports._kantoInMotionBindKrbaPlayer = function(animPlayer, battle, source)
+    if type(animPlayer) ~= "table" then return false end
+    if type(battle) == "table" then
+      boundBattleByPlayer[animPlayer] = battle
+      animPlayer._kantoInMotionBattle = battle
+    end
+    if source == "potato_voxel" then
+      animPlayer._kantoInMotionPotatoKRBA = true
+    end
+    for key, fn in pairs(boundMethods) do animPlayer[key] = fn end
+    return true
+  end
+
+  -- Hard provider seam for cooperative staged renderers.  Unlike the normal
+  -- :start wrapper this deliberately bypasses Battle System/external-owner
+  -- gates: the caller has already established that MOVE ANIMATIONS is ON and
+  -- that KIM was explicitly opted in by the active scene owner.  It returns
+  -- true only when KIM has animation data for the requested row.
+  mod.exports._kantoInMotionStartKrbaDirect = function(animPlayer,battle,moveId,attackerIsPlayer,opts,source)
+    if type(animPlayer)~="table" then return false end
+    if type(battle)=="table" then
+      boundBattleByPlayer[animPlayer]=battle
+      animPlayer._kantoInMotionBattle=battle
+    end
+    if source=="potato_voxel" then
+      animPlayer._kantoInMotionPotatoKRBA=true
+    end
+    return startKrsDirect(animPlayer,moveId,attackerIsPlayer,opts)
   end
 
   local function drawSideTransformed(state, side, c, slide, sx, sy, skipMenuClip)
@@ -1091,7 +1314,27 @@ return function(mod, DATA)
 
   function BattleState:drawPicsLayer(slide,sx,sy,onlySide,skipMenuClip)
     local sess=self.animPlayer and self.animPlayer._krs
+    -- A finished Potato/KRBA session can remain attached to AnimPlayer until
+    -- the BattleState is released. Never let that stale session keep applying
+    -- its final USER/TARGET transform to the idle battler after the move.
+    if sess and sess.done then sess=nil end
     if not sess then return originalDrawPicsLayer(self,slide,sx,sy,onlySide,skipMenuClip) end
+    -- Potato owns the staged battler placement. KRBA particles are rendered
+    -- separately through KIM's final Potato projection, so applying Essentials
+    -- USER/TARGET transform cells to this native 2D pic layer would move the
+    -- wrong physical battler (enemy Quick Attack made the player's back sprite
+    -- lunge) and made the pinned player jump during Ember. Keep Potato's
+    -- battler image completely fixed and let only the projected KRBA effects
+    -- animate.
+    local potatoStage=false
+    local potatoProbe=mod._kantoInMotionExternalStageAllowsKimAnimations
+    if type(potatoProbe)=="function" then
+      local okPotato, valuePotato=pcall(potatoProbe,self)
+      potatoStage=okPotato and valuePotato==true
+    end
+    if potatoStage then
+      return originalDrawPicsLayer(self,slide,sx,sy,onlySide,skipMenuClip)
+    end
     -- KIM's KRS arena draws the Essentials BG/back/front/FG layers directly
     -- around its final-resolution battlers. Preserve KIM's underlying pic path
     -- here (it hides only the direct battler proxies) so the 160x96 KRBA copy
@@ -1325,6 +1568,74 @@ return function(mod, DATA)
     end
     return unpackFn(downstream,2,downstream.n)
   end,10000)
+
+  -- PotatoVoxel final-screen KRBA renderer. Potato's flat desktop path
+  -- composites the 3D world first and then calls BattleState:drawAnimLayer on
+  -- the transparent 160x144 battle/UI surface. Draw the live Essentials/KRBA
+  -- session explicitly at that final seam instead of depending on whichever
+  -- AnimPlayer.draw function Potato captured when its module loaded.
+  --
+  -- `projection` mirrors PotatoVoxel's own authored-pair -> projected-pair
+  -- transform.  The special stage marker keeps additive/subtractive cels on
+  -- a straight-alpha carrier (important for Ember) without applying the
+  -- Battle-Art-specific per-move retarget function.
+  mod.exports._kantoInMotionDrawKrbaPotato = function(battle, projection)
+    local player=type(battle)=="table" and battle.animPlayer or nil
+    local sess=type(player)=="table" and rawget(player,"_krs") or nil
+    if not (sess and not sess.done) then return false end
+    projection=type(projection)=="table" and projection or {}
+    local ac=projection.authoredCenter or {75,76}
+    local pc=projection.projectedCenter or ac
+    local k=tonumber(projection.scale) or 1
+    if not (k>0) or k~=k then k=1 end
+    local stage={
+      _kantoInMotionPotato=true,
+      _kantoInMotionPotatoFinal=projection.finalScreen==true,
+      layerTransform={ authoredCenter=ac, projectedCenter=pc, scale=k },
+    }
+    local g=love and love.graphics
+    if not g then return false end
+    local sx,sy,sw,sh
+    if type(g.getScissor)=="function" then sx,sy,sw,sh=g.getScissor() end
+    if type(g.setScissor)=="function" then g.setScissor() end
+
+    -- Full-field timing planes remain screen-fixed. They intentionally do not
+    -- inherit Potato's pair transform; only particle cels track the staged
+    -- battlers/camera.
+    local pushed=false
+    local ok,err=pcall(function()
+      if not projection.skipPlanes then sess:drawBackground() end
+      -- Prefer exact semantic USER/TARGET pinning when Potato supplied both
+      -- live battler centres.  Fall back to the older midpoint projection for
+      -- compatibility with any caller that only implements the v54 contract.
+      if type(projection.playerCenter)=="table" and type(projection.enemyCenter)=="table"
+          and type(sess.drawParticlesPotato)=="function" then
+        stage.playerCenter=projection.playerCenter
+        stage.enemyCenter=projection.enemyCenter
+        stage.effectScale=tonumber(projection.effectScale) or k
+        sess:drawParticlesPotato("back",stage)
+        sess:drawParticlesPotato("front",stage)
+      else
+        g.push(); pushed=true
+        g.translate((pc[1] or ac[1])-(ac[1] or 75),
+                    (pc[2] or ac[2])-(ac[2] or 76))
+        if k~=1 then
+          g.translate(ac[1] or 75,ac[2] or 76)
+          g.scale(k,k)
+          g.translate(-(ac[1] or 75),-(ac[2] or 76))
+        end
+        sess:drawParticles("back",stage)
+        sess:drawParticles("front",stage)
+        g.pop(); pushed=false
+      end
+      if not projection.skipPlanes then sess:drawForeground() end
+    end)
+    if pushed then pcall(g.pop) end
+    if sx and type(g.setScissor)=="function" then g.setScissor(sx,sy,sw,sh)
+    elseif type(g.setScissor)=="function" then g.setScissor() end
+    if not ok then error(err,0) end
+    return true
+  end
 
   mod.exports._kantoInMotionKRBAActiveSession=function() return activeSession end
   mod.exports.playerInstalled=true

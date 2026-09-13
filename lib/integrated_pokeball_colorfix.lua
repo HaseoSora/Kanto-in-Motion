@@ -333,6 +333,48 @@ return function(mod)
       return originalRow(self, party, x, y, dx)
     end
 
+    -- When PotatoVoxel owns the 3D stage and KIM owns the snapped battle HUD,
+    -- drawBallRow is reached twice: once during KIM's private HUD capture and
+    -- once again by the native/source battle layer. The capture branch above
+    -- already authored the one true-colour row into KIM's party-ball canvas.
+    -- Suppress only the second source-layer row so it cannot show underneath
+    -- the scaled KIM row. When KIM BATTLE SYSTEM is OFF this predicate is
+    -- false and Potato keeps its ordinary native party row.
+    local potatoKimHud = false
+    local potatoKimProbe = mod._kantoInMotionPotatoKimHudActive
+    if type(potatoKimProbe) == "function" then
+      local okPotatoKim, valuePotatoKim = pcall(potatoKimProbe, self)
+      potatoKimHud = okPotatoKim and valuePotatoKim == true
+    end
+    if potatoKimHud then return end
+
+    -- PotatoVoxel also publishes dramaticShapeShot, but unlike Battle Art it
+    -- does not run the Battle Art ink-flip shader that ICONS_DRAMATIC was made
+    -- to survive. More importantly, Battle Art may have left the engine's
+    -- persistent BATTLE LAYOUT at OG before Potato took over; treating every
+    -- dramaticShapeShot as Battle Art then mixes the wrong row path with that
+    -- layout and can leave a second white/amber-looking row behind the normal
+    -- Colorfix balls. During the explicit Potato-native fallback, draw one
+    -- normal true-colour row and stop here.
+    local potatoNative = false
+    local potatoProbe = mod._kantoInMotionPotatoNativeWideActive
+    if type(potatoProbe) == "function" then
+      local okPotato, valuePotato = pcall(potatoProbe, self)
+      potatoNative = okPotato and valuePotato == true
+    end
+    if potatoNative then
+      if icons == nil then icons = buildIcons(ICONS) end
+      if icons then
+        for i = 1, 6 do
+          local mon = party[i]
+          local tile = not mon and 3 or mon.hp <= 0 and 2 or mon.status and 1 or 0
+          love.graphics.draw(icons.img, icons[tile], x + (i - 1) * dx, y)
+        end
+        return
+      end
+      return originalRow(self, party, x, y, dx)
+    end
+
     if self.dramaticShapeShot then
       if iconsDramatic == nil then iconsDramatic = buildIcons(ICONS_DRAMATIC) end
       if iconsDramatic then

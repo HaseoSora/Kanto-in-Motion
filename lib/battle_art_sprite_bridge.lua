@@ -29,6 +29,8 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame,
   local originalViewGet = nil
   local originalAnimatedUpdate = nil
   local originalSideTexture = nil
+  local originalTextures = nil
+  local originalResolveBattleScale = nil
   local lastNativeDelegateActive = nil
 
   local function handle()
@@ -71,10 +73,19 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame,
        and type(ba.setting) == "table"
   end
 
+  local function stageActive(stage)
+    if not stage or type(stage.enabled) ~= "function" then return false end
+    local ok, value = pcall(stage.enabled)
+    return ok and value == true
+  end
+
   local function kimEnabled(stage)
     if not (mod and mod.options and stage) then return false end
+    -- BATTLE SPRITES is an independent feature lane. Battle Art may own the
+    -- 3D arena while KIM's full BATTLE SYSTEM / MODERN BATTLE UI are OFF; in
+    -- that case KIM still supplies its selected sprite generations and player
+    -- size exactly like the cooperative PotatoVoxel path.
     if mod.options:get("enabled") == false
-        or mod.options:get("battleSystem") == false
         or mod.options:get("battleSprites") == false then
       return false
     end
@@ -212,9 +223,36 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame,
       return unpack(results)
     end
 
-    -- PLAYER PKMN SIZE remains a KIM control, but apply it only after Battle
-    -- Art has produced its known-good native world card. No sprite/canvas is
-    -- resampled and the foot anchor is unchanged.
+    -- PLAYER PKMN SIZE remains a KIM control. Battle Art has TWO player-back
+    -- presentation paths: a world billboard and an OG-UI pinned back. v74
+    -- changed sideTexture metadata, but the authoritative world render receives
+    -- the table returned by OverworldBattle.textures(); scaling there survives
+    -- every later capture/provider wrapper. 100% is native 1.00x.
+    if type(stage.textures) == "function" then
+      originalTextures = stage.textures
+      stage.textures = function(battle, ...)
+        local out = originalTextures(battle, ...)
+        if type(out) == "table" and type(out.player) == "table"
+            and battle and not battle.showPlayerBack and kimEnabled(stage)
+            and backGeneration() ~= "rom" then
+          local pinned = false
+          if type(stage.backPinned) == "function" then
+            local okPinned, value = pcall(stage.backPinned)
+            pinned = okPinned and value == true
+          end
+          if not pinned then
+            local pct = tonumber(mod.options:get("battlePlayerSize")) or 125
+            pct = math.max(50, math.min(200, pct))
+            out.player.presentationScale = pct / 100
+          end
+        end
+        return out
+      end
+      stage._kantoInMotionNativeSpriteScaleTexturesV75 = stage.textures
+    end
+
+    -- Keep the earlier sideTexture seam as a fallback for Battle Art revisions
+    -- that consume a side card directly instead of through textures().
     if type(stage.sideTexture) == "function" then
       originalSideTexture = stage.sideTexture
       stage.sideTexture = function(battle, side)
@@ -224,11 +262,132 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame,
             and backGeneration() ~= "rom" then
           local pct = tonumber(mod.options:get("battlePlayerSize")) or 125
           pct = math.max(50, math.min(200, pct))
-          tex.presentationScale = (tonumber(tex.presentationScale) or 1) * pct / 100
+          tex.presentationScale = pct / 100
         end
         return tex
       end
       stage._kantoInMotionNativeSpriteScaleHook = stage.sideTexture
+    end
+
+    -- If Battle Art pins a supplied back sprite to the classic 2D slot, there
+    -- is no player world texture to scale. Apply the same percentage at the
+    -- engine's back-pic scale seam, but only while that exact pinned path is
+    -- live. This leaves Battle Art's texture capture (forced 1x), trainers and
+    -- ROM fallback untouched.
+    do
+      local okState, BattleState = pcall(require, "src.battle.BattleState")
+      if okState and type(BattleState) == "table"
+          and type(BattleState.resolveBattleScale) == "function"
+          and not BattleState._kantoInMotionBattleArtPlayerScaleV75 then
+        originalResolveBattleScale = BattleState.resolveBattleScale
+        BattleState._kantoInMotionBattleArtPlayerScaleV75 = originalResolveBattleScale
+        BattleState.resolveBattleScale = function(data, side, path, species)
+          local base = originalResolveBattleScale(data, side, path, species)
+          if side == "back" and backGeneration() ~= "rom" and kimEnabled(stage) then
+            local live = type(stage.battle) == "function" and stage.battle() or nil
+            local pinned = false
+            if live and type(stage.backPinned) == "function" then
+              local okPinned, value = pcall(stage.backPinned)
+              pinned = okPinned and value == true
+            end
+            if live and pinned and not live.showPlayerBack and live.player then
+              local pct = tonumber(mod.options:get("battlePlayerSize")) or 125
+              pct = math.max(50, math.min(200, pct))
+              return pct / 100
+            end
+          end
+          return base
+        end
+      end
+    end
+
+    -- Quality of Life's caught indicator still uses the historical Dramatic
+    -- Shape coordinates (shot.scale / shot.ly). Current Battle Art snaps the
+    -- enemy HUD band to a separate edge position and can use a smaller HUD
+    -- scale, so with KIM BATTLE SYSTEM OFF the icon is left near the screen's
+    -- upper-left instead of beside the enemy name/level. Rebase only QOL's
+    -- one-pixel ball primitives from the old shot coordinates into Battle
+    -- Art's public snapped enemy-band transform. QOL itself remains untouched.
+    do
+      local g = love and love.graphics
+      if g and type(g.rectangle) == "function" and type(g.getCanvas) == "function"
+          and not g._kantoInMotionBattleArtCaughtV75 then
+        local innerRectangle = g.rectangle
+        local qolHandle = nil
+        local function qolOption(game, key)
+          if not qolHandle and type(mod.find) == "function" then
+            local ok, handle = pcall(mod.find, mod, "quality_of_life")
+            if not ok or not handle then ok, handle = pcall(mod.find, "quality_of_life") end
+            if ok then qolHandle = handle end
+          end
+          local exports = qolHandle and type(qolHandle.exports) == "table"
+            and qolHandle.exports or nil
+          if exports and type(exports.optionValue) == "function" then
+            local ok, value = pcall(exports.optionValue, game, key)
+            if ok then return value end
+          end
+          return nil
+        end
+        local function enemyNameX(battle)
+          local name = battle and battle.enemy and battle.enemy.name or ""
+          local glyphs = #tostring(name)
+          local Font = mod and mod.ui and mod.ui.Font
+          if Font and type(Font.split) == "function" then
+            local ok, parts = pcall(Font.split, tostring(name))
+            if ok and type(parts) == "table" then glyphs = #parts end
+          end
+          return 8 + (glyphs <= 2 and 16 or glyphs <= 4 and 8 or 0)
+        end
+        g._kantoInMotionBattleArtCaughtV75 = innerRectangle
+        g.rectangle = function(mode, x, y, w, h, ...)
+          if mode == "fill" and mod.options:get("battleSystem") == false
+              and stageActive(stage) then
+            local battle = type(stage.battle) == "function" and stage.battle() or nil
+            local shot = battle and rawget(battle, "dramaticShapeShot") or nil
+            if not shot and type(stage.shot) == "function" then
+              local okShot, value = pcall(stage.shot)
+              if okShot then shot = value end
+            end
+            local nx, ny, nw, nh = tonumber(x), tonumber(y), tonumber(w), tonumber(h)
+            local sc = shot and tonumber(shot.scale) or nil
+            local ly = shot and tonumber(shot.ly) or nil
+            if battle and battle.kind == "wild" and type(shot) == "table"
+                and shot.canvas and g.getCanvas() == shot.canvas
+                and nx and ny and nw and nh and sc and sc > 0 and ly
+                and math.abs(nw - sc) < 0.51 and math.abs(nh - sc) < 0.51 then
+              local caughtMode = qolOption(battle.game, "qol_caught_indicator")
+              if (caughtMode == "gen2" or caughtMode == "red" or caughtMode == "grey")
+                  and type(stage.snapRects) == "function" then
+                local sourceAnchorX = (enemyNameX(battle) - 9) * sc
+                local sourceAnchorY = ly + 7 * sc
+                if caughtMode == "gen2" then
+                  sourceAnchorX = sourceAnchorX + 2 * sc
+                  sourceAnchorY = sourceAnchorY + 2 * sc
+                else
+                  sourceAnchorX = sourceAnchorX + sc
+                  sourceAnchorY = sourceAnchorY + sc
+                end
+                local side = caughtMode == "gen2" and 6 or 7
+                local ux = (nx - sourceAnchorX) / sc
+                local uy = (ny - sourceAnchorY) / sc
+                if ux >= -0.01 and ux <= side - 1 + 0.01
+                    and uy >= -0.01 and uy <= side - 1 + 0.01 then
+                  local okRects, _, placement = pcall(stage.snapRects, shot)
+                  local at = okRects and type(placement) == "table" and placement.enemy or nil
+                  local hs = type(at) == "table" and tonumber(at.scale) or nil
+                  if hs and hs > 0 and tonumber(at.x) and tonumber(at.y) then
+                    local targetAnchor = caughtMode == "gen2" and 9 or 8
+                    x = tonumber(at.x) + (targetAnchor + ux) * hs
+                    y = tonumber(at.y) + (targetAnchor + uy) * hs
+                    w, h = hs, hs
+                  end
+                end
+              end
+            end
+          end
+          return innerRectangle(mode, x, y, w, h, ...)
+        end
+      end
     end
 
     ba._kantoInMotionNativeSpriteDelegate = true
@@ -259,7 +418,7 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame,
 
   if mod.exports then
     mod.exports.battleArtSpriteCompat = true
-    mod.exports.battleArtSpriteCompatVersion = 8
+    mod.exports.battleArtSpriteCompatVersion = 9
     mod.exports.battleArtSpriteCompatMode = "native_animated_delegate"
   end
   return M

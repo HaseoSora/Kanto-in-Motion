@@ -3939,6 +3939,10 @@ return function(mod)
     { id = "BATTLE_ART_VOXEL_FORK", label = "BATTLE ART",
       screens = { { label = "SETTINGS", id = "BATTLE_ART_VOXEL_FORK:settings", schemaFallback = true } },
       startExtras = { "CACHE" } },
+    { id = "potato_voxel", label = "POTATO VOXEL",
+      screens = { { label = "VOXEL SETTINGS", id = "PotatoVoxelSettings", schemaFallback = true } },
+      sourceOwned = true },
+    { id = "HGSS_SPRITES", label = "HGSS VISUAL OVERHAUL", schema = true },
     { id = "overworld_wild_spawns", label = "WILDS OF KANTO",
       screens = {
         { label = "WILD POKEMON", id = "overworld_wild_spawns:wilds_menu" },
@@ -4100,11 +4104,8 @@ return function(mod)
     return nil
   end
 
-  runtime.ensureCapturedOptionRows = function(game)
-    if runtime.findCapturedOptionRow({
-        id = "BATTLE_ART_VOXEL_FORK", label = "BATTLE ART" }) then
-      return
-    end
+  runtime.ensureCapturedOptionRows = function(game, spec)
+    if spec and runtime.findCapturedOptionRow(spec) then return end
     local ok, OptionsMenu = pcall(require, "src.ui.OptionsMenu")
     if ok and OptionsMenu and type(OptionsMenu.new) == "function" then
       -- Building (not pushing) the normal OPTIONS model runs every source
@@ -4115,7 +4116,7 @@ return function(mod)
   end
 
   runtime.openSourceOwnedSettings = function(game, spec)
-    runtime.ensureCapturedOptionRows(game)
+    runtime.ensureCapturedOptionRows(game, spec)
     local row = runtime.findCapturedOptionRow(spec)
     if not row then return false end
     local before = game and game.stack and game.stack.top and game.stack:top()
@@ -4185,7 +4186,7 @@ return function(mod)
           -- Art itself.  Prefer its own OPTIONS callback so the launch keeps
           -- the source mod's UI context; this fixes the dead SETTINGS row in
           -- KIM's centralized MOD MENU without modifying Battle Art.
-          if spec.id == "BATTLE_ART_VOXEL_FORK" then
+          if spec.id == "BATTLE_ART_VOXEL_FORK" or spec.sourceOwned then
             opened = runtime.openSourceOwnedSettings(game, spec)
           end
           if not opened then
@@ -19604,41 +19605,80 @@ return function(mod)
   mod.hooks:wrap("render.hud", function(next, game, viewport)
     currentGame = game
 
-    -- Useful Bag 2.4.3+ owns a standalone fullscreen HUD presenter in addition
-    -- to the decorated BagMenu state that Kanto in Motion already understands.
-    -- Its presenter runs inside `next()` and otherwise paints a second bag
-    -- underneath Modern UI. Keep Useful Bag's state/input/pocket logic intact,
-    -- but make that one nested HUD pass see the state below the bag. Its own
-    -- `game.stack:top() == session.active` guard then yields presentation to
-    -- Kanto in Motion without requiring a patched Useful Bag release.
+    -- Useful Bag owns its own fullscreen HUD presenter in addition to the
+    -- decorated BagMenu state that Kanto in Motion already understands.
+    --
+    -- Useful Bag <=2.6.3 only drew that presenter while the bag itself was
+    -- stack:top(), so older KIM builds could make the nested pass yield by
+    -- temporarily changing stack:top(). Useful Bag 2.6.4 intentionally changed
+    -- its presenter to scan the live stack and to remain visible underneath
+    -- non-opaque child screens. That made the old top() mask ineffective and
+    -- produced the classic/Useful-Bag fullscreen UI underneath Modern UI.
+    --
+    -- Keep Useful Bag's real state, session, pockets, sorting and input fully
+    -- intact. During only the nested HUD pass, append a synthetic opaque child
+    -- after the live bag state. Useful Bag still rediscovers the real bag as
+    -- session.active, but its own hasOpaqueChild() test now yields the visual
+    -- layer to KIM. stack:top() is pinned to the real top state so no other HUD
+    -- consumer sees the sentinel as an actual user-facing screen.
     local stack = game and game.stack
-    local usefulBagTop = stack and type(stack.top) == "function"
-      and stack:top() or nil
-    local maskUsefulBagHud = usefulBagTop
-      and usefulBagTop.__usefulBagKind == "bag"
-      and mod._gen1ModernCompatibility:isUsefulBagState(usefulBagTop)
-      and runtime.option("hideOriginalUi", true) ~= false
-      and runtime.option("menuUi", true) ~= false
-      and runtime.presenterEnabled("bag", usefulBagTop)
-      and runtime.presenterReady(game, usefulBagTop, "bag")
-
-    if maskUsefulBagHud and type(stack.states) == "table" then
-      local states = stack.states
-      local underState
-      for index = #states, 1, -1 do
-        if states[index] == usefulBagTop then
-          underState = states[index - 1]
+    local usefulBagState
+    local usefulBagIndex
+    if stack and type(stack.states) == "table" then
+      for index = #stack.states, 1, -1 do
+        local state = stack.states[index]
+        if state and state.__usefulBagKind == "bag"
+            and mod._gen1ModernCompatibility:isUsefulBagState(state) then
+          usefulBagState = state
+          usefulBagIndex = index
           break
         end
       end
-      local originalTop = stack.top
-      stack.top = function(self, ...)
-        local value = originalTop(self, ...)
-        if value == usefulBagTop then return underState end
-        return value
+    else
+      local top = stack and type(stack.top) == "function"
+        and stack:top() or nil
+      if top and top.__usefulBagKind == "bag"
+          and mod._gen1ModernCompatibility:isUsefulBagState(top) then
+        usefulBagState = top
       end
+    end
+
+    local maskUsefulBagHud = usefulBagState
+      and runtime.option("hideOriginalUi", true) ~= false
+      and runtime.option("menuUi", true) ~= false
+      and runtime.presenterEnabled("bag", usefulBagState)
+      and runtime.presenterReady(game, usefulBagState, "bag")
+
+    if maskUsefulBagHud and type(stack.states) == "table"
+        and usefulBagIndex then
+      local states = stack.states
+      local originalTop = stack.top
+      local realTop = type(originalTop) == "function"
+        and originalTop(stack) or states[#states]
+      local sentinel = {
+        isOpaque = true,
+        __kimUsefulBagPresenterMask = true,
+      }
+      states[#states + 1] = sentinel
+
+      if type(originalTop) == "function" then
+        stack.top = function(self, ...)
+          return realTop
+        end
+      end
+
       local ok, err = pcall(next, game, viewport)
-      stack.top = originalTop
+
+      if type(originalTop) == "function" then
+        stack.top = originalTop
+      end
+      for index = #states, 1, -1 do
+        if states[index] == sentinel then
+          table.remove(states, index)
+          break
+        end
+      end
+
       if not ok then error(err, 0) end
     else
       next(game, viewport)

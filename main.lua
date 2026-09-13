@@ -155,18 +155,22 @@ return function(mod)
     return best
   end
 
-  function mod._kantoInMotionInterop:hasBattleSceneOwner()
+  function mod._kantoInMotionInterop:hasBattleSceneOwner(game, battle)
     for _, spec in pairs(self.battleOwners) do
-      if spec.sceneOwner ~= false and self:ownerAlive(spec.owner) then return true end
+      if spec.sceneOwner ~= false and self:ownerAlive(spec.owner)
+          and self:_active(spec, game, battle, "battle") then
+        return true
+      end
     end
     return false
   end
 
-  function mod._kantoInMotionInterop:blocksBattleFeature(feature)
+  function mod._kantoInMotionInterop:blocksBattleFeature(feature, game, battle)
     local optIn = feature == "sprites" and "allowKIMSprites"
       or feature == "animations" and "allowKIMAnimations" or nil
     for _, spec in pairs(self.battleOwners) do
       if spec.sceneOwner ~= false and self:ownerAlive(spec.owner)
+          and self:_active(spec, game, battle, "battle")
           and (not optIn or spec[optIn] ~= true) then
         return true
       end
@@ -230,13 +234,13 @@ return function(mod)
   local battleOptionSchema = {
     { key = "battleSystem", label = "BATTLE SYSTEM", type = "toggle",
       default = true,
-      description = "Master switch for Kanto in Motion battle presentation. OFF yields the battle scene to vanilla or another battle mod and disables KIM's move-animation takeover, so the active battle provider uses its own animations." },
+      description = "Master switch for Kanto in Motion-owned battle scene/HUD presentation. OFF yields those layers to vanilla or another battle mod. Cooperative external scenes can still honor the separate BATTLE SPRITES, MOVE ANIMATIONS, and PLAYER TRAINER choices." },
     { key = "battleUiWip", label = "MODERN BATTLE UI", type = "toggle",
       default = true,
       description = "Use Kanto in Motion's integrated Modern UI for battle commands, move selection, battle messages, and supported battle menu screens. OFF keeps KIM's battle system, animated sprites, move animations, shiny effects, and battle HUD available, but yields the battle UI/dialog layer to vanilla or another battle UI mod." },
     { key = "battleSprites", label = "BATTLE SPRITES", type = "toggle",
       default = true,
-      description = "Animate battle Pokemon without enabling voxel rendering." },
+      description = "Use Kanto in Motion animated battle Pokemon. Cooperative external scenes such as PotatoVoxel can honor this independently even when KIM BATTLE SYSTEM is OFF." },
     { key = "battleShinyOdds", label = "SHINY ODDS", type = "choice",
       default = "native", choices = {
         { "NATIVE 1/8192", "native" }, { "1/4096", "4096" },
@@ -249,7 +253,7 @@ return function(mod)
       }, description = "Wild shiny encounter odds. NATIVE leaves Gen 1 DVs untouched (the canonical Gen 2 shiny pattern occurs naturally at 1/8192). Other choices roll exact Kanto in Motion shiny odds when a wild Pokemon is created. Shiny DVs are stored on the Pokemon, so a caught shiny stays shiny." },
     { key = "battleAnimations", label = "MOVE ANIMATIONS", type = "toggle",
       default = true,
-      description = "Use the integrated Kanto Rework / Pokemon Essentials animations for all 165 Gen 1 moves while KIM BATTLE SYSTEM is ON. OFF falls back to the active battle provider's native move animations. BATTLE SYSTEM OFF always disables KIM move animations." },
+      description = "Use the integrated Kanto Rework / Pokemon Essentials animations for all 165 Gen 1 moves. Battle Art 3D-BTL and cooperative external scenes such as PotatoVoxel can honor this independently even when KIM BATTLE SYSTEM is OFF. OFF falls back to the active battle provider's native move animations." },
     { key = "battleFrontGeneration", label = "FRONT SET", type = "choice",
       default = "menu", choices = {
         { "SAME AS MENU", "menu" }, { "GEN 2", "gen2" },
@@ -271,7 +275,7 @@ return function(mod)
         { "BROCK FRONT", "brock_front" }, { "BULMA FRONT", "bulma_front" },
         { "GARY FRONT", "gary_front" },
         { "BOY", "boy" }, { "LASS", "lass" }, { "HILBERT", "hilbert" },
-      }, description = "Choose the player trainer shown during the battle intro/send-out. ANIMATION ON plays that trainer's five-frame intro atlas when available; ANIMATION OFF holds the same trainer on its first frame. PNG/BOY/LASS/HILBERT are static-only, and DEFAULT / ROM yields to the game or another trainer-sprite provider." },
+      }, description = "Choose the player trainer shown during the battle intro/send-out. ANIMATION ON plays that trainer's five-frame intro atlas when available; ANIMATION OFF holds the same trainer on its first frame. Cooperative external scenes such as PotatoVoxel can use this choice too. PNG/BOY/LASS/HILBERT are static-only, and DEFAULT / ROM yields to the game or another trainer-sprite provider." },
     { key = "battlePlayerSize", label = "PLAYER PKMN SIZE", type = "choice",
       default = "125", choices = {
         { "50%", "50" }, { "55%", "55" }, { "60%", "60" }, { "65%", "65" },
@@ -1259,6 +1263,12 @@ return function(mod)
   -- battler immediately afterward.
   local BATTLE_BRIDGE_PREFIX = "__kanto_in_motion_battle__/"
   local battleProxyCache = {}
+  -- PotatoVoxel BACK SPRITES leaves the player on Gen1Recomp's flat pic
+  -- layer. Its picImage wrapper caches processed images by object identity, so
+  -- the normal mutable 48x48 KIM proxy can freeze/corrupt an animated frame.
+  -- Keep one immutable, frame-specific pinned drawable instead.
+  mod._kantoInMotionPotatoPinnedBackCache = {}
+  mod._kantoInMotionPotatoPinnedBackScaleActive = false
 
   local function battleSystemEnabled()
     return not IS_GEN2 and mod.options:get("battleSystem") ~= false
@@ -1302,6 +1312,11 @@ return function(mod)
     end
     return true
   end
+
+  -- Feature-level Battle Art handoff. BATTLE SYSTEM controls KIM's own arena/HUD,
+  -- but an active Battle Art 3D stage can still request KIM's independent
+  -- BATTLE SPRITES and MOVE ANIMATIONS lanes, matching PotatoVoxel.
+  mod._kantoInMotionBattleArt3DBattleEnabled = battleArt3DBattleEnabled
 
   -- KIM's HUD COLOR is the presentation authority whenever its battle system
   -- is enabled. While Battle Art owns only the 3D stage, mirror that choice
@@ -1447,6 +1462,111 @@ return function(mod)
     return frames[index]
   end
 
+  -- Cooperative staged-trainer bridge. Keep all helper locals inside this
+  -- scope so KIM's already-large main chunk does not retain more active locals
+  -- for the rest of startup. The exported closure keeps only what it needs.
+  do
+    local staticCache={}
+    local stagedCanvas=nil
+
+    local function staticImage(choice)
+      local hit=staticCache[choice]
+      if hit~=nil then return hit or nil end
+      local path=battleTrainerStaticPath(choice)
+      if not path or not (love and love.graphics
+          and type(love.graphics.newImage)=="function") then
+        staticCache[choice]=false
+        return nil
+      end
+      local image
+      local ok=pcall(function()
+        image=love.graphics.newImage(path)
+        if image and type(image.setFilter)=="function" then
+          image:setFilter("nearest","nearest")
+        end
+      end)
+      staticCache[choice]=(ok and image) or false
+      return (ok and image) or nil
+    end
+
+    local function stagedCard(battle,choice)
+      if not (battle and love and love.graphics
+          and type(love.graphics.newCanvas)=="function") then return nil end
+      local frame=battleTrainerFrameForBattle(battle,choice) or staticImage(choice)
+      if not frame then return nil end
+      if not stagedCanvas then
+        local ok,canvas=pcall(love.graphics.newCanvas,160,144,{dpiscale=1})
+        if not ok or not canvas then return nil end
+        if type(canvas.setFilter)=="function" then
+          pcall(canvas.setFilter,canvas,"nearest","nearest")
+        end
+        stagedCanvas=canvas
+      end
+
+      -- Potato's sideTexture does NOT capture the trainer in the ordinary
+      -- Gen1 UI slot at x=8. While it is building a billboard texture it
+      -- temporarily remaps backPlacement so the art is centred on TEX_AX=80
+      -- with its feet on TEX_AY=96, then hangs that complete 160x144 card on
+      -- the player arena cell. Desktop already reaches that native contract.
+      -- v92's mobile direct-card bridge accidentally kept x=8 and also added
+      -- introSlide/shake a second time, which is why only a displaced fragment
+      -- survived beside the correctly redrawn trainer in v93/v94. Mirror the
+      -- actual Potato capture here: centred/grounded, with only picOffset()
+      -- carrying SlideTrainerPicOffScreen.
+      local picOffset=0
+      if type(battle.picOffset)=="function" then
+        local ok,got=pcall(battle.picOffset,battle,"back")
+        if ok then picOffset=tonumber(got) or 0 end
+      end
+
+      local g=love.graphics
+      local previous=g.getCanvas and g.getCanvas() or nil
+      g.push("all")
+      local ok=pcall(function()
+        g.setCanvas(stagedCanvas)
+        g.origin()
+        g.clear(0,0,0,0)
+        g.setShader()
+        g.setBlendMode("alpha")
+        g.setColor(1,1,1,1)
+        local w,h=frame:getDimensions()
+        g.draw(frame,80-w*0.5+picOffset,96-h)
+      end)
+      if previous then g.setCanvas(previous) else g.setCanvas() end
+      g.pop()
+      if not ok then return nil end
+      return stagedCanvas
+    end
+
+    -- PLAYER TRAINER remains an identity choice even when a cooperative mod
+    -- owns the 3D arena. ROM/default yields; explicit KIM choices provide the
+    -- existing Battle Art-derived trainer frames, animated when available.
+    mod.exports._kantoInMotionStagedBattleTrainer=function(battle,side)
+      if type(battle)~="table" or side~="player" then return nil end
+      if not battle.showPlayerBack or battle.safari or battle.demo then return nil end
+      local choice=mod.options:get("battleTrainerSprite") or "rom"
+      if choice=="rom" then return nil end
+      local card=stagedCard(battle,choice)
+      if not card then return nil end
+      return card,1,{trainer=true,captureW=160,captureH=144,ax=80,ay=96}
+    end
+
+    -- Raw trainer-frame seam for cooperative renderers that already know how
+    -- to capture Gen1's trainer slot themselves.  PotatoVoxel is one of those:
+    -- on mobile its own sideTexture wrapper must remain the authority for the
+    -- 160x144 card/anchor transform.  Returning the frame instead of a finished
+    -- card lets KIM swap only the artwork for the duration of Potato's native
+    -- capture, which avoids both the clipped mobile billboard and the duplicate
+    -- vanilla trainer without taking over the 3D stage.
+    mod.exports._kantoInMotionBattleTrainerFrame=function(battle)
+      if type(battle)~="table" or not battle.showPlayerBack
+          or battle.safari or battle.demo then return nil end
+      local choice=mod.options:get("battleTrainerSprite") or "rom"
+      if choice=="rom" then return nil end
+      return battleTrainerFrameForBattle(battle,choice) or staticImage(choice)
+    end
+  end
+
   if mod.content and mod.content.battle_sprite_scales
       and type(mod.content.battle_sprite_scales.register)=="function" then
     for key in pairs(BATTLE_TRAINERS) do
@@ -1461,11 +1581,26 @@ return function(mod)
   if mod.hooks and type(mod.hooks.wrap)=="function" and not IS_GEN2 then
     mod.hooks:wrap("player.sprite",function(nextFn,path,ctx)
       local resolved=nextFn(path,ctx)
-      if not (battleSystemEnabled() and not externalBattleSceneOwnerRegistered()) then
-        return resolved
-      end
       if type(ctx)~="table" or ctx.kind~="battle" or ctx.side~="back"
           or ctx.demo or ctx.oakDemo then return resolved end
+
+      -- An explicit PLAYER TRAINER choice is an identity selection, not a
+      -- request for KIM to own the whole battle scene.  KIM normally yields
+      -- this hook to an external scene owner; PotatoVoxel is cooperative and
+      -- explicitly asks KIM to keep the selected trainer.  Resolve that at
+      -- the engine's real player.sprite seam so BattleState.playerBackPic is
+      -- born with the KIM asset and Potato's native side capture cannot fall
+      -- back to Red before our later texture provider gets a chance to run.
+      local ownsTrainer=battleSystemEnabled() and not externalBattleSceneOwnerRegistered()
+      if not ownsTrainer then
+        local probe=mod._kantoInMotionExternalStageAllowsKimTrainer
+        if type(probe)=="function" then
+          local ok,value=pcall(probe,ctx.battle)
+          ownsTrainer=ok and value==true
+        end
+      end
+      if not ownsTrainer then return resolved end
+
       local choice=mod.options:get("battleTrainerSprite") or "rom"
       if choice=="rom" then return resolved end
       local custom=battleTrainerStaticPath(choice)
@@ -1501,9 +1636,12 @@ return function(mod)
   end
 
   local function battleLiteHudActive()
+    local externalKimHud = type(mod._kantoInMotionExternalStageUsesKimHud) == "function"
+      and mod._kantoInMotionExternalStageUsesKimHud() == true
     return battleSystemEnabled()
       and (not externalBattleSceneOwnerRegistered()
-        or mod._kantoInMotionMobileBattleArtStageOnlyActive())
+        or mod._kantoInMotionMobileBattleArtStageOnlyActive()
+        or externalKimHud)
   end
 
 
@@ -1585,6 +1723,125 @@ return function(mod)
     end
     return drawBattleProxy(proxy)
   end
+
+  -- Potato BACK SPRITES keeps the player in Gen1Recomp's original flat
+  -- back-pic slot. That slot is a fixed 48x48 logical presentation window;
+  -- feeding it a raw 98x83 Gen5 frame lets the native pic scissor cut the
+  -- right/bottom of large species such as Charizard. Build one immutable
+  -- 48x48 proxy PER ANIMATION FRAME instead: the complete KIM frame is fitted
+  -- into the authored slot, bottom-centred, then Potato/Gen1Recomp scale the
+  -- slot exactly like an ordinary back pic. The immutable object also avoids
+  -- Potato's pic-processing cache freezing a mutable animation Canvas.
+  mod._kantoInMotionPotatoPinnedBackFrame = function(record, generation, variant, species)
+    if not (record and love.graphics and love.graphics.newCanvas) then return nil end
+    local frame = currentFrame(record)
+    local source = renderPresentationFrame(record, generation, species, frame,
+      "back", variant or "normal", true)
+    if not source then return nil end
+    local sw, sh = source:getDimensions()
+    local width, height = 48, 48
+    local key = table.concat({ generation, variant or "normal", species,
+      tostring(frame), "48x48" }, ":")
+    local canvas = mod._kantoInMotionPotatoPinnedBackCache[key]
+    if canvas then return canvas end
+    local ok, made = pcall(love.graphics.newCanvas, width, height, { dpiscale = 1 })
+    if not ok or not made then return nil end
+    if made.setFilter then pcall(made.setFilter, made, "nearest", "nearest") end
+    local scale = math.min(width / math.max(1, sw), height / math.max(1, sh), 1)
+    local dw, dh = sw * scale, sh * scale
+    local dx, dy = (width - dw) * 0.5, height - dh
+    local previous = love.graphics.getCanvas and love.graphics.getCanvas() or nil
+    love.graphics.push("all")
+    love.graphics.setCanvas(made)
+    love.graphics.origin()
+    love.graphics.setScissor()
+    love.graphics.setShader()
+    love.graphics.setBlendMode("alpha", "alphamultiply")
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.draw(source, dx, dy, 0, scale, scale)
+    if previous then love.graphics.setCanvas(previous) else love.graphics.setCanvas() end
+    love.graphics.pop()
+    mod._kantoInMotionPotatoPinnedBackCache[key] = made
+    return made
+  end
+
+  -- Native-resolution pinned-back provider for cooperative external stages.
+  -- The 48x48 proxy above is retained as a compatibility fallback, but Potato
+  -- can now suppress that low-resolution source copy and redraw the original
+  -- KIM atlas cell directly at final window resolution. This keeps exactly the
+  -- same 48x48 logical footprint while avoiding the destructive shrink-to-48
+  -- followed by a large window upscale that made Charizard visibly blocky.
+  mod.exports._kantoInMotionPotatoPinnedBackNative = function(battle)
+    if mod.options:get("battleSprites") == false or type(battle) ~= "table" then
+      return nil
+    end
+    local battler = battle.player
+    local mon = battler and battler.mon
+    if not mon or battle.showPlayerBack or battle.sendingOut
+        or battle.safari or battle.demo then
+      return nil
+    end
+    local record, generation, species, shiny = battleRecord(mon.species, "back", mon)
+    if not record then return nil end
+    local frame = currentFrame(record)
+    local source = renderPresentationFrame(record, generation, species, frame,
+      "back", shiny and "shiny" or "normal", true)
+    if not source or type(source.getDimensions) ~= "function" then return nil end
+    local sw, sh = source:getDimensions()
+    if not (sw and sh and sw > 0 and sh > 0) then return nil end
+    -- Preserve each Gen 5 back sprite's authored relative dimensions instead
+    -- of normalizing every species into the same 48x48 Gen-1 back-pic slot.
+    -- That old fit-to-48 step made naturally small Pokemon (Pikachu in
+    -- particular) nearly as large as Charizard. PLAYER PKMN SIZE now scales
+    -- the native atlas frame directly: 100% = 1.00x, 125% = 1.25x, etc.
+    local pct = tonumber(mod.options:get("battlePlayerSize")) or 125
+    pct = math.max(50, math.min(200, pct))
+    local fit = pct / 100
+    return source, fit
+  end
+
+  -- Public/private bridge for cooperative staged-battle renderers.
+  -- PotatoVoxel captures its billboard textures through the engine's native
+  -- pic-layer function, which predates KIM's drawPicsLayer substitution.
+  -- Give that renderer the exact same live KIM Canvas explicitly rather than
+  -- making it guess from a filename or copying Pokémon assets.
+  mod.exports._kantoInMotionStagedBattleSprite = function(battle, side)
+    -- BATTLE SPRITES is intentionally independent for a cooperative external
+    -- scene. KIM's full BATTLE SYSTEM may be OFF while PotatoVoxel owns the
+    -- arena/camera; the explicit sprite toggle still decides whether KIM art
+    -- is supplied to that scene. Standalone KIM battles continue to use the
+    -- battleLiteOwnsSprites() master gate elsewhere.
+    if mod.options:get("battleSprites") == false or type(battle) ~= "table" then
+      return nil
+    end
+    local battler = side == "enemy" and battle.enemy or battle.player
+    local mon = battler and battler.mon
+    if not mon then return nil end
+    if side == "enemy" then
+      if battle.showEnemyTrainer or battle.enemySendingOut or battle.enemyHidden then
+        return nil
+      end
+    else
+      if battle.showPlayerBack or battle.sendingOut or battle.safari or battle.demo then
+        return nil
+      end
+    end
+    local view = side == "enemy" and "front" or "back"
+    local record, generation, species, shiny = battleRecord(mon.species, view, mon)
+    if not record then return nil end
+    local image = battleProxy(record, generation, view,
+      shiny and "shiny" or "normal", species)
+    if not image then return nil end
+    local scale = 1
+    if side == "player" then
+      local pct = tonumber(mod.options:get("battlePlayerSize")) or 125
+      pct = math.max(50, math.min(200, pct))
+      scale = pct / 100
+    end
+    return image, scale
+  end
+
 
   local function resolveBattleBridge(path, mode)
     local record, generation, side, variant, species = decodeBattleBridgePath(path)
@@ -2203,11 +2460,50 @@ return function(mod)
           return canvas
         end
         BattleState.drawPicsLayer = function(self, ...)
-          if not battleLiteOwnsSprites() then return nativeDrawPicsLayer(self, ...) end
+          local externalKimSprites = false
+          if type(mod._kantoInMotionExternalStageUsesKimSprites) == "function" then
+            local okExternal, valueExternal = pcall(
+              mod._kantoInMotionExternalStageUsesKimSprites, self)
+            externalKimSprites = okExternal and valueExternal == true
+          end
+          local externalPinnedBack = false
+          if externalKimSprites
+              and type(mod._kantoInMotionExternalStagePlayerBackPinned) == "function" then
+            local okPinned, valuePinned = pcall(
+              mod._kantoInMotionExternalStagePlayerBackPinned, self)
+            externalPinnedBack = okPinned and valuePinned == true
+          end
+          if not battleLiteOwnsSprites() and not externalKimSprites then
+            return nativeDrawPicsLayer(self, ...)
+          end
           local oldEnemy = self.enemy and self.enemy.sprite
           local oldPlayer = self.player and self.player.sprite
-          local changedEnemy, changedPlayer = false, false
+          local oldPlayerBack = self.playerBackPic
+          local changedEnemy, changedPlayer, changedPlayerBack = false, false, false
           local direct = battleLiteFullScreenActive()
+
+          -- Potato BACK SPRITES is a completely different player path from
+          -- its staged 3D billboard provider: the player's trainer/Pokemon is
+          -- intentionally left in Gen1Recomp's flat back-pic slot.  That is
+          -- why the earlier mobile trainer fixes never touched the malformed
+          -- fragment seen with BATTLE SYSTEM = OFF -- Potato never called the
+          -- player texture provider at all.  On mobile only, hide this native
+          -- trainer source copy for the one intro phase; potato_voxel_compat
+          -- redraws one complete trainer at final resolution in the same
+          -- pinned slot. Desktop keeps the already-working native path.
+          local mobilePinnedTrainer = false
+          if externalPinnedBack and not battleSystemEnabled() and self.showPlayerBack
+              and type(mod._kantoInMotionNativeMobileHost) == "function" then
+            local okMobile, isMobile = pcall(mod._kantoInMotionNativeMobileHost)
+            mobilePinnedTrainer = okMobile and isMobile == true
+          end
+          if mobilePinnedTrainer then
+            local blank = transparentPic()
+            if blank then
+              self.playerBackPic = blank
+              changedPlayerBack = true
+            end
+          end
 
           if self.enemy and self.enemy.mon and not self.enemySendingOut then
             local record, generation, species, shiny = battleRecord(
@@ -2237,15 +2533,31 @@ return function(mod)
                 local blank = transparentPic()
                 if blank then self.player.sprite = blank; changedPlayer = true end
               else
-                local image = battleProxy(record, generation, "back",
-                  shiny and "shiny" or "normal", species)
+                local variant = shiny and "shiny" or "normal"
+                local image
+                if externalPinnedBack then
+                  -- Potato's pinned back is redrawn from the native KIM atlas
+                  -- at final window resolution by potato_voxel_compat. Keep the
+                  -- original 160x144 source layer transparent so it cannot
+                  -- downsample the sprite first or leave a duplicate behind.
+                  image = transparentPic()
+                else
+                  image = battleProxy(record, generation, "back", variant, species)
+                end
                 if image then self.player.sprite = image; changedPlayer = true end
               end
             end
           end
+          -- Keep Potato's integer-scale seam at 1x for the already-sized,
+          -- frame-stable KIM pinned back drawable. The flag lives only across
+          -- this synchronous native draw and is cleared even if the draw fails.
+          local previousPinnedScale = mod._kantoInMotionPotatoPinnedBackScaleActive
+          mod._kantoInMotionPotatoPinnedBackScaleActive = externalPinnedBack and changedPlayer
           local result = { pcall(nativeDrawPicsLayer, self, ...) }
+          mod._kantoInMotionPotatoPinnedBackScaleActive = previousPinnedScale
           if changedEnemy and self.enemy then self.enemy.sprite = oldEnemy end
           if changedPlayer and self.player then self.player.sprite = oldPlayer end
+          if changedPlayerBack then self.playerBackPic = oldPlayerBack end
           local ok = table.remove(result, 1)
           if not ok then error(result[1], 0) end
           return unpack(result)
@@ -2275,13 +2587,20 @@ return function(mod)
         BattleState.draw = function(self, ...)
           local ownsFullscreen = battleLiteFullScreenActive()
           local ownsMobileStageUi = mod._kantoInMotionMobileBattleArtStageOnlyActive()
+          local ownsExternalMobileStageUi = false
+          if type(mod._kantoInMotionNativeMobileHost) == "function"
+              and mod._kantoInMotionNativeMobileHost()
+              and type(mod._kantoInMotionExternalStageUsesKimHud) == "function" then
+            local okExternal, value = pcall(mod._kantoInMotionExternalStageUsesKimHud, self)
+            ownsExternalMobileStageUi = okExternal and value == true
+          end
           if not ownsFullscreen then
             if pendingFullscreenBattle == self then pendingFullscreenBattle = nil end
-            -- Battle Art can own the 3D stage without owning the 2D battle UI.
-            -- Keep KIM's hybrid marker live on that mobile stage so bundled
-            -- Modern UI routes commands/moves/messages through its lower-panel
-            -- presenter while the native BattleState continues to own input.
-            self._kantoInMotionBattleLite = ownsMobileStageUi and true or nil
+            -- A cooperative 3D stage can own the world without owning the 2D
+            -- battle UI. Keep KIM's hybrid marker live on mobile Battle Art
+            -- and PotatoVoxel so Modern UI sees the same lower-panel contract
+            -- before render.compose clears/scrubs the source canvas.
+            self._kantoInMotionBattleLite = (ownsMobileStageUi or ownsExternalMobileStageUi) and true or nil
             if self._kantoInMotionOwnsBattlePaper then
               self.letterboxWhite = nil
               self._kantoInMotionOwnsBattlePaper = nil
@@ -2377,7 +2696,19 @@ return function(mod)
         BattleState._kantoInMotionBattleScale = nativeResolveScale
         BattleState.resolveBattleScale = function(data, side, path, species)
           local base = nativeResolveScale(data, side, path, species)
+          if side == "back" and mod._kantoInMotionPotatoPinnedBackScaleActive then
+            -- The Potato-pinned KIM drawable is now a normal 48x48 logical
+            -- back slot, so preserve Gen1Recomp/Potato's native scale instead
+            -- of forcing 1x. This keeps the full fitted sprite at the same
+            -- authored size/anchor as an ordinary back pic.
+            return base
+          end
           if not (battleSystemEnabled() and not externalBattleSceneOwnerRegistered() and species) then
+            -- Cooperative Potato sprite replacement intentionally leaves this
+            -- scale seam native. v51 used that path and rendered large back
+            -- sprites such as Charizard correctly; forcing a 1.25x logical
+            -- scale here shrank the already display-sized KIM proxy into the
+            -- clipped fragment seen in v53/v54.
             return base
           end
 
@@ -2952,7 +3283,8 @@ return function(mod)
     local fit = math.max(1, math.floor(math.min(vw / 160, vh / 144)))
     local stage = math.max(1, fit - 1)
     local lx = math.floor((vw - 160 * stage) * 0.5)
-    local portraitTouch=touchBattleOrientation(game)=="portrait"
+    local touchOrientation=touchBattleOrientation(game)
+    local portraitTouch=touchOrientation=="portrait"
     local pixelScale = math.max(1, math.floor(stage * 2 / 3 + 0.5))
     if portraitTouch then
       -- 4x is the accepted 1920-wide battle-sprite rung. Scale that rung by
@@ -2960,12 +3292,31 @@ return function(mod)
       -- larger than the newly width-fitted arena.
       pixelScale=math.max(1,math.floor(4*(vw/1920)+0.5))
     end
+
+    -- Landscape touch skins reserve large side gutters for the virtual pad and
+    -- A/B buttons. `vw` is therefore only the centre game cutout (~960px on a
+    -- 2048px phone), even though the intended mobile battler rung should track
+    -- the full framebuffer. Using the cutout made PLAYER PKMN SIZE = 100% land
+    -- on a 3x sprite where the authored mobile baseline is about 4x. Keep 100%
+    -- as a true 1.00x multiplier and correct only that baseline.
+    local playerPixelScale=pixelScale
+    if touchOrientation=="landscape" then
+      local world=battleWorldMetrics()
+      local fullW=world and tonumber(world.pixelWidth) or vw
+      local authored=math.max(1,math.floor(4*(fullW/1920)+0.5))
+      playerPixelScale=math.max(pixelScale,math.min(stage,authored))
+    end
+
     if mod.options:get("battleArenaFill")=="krs" then
       local geo=krsArenaGroundGeometry(game,battle,vw,vh,pixelScale)
-      if geo then return geo end
+      if geo then
+        geo.playerPixelScale=playerPixelScale
+        return geo
+      end
     end
     local geo = {
-      scale = stage, pixelScale = pixelScale, lx = lx, ly = 0,
+      scale = stage, pixelScale = pixelScale, playerPixelScale = playerPixelScale,
+      lx = lx, ly = 0,
       playerX = lx + 26 * stage, playerY = 110 * stage,
       enemyX = lx + 124 * stage, enemyY = 65 * stage,
     }
@@ -3012,7 +3363,9 @@ return function(mod)
     if not frame then return nil end
     if frame.setFilter then pcall(frame.setFilter, frame, "nearest", "nearest") end
 
-    local scale = geo.pixelScale * battlerGrow(battle, battler)
+    local basePixelScale = side == "player"
+      and (tonumber(geo.playerPixelScale) or geo.pixelScale) or geo.pixelScale
+    local scale = basePixelScale * battlerGrow(battle, battler)
     if side == "player" then
       local pct = tonumber(mod.options:get("battlePlayerSize")) or 125
       pct = math.max(50, math.min(200, pct))
@@ -3323,7 +3676,23 @@ return function(mod)
     -- fall back to the vanilla battle menus.
     if not integratedModernUiEnabled() then return false end
     if mod._kantoInMotionModernUiInstalled ~= true then return false end
-    if not battleSystemEnabled() or externalBattleSceneOwnerRegistered() then return false end
+    if not battleSystemEnabled() then return false end
+
+    -- A generic external scene owner normally makes this helper yield, but an
+    -- owner registered as LOWER/FULL has explicitly asked KIM Modern UI to
+    -- keep the lower battle presentation. PotatoVoxel uses LOWER: it owns the
+    -- 3D arena while KIM owns commands/moves/dialog. The integrated Modern UI
+    -- module already honors this same registry; mirror that decision here so
+    -- battle.bottom_ui_visible suppresses the source panel too. Legacy Battle
+    -- Art remains on its established path because it has no registry entry.
+    if externalBattleSceneOwnerRegistered() then
+      local spec = mod._kantoInMotionInterop
+        and type(mod._kantoInMotionInterop.battleOwnerFor) == "function"
+        and mod._kantoInMotionInterop:battleOwnerFor(game,state) or nil
+      local mode = type(spec) == "table"
+        and tostring(spec.modernUi or spec.mode or "native"):lower() or "native"
+      if mode ~= "lower" and mode ~= "full" then return false end
+    end
     return mod.options:get("battleUiWip") ~= false
   end
 
@@ -3362,6 +3731,99 @@ return function(mod)
     end
     return true
   end
+
+  -- Android/iOS composes the BattleState source before render.hud. Typed Move
+  -- Colors can therefore decide to draw its detached 2x2 selector before the
+  -- old render.hud-only compatibility install ran. Keep the same desktop
+  -- detached() policy, but install it immediately before every BattleState draw
+  -- as well. Store the installer on `mod` rather than adding locals to this
+  -- already-large bootstrap function.
+  mod._kantoInMotionEnsureTypedPreDrawCompat = function()
+    local okState,BattleState=pcall(require,"src.battle.BattleState")
+    if not (okState and type(BattleState)=="table"
+        and type(BattleState.draw)=="function") then return false end
+    if mod._kantoInMotionTypedPreDrawClass==BattleState
+        and BattleState.draw==mod._kantoInMotionTypedPreDrawFn then
+      return true
+    end
+    -- Capture this layer's inner draw in a per-wrapper local. A later mod may
+    -- wrap BattleState.draw and cause us to install a newer outer layer; using
+    -- one shared mutable inner upvalue would make the older layer recurse.
+    local innerDraw=BattleState.draw
+    local wrapper
+    wrapper=function(self,...)
+      pcall(installTypedBattleLiteInputCompat)
+      return innerDraw(self,...)
+    end
+    mod._kantoInMotionTypedPreDrawClass=BattleState
+    mod._kantoInMotionTypedPreDrawFn=wrapper
+    BattleState.draw=wrapper
+    return true
+  end
+
+  pcall(mod._kantoInMotionEnsureTypedPreDrawCompat)
+  if mod.events and type(mod.events.on)=="function" then
+    mod.events:on("mods.loaded",function()
+      pcall(mod._kantoInMotionEnsureTypedPreDrawCompat)
+      pcall(installTypedBattleLiteInputCompat)
+    end)
+    mod.events:on("game.ready",function()
+      pcall(mod._kantoInMotionEnsureTypedPreDrawCompat)
+      pcall(installTypedBattleLiteInputCompat)
+    end)
+    mod.events:on("battle.started",function()
+      pcall(mod._kantoInMotionEnsureTypedPreDrawCompat)
+      pcall(installTypedBattleLiteInputCompat)
+    end)
+  end
+
+  -- Typed Move Colors 0.3.9 has two battle presenters: an in-canvas
+  -- `battle.overlay` decorator and a finished-window `render.hud` presenter.
+  -- PotatoVoxel reports a wide battle layout, so Typed uses the in-canvas
+  -- decorator instead of its detached presenter. That is why changing only
+  -- Typed's detached/wide-layout decision did not remove the second move grid.
+  --
+  -- KIM Modern UI already owns move selection while BATTLE SYSTEM and MODERN
+  -- BATTLE UI are ON. During only the nested draw hooks used by Typed, hide the
+  -- move-selection phase, then restore it before KIM Modern UI paints. Keep
+  -- these helpers on `mod` because this bootstrap is already at Lua's local
+  -- variable ceiling.
+  mod._kantoInMotionOwnsTypedMoveSurface = function(battle)
+    if not battle or not typedMoveColorsHandle() then return false end
+    if not battleSystemEnabled() then return false end
+    if not integratedModernUiEnabled() then return false end
+    if mod._kantoInMotionModernUiInstalled ~= true then return false end
+    if mod.options:get("battleUiWip") == false then return false end
+    return battle.phase == "moveSelect" or battle.phase == "mimicSelect"
+  end
+
+  mod._kantoInMotionWithTypedMovePhaseHidden = function(battle, fn)
+    if not mod._kantoInMotionOwnsTypedMoveSurface(battle) then return fn() end
+    local oldPhase = battle.phase
+    battle.phase = "kantoInMotionMovePresenter"
+    local result = { pcall(fn) }
+    battle.phase = oldPhase
+    local ok = table.remove(result, 1)
+    if not ok then error(result[1], 0) end
+    return unpack(result)
+  end
+
+  -- Typed's in-canvas move cards are drawn from its -100 battle.overlay link.
+  -- Priority -50 places this immediately outside that link, so Typed sees the
+  -- temporary non-move phase while the real battle state stays unchanged.
+  mod.hooks:wrap("battle.overlay", function(nextFn, battle)
+    return mod._kantoInMotionWithTypedMovePhaseHidden(battle,
+      function() return nextFn(battle) end)
+  end, -50)
+
+  -- Also cover Typed's -100 final-window presenter. Modern UI's +100 HUD link
+  -- is outside this wrapper: the real phase is restored before KIM draws its
+  -- one authoritative move panel.
+  mod.hooks:wrap("render.hud", function(nextFn, game, viewport)
+    return mod._kantoInMotionWithTypedMovePhaseHidden(
+      currentBattleState and currentBattleState(game) or nil,
+      function() return nextFn(game, viewport) end)
+  end, -50)
 
   local function withTypedBattlePresentationSuppressed(game, fn)
     pcall(installTypedBattleLiteInputCompat)
@@ -3869,15 +4331,24 @@ return function(mod)
     local ownColorMode = rawget(battle, "colorMode")
     local mobileStageOnly = type(mod._kantoInMotionMobileBattleArtStageOnlyActive) == "function"
       and mod._kantoInMotionMobileBattleArtStageOnlyActive()
-    local ownDramaticShapeShot = mobileStageOnly and rawget(battle, "dramaticShapeShot") or nil
+    local mobileExternalStageHud = false
+    if not mobileStageOnly
+        and type(mod._kantoInMotionNativeMobileHost) == "function"
+        and mod._kantoInMotionNativeMobileHost()
+        and type(mod._kantoInMotionExternalStageUsesKimHud) == "function" then
+      local okExternal, value = pcall(mod._kantoInMotionExternalStageUsesKimHud, battle)
+      mobileExternalStageHud = okExternal and value == true
+    end
+    local mobileSafeCapture = mobileStageOnly or mobileExternalStageHud
+    local ownDramaticShapeShot = mobileSafeCapture and rawget(battle, "dramaticShapeShot") or nil
     local stackBase = nil
 
-    if mobileStageOnly and type(g.getStackDepth) == "function" then
+    if mobileSafeCapture and type(g.getStackDepth) == "function" then
       local okDepth, depth = pcall(g.getStackDepth)
       if okDepth then stackBase = tonumber(depth) end
     end
 
-    if mobileStageOnly then
+    if mobileSafeCapture then
       local okPush, pushErr = pcall(g.push, "all")
       if not okPush then
         if mod.log and type(mod.log.warn) == "function" then
@@ -3911,14 +4382,42 @@ return function(mod)
       battle._kantoInMotionHudCapture = true
       battle._kantoInMotionPartyBallCanvas = battlePartyBallCanvas
 
-      -- Mobile Battle Art wraps drawHUDs and can suppress this private KIM
-      -- capture through its staged-scene marker. Remove that marker only on
-      -- Android/iOS stage-only battles. Desktop keeps the v11 call untouched.
-      if mobileStageOnly then battle.dramaticShapeShot = nil end
+      -- Cooperative staged renderers may wrap/suppress drawHUDs whenever
+      -- dramaticShapeShot is present. This is KIM's private 160x144 scratch
+      -- capture, not a request to redraw the 3D stage, so temporarily hide the
+      -- staged-shot marker on Android/iOS. That makes both Battle Art and
+      -- PotatoVoxel delegate to Gen1Recomp's native HUD glyph draw.
+      if mobileSafeCapture then battle.dramaticShapeShot = nil end
       battle:drawHUDs(slide or 0)
+
+      -- The party row is authored into its own true-colour canvas above. If an
+      -- engine/mod HUD wrapper also bakes the source balls into the main HUD
+      -- canvas, KIM's shadow pass makes that stale row visible behind the
+      -- correct Colorfix balls (most obvious after Battle Art persisted OG
+      -- layout and Potato was re-enabled). Scrub only the exact 8px party-row
+      -- cells, and only while those rows are actually active; live HP numbers
+      -- share y=80 later in the battle and must never be touched.
+      if battlePartyBallCanvas and type(g.setBlendMode) == "function"
+          and type(g.rectangle) == "function" then
+        local intro = battle.introBalls and (slide or 0) == 0
+        local enemyRow = (battle.showEnemyBalls and battle.enemyParty
+            and (slide or 0) == 0)
+          or (intro and battle.enemyParty
+            and (battle.kind == "trainer" or battle.kind == "link"))
+        if intro or enemyRow then
+          g.setCanvas(battleHudCanvas)
+          g.setShader()
+          g.setBlendMode("replace")
+          g.setColor(0, 0, 0, 0)
+          if intro then g.rectangle("fill", 88, 80, 48, 8) end
+          if enemyRow then g.rectangle("fill", 24, 16, 48, 8) end
+          g.setBlendMode("alpha")
+          g.setColor(1, 1, 1, 1)
+        end
+      end
     end)
 
-    if mobileStageOnly then
+    if mobileSafeCapture then
       -- A swallowed nested draw error must not strand graphics pushes before
       -- Gen1Recomp reaches GameViewport.finish -> TouchControls.
       if stackBase ~= nil and type(g.getStackDepth) == "function" then
@@ -4312,7 +4811,22 @@ return function(mod)
       if not battle and composeGame then battle=currentBattleState(composeGame) end
       local childMenuOpen=battle and composeGame
         and battleChildMenuOpen(composeGame,battle) or false
-      if battle and not childMenuOpen and battleLiteFullScreenActive()
+      -- PotatoVoxel is also a cooperative scene owner on mobile: its world and
+      -- camera stay live, but when KIM owns the HUD/Modern lower panel we must
+      -- remove the same finished native battle UI surface that Battle Lite
+      -- removes. Otherwise the source trainer and native move menu survive
+      -- underneath KIM's reconstructed trainer + Modern UI, producing the
+      -- duplicate trainer and stacked attack menus seen in v83.
+      local externalKimHudStage=false
+      if battle and type(mod._kantoInMotionExternalStageUsesKimHud)=="function" then
+        local okExternal,value=pcall(mod._kantoInMotionExternalStageUsesKimHud,battle)
+        externalKimHudStage=okExternal and value==true
+      end
+      local mobileExternalKimHudStage=externalKimHudStage
+        and type(mod._kantoInMotionNativeMobileHost)=="function"
+        and mod._kantoInMotionNativeMobileHost() or false
+      if battle and not childMenuOpen
+          and (battleLiteFullScreenActive() or mobileExternalKimHudStage)
           and ctx and ctx.uiCanvas and love and love.graphics then
         -- Battle Art-style ownership: Modern UI has already had a chance to
         -- inspect/capture the untouched source (priority 100). Now remove the
@@ -4348,7 +4862,11 @@ return function(mod)
     -- source text box is not needed in that mode and would otherwise update
     -- underneath the final-window compositor.
     mod.hooks:wrap("battle.bottom_ui_visible", function(nextFn, state)
-      if battleLiteFullScreenActive() and battleModernUiActive(state and state.game,state) then
+      local externalKimStage = state
+        and type(mod._kantoInMotionExternalStageUsesKimHud) == "function"
+        and mod._kantoInMotionExternalStageUsesKimHud(state) == true
+      if (battleLiteFullScreenActive() or externalKimStage)
+          and battleModernUiActive(state and state.game,state) then
         if state then state._kantoInMotionBottomUiSuppressed = true end
         return false
       end
@@ -4382,17 +4900,25 @@ return function(mod)
       local active = battle and battleLiteFullScreenActive() or false
       local battleArt3DActive = battle and battleArt3DBattleEnabled() or false
       local mobileBattleArtStageOnly = battle and mod._kantoInMotionMobileBattleArtStageOnlyActive() or false
+      local externalKimHudStage = battle
+        and type(mod._kantoInMotionExternalStageUsesKimHud) == "function"
+        and mod._kantoInMotionExternalStageUsesKimHud(battle) == true or false
+      local mobileExternalKimHudStage = externalKimHudStage
+        and type(mod._kantoInMotionNativeMobileHost) == "function"
+        and mod._kantoInMotionNativeMobileHost() or false
       if not battle or not battleSystemEnabled() or externalBattleSceneOwnerRegistered() then
         restoreBattleLayout(game)
       elseif battleSystemEnabled() and not externalBattleSceneOwnerRegistered() then
         forceBattleLayoutOG(game)
       end
       if battle then
-        battle._kantoInMotionBattleLite = (active or mobileBattleArtStageOnly) and true or nil
+        battle._kantoInMotionBattleLite = (active or mobileBattleArtStageOnly
+          or mobileExternalKimHudStage) and true or nil
         battle._kantoInMotion3DBattle = battleArt3DActive and true or nil
       end
       if game then
-        game._kantoInMotionFullscreenBattle = (active or mobileBattleArtStageOnly) and true or nil
+        game._kantoInMotionFullscreenBattle = (active or mobileBattleArtStageOnly
+          or mobileExternalKimHudStage) and true or nil
       end
 
       -- render.compose removed the complete native 160x144 battle surface.
@@ -4402,11 +4928,11 @@ return function(mod)
       -- Party/Bag child screens are full UI owners: never reconstruct battle
       -- furniture over them. This fixes the clipped/incomplete Pokemon menu
       -- and HP/status bands appearing on top of both Pokemon and Item screens.
-      local childMenuOpen = (active or mobileBattleArtStageOnly)
+      local childMenuOpen = (active or mobileBattleArtStageOnly or externalKimHudStage)
         and battleChildMenuOpen(game, battle) or false
       if battle then
-        battle._kantoInMotionMobileDialogRect = (active or mobileBattleArtStageOnly)
-          and mobileBattleDialogRect(battle,viewport) or nil
+        battle._kantoInMotionMobileDialogRect = (active or mobileBattleArtStageOnly
+          or mobileExternalKimHudStage) and mobileBattleDialogRect(battle,viewport) or nil
         -- Publish the exact mobile portrait battlefield rectangle in LOVE/window
         -- units. Modern UI must use this instead of its own responsive arena
         -- estimate: Android KRS placement is authored in physical-pixel space
@@ -4432,7 +4958,7 @@ return function(mod)
           end
         end
       end
-      if active and not childMenuOpen then
+      if (active or mobileExternalKimHudStage) and not childMenuOpen then
         pcall(drawNativeBattleOverlay,battle,viewport)
         if touchBattleOrientation(battle and battle.game)=="portrait"
             and not battleModernUiActive(game,battle) then
@@ -4450,7 +4976,8 @@ return function(mod)
       -- full-field image/color timing plane.
       local krbaBattleArtSession=nil
       local mobileBattleArt = battle and battleArt3DBattleEnabled() and mod._kantoInMotionNativeMobileHost()
-      if battle and battleSystemEnabled() and battle.dramaticShapeShot
+      if battle and battleArt3DBattleEnabled()
+          and battle.dramaticShapeShot
           and mod.exports and type(mod.exports._kantoInMotionKRBAActiveSession)=="function" then
         local okSess,sess=pcall(mod.exports._kantoInMotionKRBAActiveSession)
         if okSess and type(sess)=="table" and not sess.done then
@@ -4476,6 +5003,30 @@ return function(mod)
           pcall(shinyFn, mod._kantoInMotionShinyEncounterFx, battle, game)
         end
       end
+
+      -- PotatoVoxel publishes the same projected-foot stage contract that the
+      -- Battle Art shiny compositor consumes (dramaticShapeShot.player/enemy,
+      -- lx/ly/scale/pw/ph). KIM never called the shiny encounter module for a
+      -- Potato-owned stage, so shiny identity worked but the one-shot sparkle
+      -- and audio could never start. Keep the cue independent from BATTLE
+      -- SYSTEM ownership, exactly like KIM's cooperative Potato sprites and
+      -- move animations. Mobile uses the no-stack compositor; desktop uses the
+      -- established push/pop path.
+      if battle and not battleArt3DBattleEnabled()
+          and mod._kantoInMotionShinyEncounterFx
+          and type(mod._kantoInMotionPotatoNativeWideActive)=="function" then
+        local okPotatoShiny,potatoShinyStage=pcall(
+          mod._kantoInMotionPotatoNativeWideActive,battle)
+        if okPotatoShiny and potatoShinyStage==true then
+          local potatoShinyFn=(type(mod._kantoInMotionNativeMobileHost)=="function"
+              and mod._kantoInMotionNativeMobileHost())
+            and mod._kantoInMotionShinyEncounterFx.drawBattleArtMobile
+            or mod._kantoInMotionShinyEncounterFx.drawBattleArt
+          if type(potatoShinyFn)=="function" then
+            pcall(potatoShinyFn,mod._kantoInMotionShinyEncounterFx,battle,game)
+          end
+        end
+      end
       if krbaBattleArtSession then
         local frontFn = mobileBattleArt and krbaBattleArtSession.drawBattleArtScreenFrontMobile
           or krbaBattleArtSession.drawBattleArtScreenFront
@@ -4487,8 +5038,8 @@ return function(mod)
           function() return nextFn(game, viewport) end)
       end) }
 
-      if (active or mobileBattleArtStageOnly) and not childMenuOpen
-          and battleLiteHudActive() then
+      if (active or mobileBattleArtStageOnly or externalKimHudStage)
+          and not childMenuOpen and battleLiteHudActive() then
         drawBattleArtHud(battle, viewport, select(1, battleOffsets(battle)))
       end
 
@@ -5902,6 +6453,47 @@ return function(mod)
       elseif not okBall then
         mod.log:error("Battle Art mobile stage-only bridge failed: %s",tostring(ballInstaller))
       end
+    end
+
+    -- PotatoVoxel compatibility. PotatoVoxel remains the 3D scene/camera owner
+    -- while KIM is allowed to provide its animated Pokémon, KRBA move effects,
+    -- Modern lower battle UI and HP/status HUD. No PotatoVoxel files are edited.
+    okBall,ballInstaller=pcall(function()
+      local src=assert(mod:read("lib/potato_voxel_compat.lua"))
+      local loader=loadstring or load
+      return assert(loader(src,"@"..mod.path.."/lib/potato_voxel_compat.lua"))()
+    end)
+    if okBall and type(ballInstaller)=="function" then
+      okBall,ballInstaller=pcall(ballInstaller,mod,battleSystemEnabled,battleHudGeometry)
+    end
+    if okBall and ballInstaller then
+      mod._kantoInMotionPotatoVoxelCompat=ballInstaller
+
+      -- PotatoVoxel can leave a LOVE graphics push alive through the finished
+      -- GameViewport only on mobile while KIM owns the HUD/UI. Do not repair
+      -- render.hud itself: doing so changes the canvas/transform that the
+      -- trainer, Modern UI and snapped HUD need. Instead clean the stack at
+      -- TouchControls:draw, after GameViewport.finish(), where Gen1Recomp's
+      -- expected stack depth is zero.
+      if mod._kantoInMotionNativeMobileHost()
+          and type(mod._kantoInMotionPotatoKimHudActive)=="function" then
+        local okPotatoGuard,potatoGuard=pcall(function()
+          local src=assert(mod:read("lib/potato_voxel_mobile_touch_guard.lua"))
+          local loader=loadstring or load
+          return assert(loader(src,"@"..mod.path.."/lib/potato_voxel_mobile_touch_guard.lua"))()
+        end)
+        if okPotatoGuard and type(potatoGuard)=="function" then
+          okPotatoGuard,potatoGuard=pcall(potatoGuard,mod,
+            mod._kantoInMotionPotatoKimHudActive)
+        end
+        if okPotatoGuard and potatoGuard then
+          mod._kantoInMotionPotatoMobileTouchGuard=true
+        elseif not okPotatoGuard then
+          mod.log:error("PotatoVoxel mobile TouchControls guard failed: %s",tostring(potatoGuard))
+        end
+      end
+    elseif not okBall then
+      mod.log:error("PotatoVoxel compatibility bridge failed: %s",tostring(ballInstaller))
     end
 
     -- Wilds of Kanto already ships shiny overworld art and a Battle Art-shaped

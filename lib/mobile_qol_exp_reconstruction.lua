@@ -79,6 +79,37 @@ return function(mod, stageOnlyActive, battleHudGeometry)
     return nil
   end
 
+  local function kimBattleOn()
+    if not (mod and mod.options and type(mod.options.get) == "function") then return true end
+    local ok, value = pcall(mod.options.get, mod.options, "battleSystem")
+    return not ok or value ~= false
+  end
+
+  local function battleArtStage()
+    if not (mod and type(mod.find) == "function") then return nil end
+    local ok, handle = pcall(mod.find, mod, "BATTLE_ART_VOXEL_FORK")
+    if not ok or not handle then ok, handle = pcall(mod.find, "BATTLE_ART_VOXEL_FORK") end
+    local exports = ok and handle and type(handle.exports) == "table" and handle.exports or nil
+    local lib = exports and exports.lib or nil
+    if not (type(lib) == "table" and type(lib.require) == "function") then return nil end
+    local okStage, stage = pcall(lib.require, "OverworldBattle")
+    return okStage and type(stage) == "table" and stage or nil
+  end
+
+  local function battleArt3DActive()
+    local probe = mod and mod._kantoInMotionBattleArt3DBattleEnabled
+    if type(probe) == "function" then
+      local ok, value = pcall(probe)
+      if ok then return value == true end
+    end
+    local stage = battleArtStage()
+    if stage and type(stage.enabled) == "function" then
+      local ok, value = pcall(stage.enabled)
+      return ok and value == true
+    end
+    return false
+  end
+
   local function battleShake(battle)
     local fx = battle and battle.fx
     local sx = fx and tonumber(fx.shakeX) or 0
@@ -212,8 +243,13 @@ return function(mod, stageOnlyActive, battleHudGeometry)
   end
 
   local function active3D()
+    -- KIM stage-only ownership is active only when BATTLE SYSTEM is ON. QOL's
+    -- caught indicator still needs Battle Art geometry when KIM is OFF and
+    -- Battle Art owns its native mobile HUD, so recognize the real 3D stage
+    -- independently here.
     local ok, active = pcall(stageOnlyActive)
-    return ok and active == true
+    if ok and active == true then return true end
+    return battleArt3DActive()
   end
 
   local function withCanvas(canvas, fn)
@@ -391,11 +427,31 @@ return function(mod, stageOnlyActive, battleHudGeometry)
     if ux < -0.01 or ux > side - 1 + 0.01
         or uy < -0.01 or uy > side - 1 + 0.01 then return false end
 
-    local geo = targetGeometry(battle, shot)
-    if not geo then return false end
-    local hs = tonumber(geo.hudScale)
-    local enemyX = tonumber(geo.enemyBandX)
-    local enemyY = tonumber(geo.enemyBandY)
+    local hs, enemyX, enemyY
+    if kimBattleOn() then
+      -- KIM owns the final mobile HUD while BATTLE SYSTEM is ON.
+      local geo = targetGeometry(battle, shot)
+      if geo then
+        hs = tonumber(geo.hudScale)
+        enemyX = tonumber(geo.enemyBandX)
+        enemyY = tonumber(geo.enemyBandY)
+      end
+    else
+      -- BATTLE SYSTEM OFF: preserve Battle Art's native HUD and place the ball
+      -- against Battle Art's own snapped enemy band. This is the mobile mirror
+      -- of the desktop v76 fixed-anchor correction and remains independent of
+      -- the enemy name's short-name centering offset.
+      local stage = battleArtStage()
+      if stage and type(stage.snapRects) == "function" then
+        local okRects, _, placement = pcall(stage.snapRects, shot)
+        local at = okRects and type(placement) == "table" and placement.enemy or nil
+        if type(at) == "table" then
+          hs = tonumber(at.scale)
+          enemyX = tonumber(at.x)
+          enemyY = tonumber(at.y)
+        end
+      end
+    end
     if not (hs and hs > 0 and enemyX and enemyY) then return false end
 
     local targetAnchor = mode == "gen2" and 9 or 8
@@ -467,8 +523,11 @@ return function(mod, stageOnlyActive, battleHudGeometry)
       if active3D() then
         local shot = rawget(battle, "dramaticShapeShot")
         if type(shot) == "table" and shot.canvas and not shot.kantoInMotion2D then
-          if route3DMain(battle, shot, nx, ny, nw, nh)
-              or route3DBurst(nx, ny, nw, nh)
+          -- EXP reconstruction is KIM-HUD-only. With BATTLE SYSTEM OFF leave
+          -- Battle Art's native EXP path untouched and redirect only the caught
+          -- indicator onto its snapped enemy band.
+          if (kimBattleOn() and (route3DMain(battle, shot, nx, ny, nw, nh)
+              or route3DBurst(nx, ny, nw, nh)))
               or route3DCaughtPixel(battle, shot, nx, ny, nw, nh) then
             return
           end

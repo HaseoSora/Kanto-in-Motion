@@ -1,3 +1,15 @@
+## 1.3.7
+
+- Added confirmed **PotatoVoxel compatibility on desktop and mobile** without modifying PotatoVoxel: PotatoVoxel keeps ownership of the 3D world/camera while Kanto in Motion can cooperatively provide animated battle sprites, move animations, HP/status HUD, Modern Battle UI, and compatible overlays.
+- Fixed **Typed Move Colors + KIM Modern Battle UI** ownership with PotatoVoxel so the source 2x2 move selector no longer renders behind KIM's Modern move menu; Typed Move Colors still supplies KIM's move colors/effectiveness data and remains unmodified.
+- Restored **Quality of Life EXP and already-caught indicators** on the PotatoVoxel path, including mobile portrait/landscape placement and desktop caught-icon alignment for short species names.
+- Fixed the **mobile PotatoVoxel trainer intro** when `BATTLE SYSTEM = OFF` and `MODERN BATTLE UI = OFF`, including PotatoVoxel's pinned/BACK SPRITES path, without disrupting the 3D stage.
+- Fixed **mobile portrait player-Pokémon placement** on the PotatoVoxel pinned-player path so KIM battlers no longer sit against the dialogue/Modern UI panel.
+- Added KIM's **shiny encounter sparkle + audio** to PotatoVoxel battles on desktop and mobile with a single authoritative shiny cue.
+- Preserved KIM move-animation resizing, KRBA targeting, party-ball/HUD handling, mobile touch/high-DPI composition, and Battle System ON/OFF handoff while PotatoVoxel owns the arena.
+- Included the **Useful Bag compatibility fix**: KIM suppresses Useful Bag's duplicate standalone bag presenter while preserving its pockets, sorting, capacity, controls, callbacks, and inventory behavior. Useful Bag remains unmodified.
+- External compatibility mods remain optional and are not bundled or modified by Kanto in Motion.
+
 ## 1.3.6
 
 - Fixed KRS/GEN6 move-animation targeting so ordinary target-local, user-local, and travelling KRBA effects use KIM's live rendered battler anchors.

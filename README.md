@@ -1,16 +1,18 @@
-# Kanto in Motion v1.3.6
+# Kanto in Motion v1.3.7
 
 **Kanto in Motion** is an animated Pokémon presentation and battle overhaul for Gen1Recomp. It supports **Pokémon Red / Blue / Yellow** and retains the Gen 2 presentation support introduced in v1.2.0 for **Gold / Silver / Crystal**.
 
 The internal mod ID remains `animated_menu_pokemon`, so existing Kanto in Motion settings can carry forward when upgrading.
 
-## v1.3.6 highlights
+## v1.3.7 highlights
 
-- Fixed **KRS and GEN6 move-animation targeting** so Slash, Gust, Tackle/Quick Attack, travelling effects, and other battler-centered animations follow the Pokémon's actual rendered position instead of an old wide-stage coordinate.
-- KRS and GEN6 now use the same **species-aware live battler centers** used to draw KIM's animated Pokémon, including animation shake/lunge transforms and player-size changes.
-- Fixed the **Pokédex entry submenu** so selecting a known Pokémon no longer drops back to the classic Pokédex. DATA / CRY / AREA / QUIT now stay inside Modern UI.
-- Pokédex submenu detection is structural rather than label-based, preserving compatibility with translated UI text.
-- Retains v1.3.5's **MODERN BATTLE UI ON/OFF**, battle UI opacity improvements, large-font layout fixes, mobile dialog/PP fixes, and Weather FX Modern UI compatibility.
+- Added confirmed **PotatoVoxel desktop/mobile compatibility** with PotatoVoxel retaining the 3D arena/camera while KIM can provide animated battlers, KRBA move animations, HUD, Modern Battle UI, and compatible overlays.
+- Fixed **Typed Move Colors** duplicate move-menu presentation with KIM Modern Battle UI on the PotatoVoxel path without modifying Typed Move Colors.
+- Restored **Quality of Life EXP and already-caught overlays** for PotatoVoxel, including mobile portrait/landscape and short-name desktop alignment.
+- Fixed the **mobile PotatoVoxel trainer intro** in the native battle-UI path and corrected portrait player-Pokémon placement for KIM sprites.
+- Added KIM's **shiny encounter sparkle/audio** to PotatoVoxel on desktop and mobile.
+- Included the **Useful Bag compatibility fix** that removes its duplicate standalone bag presenter while preserving Useful Bag's inventory behavior.
+- External compatibility packages remain optional, unmodified, and unbundled.
 
 ## Animated Pokémon features
 
@@ -64,7 +66,7 @@ Open **KANTO IN MOTION** from the mod settings screen. Gen 1 also exposes a **BA
 
 ## KANTO IN MOTION → BATTLE settings
 
-The Battle submenu is currently **Gen 1 only**. These are the current v1.3.6 settings and their behavior.
+The Battle submenu is currently **Gen 1 only**. These are the current v1.3.7 settings and their behavior.
 
 | Setting | Choices | Default | What it does |
 | --- | --- | --- | --- |
@@ -147,10 +149,13 @@ Kanto in Motion does **not** claim ownership of third-party or Pokémon-derived 
 
 ## External compatibility mods are not bundled
 
-The following integrations are compatibility-only in v1.3.5. Their packages are **not copied, modified, or redistributed by Kanto in Motion**:
+The following integrations are compatibility-only in v1.3.7. Their packages are **not copied, modified, or redistributed by Kanto in Motion**:
 
 - Quality of Life
 - Typed Move Colors
+- PotatoVoxel
+- Battle Art
+- HGSS Sprites
 - Overworld Wild Spawns / Wilds of Kanto
 - Gen2 Clean UI
 - Useful Bag
@@ -189,17 +194,17 @@ Because Kanto in Motion uses `engine_internals` for UI/battle integration, large
 
 ## Release packages
 
-v1.3.5 is provided in two ZIPs. Install **one**, not both.
+v1.3.7 is provided in two ZIPs. Install **one**, not both.
 
 ### Full Assets
 
-`Kanto-in-Motion-v1.3.5-Full-Assets.zip`
+`Kanto-in-Motion-v1.3.7-Full-Assets.zip`
 
 Includes the animated Pokémon/title payloads present in the maintainer's working release build, along with the integrated battle/background/UI assets used by KIM.
 
 ### No Pokémon Assets
 
-`Kanto-in-Motion-v1.3.5-No-Pokemon-Assets.zip`
+`Kanto-in-Motion-v1.3.7-No-Pokemon-Assets.zip`
 
 Excludes the locally imported Pokémon front/back/title artwork and associated generated sprite metadata where required. The runtime code remains intact and `tools/import_assets.py` can populate compatible local sprite assets.
 
@@ -207,7 +212,7 @@ See `ASSET_NOTICES.md` for the exact packaging boundary.
 
 ## Installation
 
-1. Download **one** v1.3.5 ZIP: Full Assets or No Pokémon Assets.
+1. Download **one** v1.3.7 ZIP: Full Assets or No Pokémon Assets.
 2. Import the ZIP through Gen1Recomp's Mods interface.
 3. If using No Pokémon Assets, populate compatible local sprite art using `tools/import_assets.py` or your established local asset workflow.
 4. Enable Kanto in Motion.
@@ -215,7 +220,7 @@ See `ASSET_NOTICES.md` for the exact packaging boundary.
 
 ### Upgrading from an earlier Kanto in Motion release
 
-Replace the previous Kanto in Motion package with one complete v1.3.5 package. The internal ID remains `animated_menu_pokemon`, so compatible saved KIM options carry forward. Do not layer older test patches underneath v1.3.5; their final confirmed changes are already included.
+Replace the previous Kanto in Motion package with one complete v1.3.7 package. The internal ID remains `animated_menu_pokemon`, so compatible saved KIM options carry forward. Do not layer older test patches underneath v1.3.5; their final confirmed changes are already included.
 
 If upgrading from the older **Animated Menu Pokémon** package, remove/disable that package first because it shares the same internal mod ID.
 
