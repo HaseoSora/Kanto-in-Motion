@@ -172,11 +172,6 @@ KIM includes a heavily customized integrated build derived from the Gen1 Modern 
 https://www.deviantart.com/xpixelpriorx  
 The animated earned-badge artwork used by KIM's Trainer Card presentation is credited to xpixelpriorx.
 
-### Gen 9 Move Animation Project — KRLW890 and contributors
-
-https://www.eeveeexpo.com/resources/1480/  
-The Pokémon Essentials animation data used by the integrated Kanto Rework animation conversion identifies this project as an upstream source. See `THIRD_PARTY_NOTICES.md` for details.
-
 Kanto in Motion does **not** claim ownership of third-party or Pokémon-derived artwork. See `THIRD_PARTY_NOTICES.md` and `ASSET_NOTICES.md` before redistributing included assets.
 
 ## External compatibility mods are not bundled
