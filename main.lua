@@ -5856,6 +5856,29 @@ return function(mod)
       end
     end
 
+    -- HGSS Visual Overhaul compatibility:
+    -- When KIM's master BATTLE SYSTEM is ON, do not allow HGSS's independent
+    -- Gen-1 battle system to participate at all.  The bridge snapshots the
+    -- complete KIM/Battle Art/Potato battle chain before HGSS loads, then
+    -- dispatches around HGSS's later battle wrappers.  Turning BATTLE SYSTEM
+    -- OFF immediately gives the normal HGSS battle path back.
+    do
+      local okHgssBlock,hgssBlock=pcall(function()
+        local src=assert(mod:read("lib/hgss_battle_hard_block.lua"))
+        local loader=loadstring or load
+        return assert(loader(src,
+          "@"..mod.path.."/lib/hgss_battle_hard_block.lua"))()
+      end)
+      if okHgssBlock and type(hgssBlock)=="function" then
+        okHgssBlock,hgssBlock=pcall(hgssBlock,mod,battleSystemEnabled)
+      end
+      if okHgssBlock and hgssBlock then
+        mod._kantoInMotionHgssBattleHardBlock=hgssBlock
+      elseif not okHgssBlock then
+        mod.log:error("HGSS battle hard-block bridge failed: %s",
+          tostring(hgssBlock))
+      end
+    end
 
   end
 

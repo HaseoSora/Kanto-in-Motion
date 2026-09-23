@@ -1,14 +1,14 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
   "games": [
     "gen1"
   ],
-  "game_version": ">=0.2.24 <0.3.0",
+  "game_version": ">=0.2.24 <0.3.9",
   "category": "UI",
   "priority": 105,
   "dependencies": [],

@@ -1,3 +1,11 @@
+# v1.4.1
+
+- Added compatibility with **Gen1Recomp 0.3.1**.
+- Updated the declared Gen1Recomp range to **>= 0.2.24 and < 0.3.9**.
+- Added a **KIM-only HGSS_SPRITES battle hard block**. With **BATTLE SYSTEM = ON**, KIM bypasses HGSS battle-side hooks so HGSS can no longer enlarge battle trainers, shrink battlers, replace battle art, or interfere with KIM + Battle Art presentation.
+- HGSS overworld/menu/icon/player-overworld behavior is preserved. With **BATTLE SYSTEM = OFF**, HGSS battle behavior is available again.
+- Preserved existing Battle Art and PotatoVoxel compatibility, including desktop/mobile sizing behavior.
+
 # v1.4.0 — Gen 1 HD public release
 
 - Promotes the confirmed-good Gen1 HD v39 code and asset baseline into the public release line.

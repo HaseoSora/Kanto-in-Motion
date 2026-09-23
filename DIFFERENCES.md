@@ -1,6 +1,6 @@
-# v1.4.0 scope differences
+# v1.4.1 scope differences
 
-Compared with the older Kanto in Motion v1.3.7 release line, v1.4.0 moves the Gen 1 battle presentation to the new HD pipeline.
+Compared with the older Kanto in Motion v1.3.7 release line, v1.4.1 moves the Gen 1 battle presentation to the new HD pipeline.
 
 - Gen 1 is the active game target for this release; Gen 2 support is not included.
 - HD animated Pokémon #001–151 replace the older generation-selection battle-art pipeline.

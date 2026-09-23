@@ -2,51 +2,36 @@
 
 Kanto in Motion includes or adapts community work. Attribution does not imply endorsement and does not transfer ownership of the original work to Kanto in Motion.
 
-## Animated Pokémon battle sprites — Battle Sprites Reloded
-
-**Creator:** JDChaos  
-**Original thread:** https://forums.pokemmo.com/index.php?/topic/142585-battle-sprites-reloded/
-
-Used for front/back, normal/shiny, and available male/female variants. KIM converts the supplied source artwork into its packaged Gen 1 HD sprite-sheet format.
-
 ## Gen1 Modern UI
 
-Original project / author credit: **ArmstrongThomas**  
+Original project / author credit: **ArmstrongThomas**
 https://github.com/ArmstrongThomas/gen1-modern-ui
 
 Kanto in Motion integrates a customized Gen1 Modern UI-based presentation adapted to KIM's mod identity, animated sprite provider, battle presentation, and desktop/mobile behavior.
 
+
+## Battle Art / Battle Art Voxel Fork
+
+**Author / project credit:** absol89  
+https://github.com/absol89/DramaticShapeVoxelMod
+
+Kanto in Motion includes compatibility code for Battle Art's staged 3D battle presentation. Battle Art itself is an optional external mod and is not bundled with Kanto in Motion.
+
 ## Poké Ball Colorfix
 
-Author / project credit: **keberos**  
+Author / project credit: **keberos**
 https://github.com/keberos/pokeball-colorfix
 
-Kanto in Motion integrates the Gen 1 Poké Ball palette/presentation fixes used by its battle path and adds fullscreen/mobile target-position compatibility.
+Kanto in Motion integrates the Gen 1 Poké Ball palette/presentation fixes used by its battle path and adds its own fullscreen/mobile target-position compatibility.
 
 ## Trainer Card animated badges
 
-The retained animated badge artwork is credited to **xpixelpriorx**:  
+The retained animated badge artwork is credited to **xpixelpriorx**:
 https://www.deviantart.com/xpixelpriorx
-
-## Kanto Rework Battle Anims / Kanto Rework Suite
-
-**Author / project credit:** Faendra  
-https://github.com/Faendra/kanto-rework-suite
-
-Kanto in Motion integrates the Kanto Rework battle-animation lineage used for the Gen 1 move-animation bridge. The integrated player is adapted for KIM's fullscreen battle layouts, mobile composition, player/enemy targeting, and KIM sprite geometry.
-
-## Gen 9 Move Animation Project
-
-**Project lead / resource credit:** KRLW890 and contributors  
-https://www.eeveeexpo.com/resources/1480/
-
-`data/gen1_anims.lua` is generated from Pokémon Essentials animation data supplied through the Kanto Rework Battle Animations lineage. That data identifies the **Gen 9 Move Animation Project** as an upstream animation source and retains the Pokémon Essentials 512×384 animation design space.
-
-Consult the upstream resource for its complete contributor and source credits when redistributing derived animation data/assets.
 
 ## Pokémon-derived HD artwork
 
-The HD Pokémon sprite sheets are generated from the Battle Sprites Reloded source listed above. Kanto in Motion does not claim ownership of Pokémon-derived artwork.
+The HD Pokémon sprite sheets are generated from the supplied Pokémon HD 1–151 GIF pack. Kanto in Motion does not claim ownership of Pokémon-derived artwork.
 
 ## Shiny encounter presentation assets
 
@@ -54,4 +39,23 @@ The supplied `assets/effects/shiny_sparkle.png` and `assets/sfx/shiny.wav` are r
 
 ## Compatibility-only external mods
 
-Kanto in Motion contains interoperability code for optional external mods such as Battle Art, PotatoVoxel, Typed Move Colors, Useful Bag, Advanced Box System, the Spanish translation mod, Weather FX, and other mods using KIM's public compatibility interfaces. Their packages/assets are not bundled here.
+Kanto in Motion contains interoperability code for external mods such as Typed Move Colors, Useful Bag, Advanced Box System, PotatoVoxel, the Spanish translation mod, and other mods using KIM's public compatibility interfaces. Their packages are not bundled here.
+
+## Kanto Rework Battle Anims / Kanto Rework Suite backgrounds
+
+**Author / project credit:** Faendra  
+https://github.com/Faendra/kanto-rework-suite
+
+Kanto in Motion integrates the Kanto Rework battle-animation lineage used for the Gen 1 move-animation bridge and the KRS battle-background/routing data used by the v1.3.4 KRS arena choice.
+
+The integrated animation player has been adapted for KIM's standalone fullscreen 2D battle layout, mobile composition, player/enemy targeting, and KIM sprite geometry. Kanto Rework Suite itself is not required at runtime for these integrated components.
+
+## Gen 9 Move Animation Project
+
+**Project lead / resource credit:** KRLW890 and contributors  
+https://www.eeveeexpo.com/resources/1480/
+
+`data/gen1_anims.lua` is generated from the `PkmnAnimations.rxdata` supplied through the Kanto Rework Battle Animations integration. That data identifies the **Gen 9 Move Animation Project** as its upstream animation source and retains the Pokémon Essentials 512×384 animation design space.
+
+The Gen 9 project is itself a successor to earlier community animation work. Consult the upstream resource for its complete contributor and source credits when redistributing derived animation data/assets.
+
