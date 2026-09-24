@@ -1,0 +1,40 @@
+{
+  "id": "animated_menu_pokemon",
+  "name": "Kanto in Motion",
+  "version": "1.4.2",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "overhaul",
+  "games": [
+    "gen1"
+  ],
+  "game_version": "0.0.0-dev || >=0.1.69 <3.0.0",
+  "category": "UI",
+  "priority": 105,
+  "dependencies": [],
+  "optional_dependencies": [
+    "gen3_battle_ui",
+    "colosseum_ui_overhaul",
+    "useful_bag",
+    "typed_move_colors",
+    "overworld_wild_spawns",
+    "BATTLE_ART_VOXEL_FORK",
+    "recomp-spanish",
+    "advanced_box_system",
+    "weather_fx",
+    "potato_voxel",
+    "HGSS_SPRITES"
+  ],
+  "conflicts": [
+    "gen1_modern_ui",
+    "gen1_clean_ui",
+    "pokeball-colorfix"
+  ],
+  "permissions": [
+    "engine_internals",
+    "network"
+  ],
+  "affects_link": false,
+  "description": "Kanto in Motion v1.4.0 Gen 1 HD battle overhaul. Adds HD animated Pokemon #001-151, 1920x950 location-aware time-of-day battle backgrounds, integrated Gen 1 move animations, Modern battle UI, shiny encounter effects, and PC/mobile compatibility for Battle Art and PotatoVoxel. Gen 2 support is not included in this release.",
+  "github": "HaseoSora/Kanto-in-Motion"
+}
