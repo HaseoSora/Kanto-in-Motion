@@ -353,10 +353,6 @@ Kanto in Motion includes, integrates, or adapts work from several community proj
 - **Animated Trainer Card badges — xpixelpriorx**  
   Animated earned-badge artwork used by KIM's Trainer Card presentation.
 
-- **Gen 9 Move Animation Project — KRLW890 and contributors**  
-  https://www.eeveeexpo.com/resources/1480/  
-  Upstream animation-data lineage used by the Kanto Rework / Pokémon Essentials conversion.
-
 - **Animated Pokémon battle sprites — JDChaos / Battle Sprites Reloded**  
   https://forums.pokemmo.com/index.php?/topic/142585-battle-sprites-reloded/  
   Used for KIM's HD front/back, normal/shiny, and available male/female battle animations.
