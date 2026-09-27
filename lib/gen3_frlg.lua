@@ -19,11 +19,44 @@ return function(mod)
       description = "Animate Kanto in Motion Pokemon. OFF holds the first frame." },
     { key = "battleSprites", label = "BATTLE SPRITES", type = "toggle", default = true,
       description = "Use Kanto in Motion animated Pokemon in FireRed/LeafGreen battles while keeping the native FRLG battle UI and move animations." },
+    { key = "battleShadowQuality", label = "PKMN SHADOWS", type = "choice",
+      default = "medium", choices = {
+        { "OFF", "off" }, { "LOW", "low" }, { "MEDIUM", "medium" },
+        { "HIGH", "high" }, { "ULTRA", "ultra" },
+      }, description = "Ground-contact shadow quality for Kanto in Motion HD battle Pokemon. Uses the same shadow system as Red/Blue/Yellow." },
+    { key = "battleShadowOpacity", label = "SHADOW OPACITY", type = "choice",
+      default = "100", choices = {
+        { "50%", "50" }, { "60%", "60" }, { "70%", "70" },
+        { "80%", "80" }, { "90%", "90" }, { "100%", "100" },
+        { "110%", "110" }, { "120%", "120" }, { "130%", "130" },
+        { "140%", "140" }, { "150%", "150" },
+      }, description = "Adjust Kanto in Motion battle shadow darkness without changing Pokemon size or position. 100% matches the Gen 1 calibrated reference." },
     { key = "hdBattleBackgrounds", label = "HD BATTLE BACKGROUNDS", type = "toggle", default = true,
       description = "Use Kanto in Motion's location-aware HD Kanto battle backgrounds in FireRed/LeafGreen. FRLG keeps its native battler positions so the native HUD and move animations stay aligned. OFF restores the native FRLG battle background." },
   }
   mod._kantoInMotionOptionSchema = schema
   mod.options:define(schema)
+
+  local battlerShadows
+  do
+    local source, err = mod:read("lib/battler_shadows.lua")
+    if source then
+      local chunk, compileErr = load(source, "@" .. mod.path .. "/lib/battler_shadows.lua")
+      if chunk then
+        local okFactory, factory = pcall(chunk)
+        if okFactory and type(factory) == "function" then
+          local okRenderer, renderer = pcall(factory, mod)
+          if okRenderer and type(renderer) == "table" then battlerShadows = renderer end
+        elseif mod.log and mod.log.error then
+          mod.log:error("cannot load FRLG Pokemon shadows: %s", tostring(factory))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("cannot compile FRLG Pokemon shadows: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("cannot read FRLG Pokemon shadows: %s", tostring(err))
+    end
+  end
 
   local function loadTable(relative, quiet)
     local source, err = mod:read(relative)
@@ -1124,6 +1157,8 @@ return function(mod)
       groundY = groundY + (tonumber(pres.oy) or 0)
     end
 
+    local shadowX, shadowGroundY = x, groundY
+
     -- Do NOT inherit FRLG's command-menu idle bounce.  That bounce was
     -- authored for the original 64x64 GBA sprite and looks exaggerated on
     -- KIM's animated HD cards.  Real move/send-out/faint transforms still
@@ -1144,6 +1179,24 @@ return function(mod)
     local alpha = pres and (tonumber(pres.alpha) or 1) or 1
     local darken = pres and (tonumber(pres.darken) or 0) or 0
     local flash = pres and (tonumber(pres.flash) or 0) or 0
+
+    if battlerShadows and type(battlerShadows.drawDirect) == "function" then
+      love.graphics.setShader()
+      love.graphics.setBlendMode("alpha")
+      love.graphics.setColor(1, 1, 1, 1)
+      pcall(battlerShadows.drawDirect, battlerShadows, {
+        w = source.width,
+        h = source.height,
+        scaleX = baseScale * ux * animScale * math.abs(sxExtra),
+        scaleY = baseScale * uy * animScale * math.abs(syExtra),
+        ax = ox + shadowX * ux,
+        ay = oy + shadowGroundY * uy,
+        groundShift = 0,
+        species = info.dex or info.species,
+        dex = info.dex,
+      }, info.side == "back" and "player" or "enemy", alpha)
+    end
+
     local shade = 1 - darken * (1 - 8 / 255)
     if flash > 0 then
       love.graphics.setColor(1, 1, 1, alpha * (0.4 + 0.6 * ((flash % 2 == 0) and 1 or 0.3)))

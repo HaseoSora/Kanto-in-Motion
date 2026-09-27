@@ -266,6 +266,24 @@ return function(mod)
       default = true,
       description = "Use Kanto in Motion HD animated Pokemon in native Gold/Silver/Crystal battles. The Gen 2 battle HUD, trainers, commands, backgrounds and move animations remain native.",
     }
+    optionSchema[#optionSchema + 1] = {
+      key = "battleShadowQuality", label = "PKMN SHADOWS", type = "choice",
+      default = "medium", choices = {
+        { "OFF", "off" }, { "LOW", "low" }, { "MEDIUM", "medium" },
+        { "HIGH", "high" }, { "ULTRA", "ultra" },
+      },
+      description = "Ground-contact shadow quality for Kanto in Motion HD battle Pokemon. Uses the same shadow system as Red/Blue/Yellow.",
+    }
+    optionSchema[#optionSchema + 1] = {
+      key = "battleShadowOpacity", label = "SHADOW OPACITY", type = "choice",
+      default = "100", choices = {
+        { "50%", "50" }, { "60%", "60" }, { "70%", "70" },
+        { "80%", "80" }, { "90%", "90" }, { "100%", "100" },
+        { "110%", "110" }, { "120%", "120" }, { "130%", "130" },
+        { "140%", "140" }, { "150%", "150" },
+      },
+      description = "Adjust Kanto in Motion battle shadow darkness without changing Pokemon size or position. 100% matches the Gen 1 calibrated reference.",
+    }
   end
 
   -- Kanto in Motion's battle presenter owns the optional HD background,
@@ -4872,6 +4890,30 @@ return function(mod)
           and (tonumber(self:faintSink(sideName)) or 0) or 0
 
         local G = love.graphics
+
+        -- Gen 2's live HD battle bridge is implemented here in main.lua
+        -- (lib/gen2_gsc.lua is not the active battle path). Draw the shared
+        -- KIM shadow at the HD battler's CURRENT ground point after native
+        -- slide/SCX/SCY motion has been applied, so it follows the Pokemon
+        -- instead of being baked into the low-resolution battle field.
+        local shadows = mod._kantoInMotionBattlerShadows
+        if shadows and type(shadows.drawDirect) == "function" then
+          G.push("all")
+          G.setShader()
+          G.setBlendMode("alpha")
+          G.setColor(1, 1, 1, 1)
+          pcall(shadows.drawDirect, shadows, {
+            w = iw,
+            h = ih,
+            scale = scale,
+            ax = px + dw * 0.5,
+            ay = py + dh,
+            groundShift = 0,
+            species = tonumber(mon.species),
+            dex = tonumber(mon.species),
+          }, sideName, 1)
+          G.pop()
+        end
         local function paint()
           if sunk > 0 then
             -- Fainting sinks the image through the bottom of its native box.

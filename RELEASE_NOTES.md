@@ -1,21 +1,18 @@
-# Kanto in Motion v1.5.0
+# Kanto in Motion v1.5.1
 
-v1.5.0 is the multi-generation HD update.
+v1.5.1 is a small follow-up to the v1.5.0 multi-generation release.
 
-## Highlights
+## Changes
 
-- Added Kanto in Motion support for **Gold / Silver / Crystal** and **FireRed / LeafGreen** alongside the existing Red / Blue / Yellow implementation.
-- Added HD animated Pokémon support through **#251 in G/S/C** and **#386 in FR/LG**.
-- Added **HD Pokémon icons #001–386** across R/B/Y, G/S/C, and FR/LG with a live `POKEMON ICONS` toggle.
-- Added final-resolution G/S/C and FR/LG icon rendering to avoid native-canvas pixelation.
-- Added HD animated G/S/C battle Pokémon while keeping the native Gen 2 HUD, trainers, commands, backgrounds, and move animations.
-- Added FR/LG HD battle Pokémon, menu/Pokédex/Summary previews, and optional HD battle backgrounds while preserving the native FR/LG UI and move-animation engine.
-- Fixed FR/LG mobile portrait/landscape rendering, duplicate battle HUD/menu presentation, `SCREEN POS` alignment, and menu Pokémon placement.
-- Improved HGSS_SPRITES compatibility so KIM can own its icon and Gen 1 battle paths without HGSS overriding them.
-- Preserves the existing Gen 1 Battle Art and PotatoVoxel compatibility paths.
+- Added KIM-style Pokémon shadows to **Gold / Silver / Crystal**.
+- Added KIM-style Pokémon shadows to **FireRed / LeafGreen**.
+- Added **PKMN SHADOWS** and **SHADOW OPACITY** settings to both game families.
+- FR/LG shadows now follow Pokémon during send-out/slide movement.
+- Restored the missing `data/hd_pokemon_national.lua` file in the release package so Gen 2 Pokémon #152–251 use their HD sprites on clean installs.
+- Preserves all v1.5.0 desktop/mobile rendering and compatibility fixes.
 
 ## Updating
 
-Replace your previous Kanto in Motion package with v1.5.0.
+Replace the previous Kanto in Motion package with v1.5.1.
 
-The internal mod ID remains `animated_menu_pokemon`, so existing KIM settings can carry forward.
+The internal mod ID remains `animated_menu_pokemon`, so existing settings can carry forward.

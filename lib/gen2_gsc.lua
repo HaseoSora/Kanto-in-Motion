@@ -21,6 +21,18 @@ return function(mod)
       description = "Animate Kanto in Motion Pokemon in supported Gold/Silver/Crystal presentation." },
     { key = "battleSprites", label = "BATTLE SPRITES", type = "toggle", default = true,
       description = "Use Kanto in Motion HD animated Pokemon in Gold/Silver/Crystal battles while keeping the native Gen 2 battle system, HUD, trainers and move animations." },
+    { key = "battleShadowQuality", label = "PKMN SHADOWS", type = "choice",
+      default = "medium", choices = {
+        { "OFF", "off" }, { "LOW", "low" }, { "MEDIUM", "medium" },
+        { "HIGH", "high" }, { "ULTRA", "ultra" },
+      }, description = "Ground-contact shadow quality for Kanto in Motion HD battle Pokemon." },
+    { key = "battleShadowOpacity", label = "SHADOW OPACITY", type = "choice",
+      default = "100", choices = {
+        { "50%", "50" }, { "60%", "60" }, { "70%", "70" },
+        { "80%", "80" }, { "90%", "90" }, { "100%", "100" },
+        { "110%", "110" }, { "120%", "120" }, { "130%", "130" },
+        { "140%", "140" }, { "150%", "150" },
+      }, description = "Adjust Kanto in Motion battle shadow darkness. 100% matches the Gen 1 reference." },
     { key = "menuSprites", label = "SUMMARY SPRITES", type = "toggle", default = true,
       description = "Use Kanto in Motion HD animated Pokemon on the Gold/Silver/Crystal Pokemon Summary screen." },
     { key = "pokedexSprites", label = "POKEDEX SPRITES", type = "toggle", default = true,

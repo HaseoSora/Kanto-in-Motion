@@ -26,6 +26,9 @@ return function(mod)
   local SPECIES_SIZE = {
     RATTATA = 1.25,
   }
+  local DEX_SIZE = {
+    [19] = 1.25, -- Rattata
+  }
 
   local function quality()
     if not (mod and mod.options) then return "off" end
@@ -59,9 +62,13 @@ return function(mod)
     local profile = PROFILES[q]
     if not profile then return false end
 
-    local scale = tonumber(metrics.scale) or 0
-    local sw = math.abs((tonumber(metrics.w) or 0) * scale)
-    local sh = math.abs((tonumber(metrics.h) or 0) * scale)
+    -- Gen 1 publishes one uniform final scale. Gen 2/3 can supply separate
+    -- final X/Y scales when their presentation transform is non-square.
+    local uniformScale = tonumber(metrics.scale) or 0
+    local scaleX = tonumber(metrics.scaleX) or uniformScale
+    local scaleY = tonumber(metrics.scaleY) or uniformScale
+    local sw = math.abs((tonumber(metrics.w) or 0) * scaleX)
+    local sh = math.abs((tonumber(metrics.h) or 0) * scaleY)
     if sw <= 0 or sh <= 0 then return false end
 
     -- Use both dimensions so wide wings/tails do not create gigantic shadows,
@@ -69,7 +76,9 @@ return function(mod)
     local diameter = math.min(sw * 0.52, sh * 0.72)
     diameter = math.max(10, diameter) * (tonumber(profile.size) or 1)
     local species = tostring(metrics.species or ""):upper()
-    diameter = diameter * (tonumber(SPECIES_SIZE[species]) or 1)
+    local dex = tonumber(metrics.dex) or tonumber(metrics.species)
+    diameter = diameter
+      * (tonumber(SPECIES_SIZE[species]) or tonumber(DEX_SIZE[dex]) or 1)
     local rx = diameter * 0.5
     local ry = math.max(2, rx * (side == "player" and 0.22 or 0.20))
 
