@@ -1,24 +1,21 @@
-# Kanto in Motion v1.4.1
+# Kanto in Motion v1.5.0
 
-Kanto in Motion v1.4.1 is a compatibility-focused update.
+v1.5.0 is the multi-generation HD update.
 
 ## Highlights
 
-- **Gen1Recomp 0.3.1 support**
-  - KIM now declares compatibility with Gen1Recomp **>= 0.2.24 and < 0.3.9**.
-  - The mod API remains API 2.
+- Added Kanto in Motion support for **Gold / Silver / Crystal** and **FireRed / LeafGreen** alongside the existing Red / Blue / Yellow implementation.
+- Added HD animated Pokémon support through **#251 in G/S/C** and **#386 in FR/LG**.
+- Added **HD Pokémon icons #001–386** across R/B/Y, G/S/C, and FR/LG with a live `POKEMON ICONS` toggle.
+- Added final-resolution G/S/C and FR/LG icon rendering to avoid native-canvas pixelation.
+- Added HD animated G/S/C battle Pokémon while keeping the native Gen 2 HUD, trainers, commands, backgrounds, and move animations.
+- Added FR/LG HD battle Pokémon, menu/Pokédex/Summary previews, and optional HD battle backgrounds while preserving the native FR/LG UI and move-animation engine.
+- Fixed FR/LG mobile portrait/landscape rendering, duplicate battle HUD/menu presentation, `SCREEN POS` alignment, and menu Pokémon placement.
+- Improved HGSS_SPRITES compatibility so KIM can own its icon and Gen 1 battle paths without HGSS overriding them.
+- Preserves the existing Gen 1 Battle Art and PotatoVoxel compatibility paths.
 
-- **HGSS_SPRITES battle isolation**
-  - When **KIM → BATTLE SYSTEM = ON**, KIM bypasses HGSS_SPRITES battle hooks.
-  - This prevents HGSS from enlarging the battle trainer, shrinking Pokémon, replacing battle sprites, or overriding Battle Art scaling/presentation.
-  - HGSS overworld, menu, icon, and player-overworld features remain available.
-  - Turning **BATTLE SYSTEM = OFF** allows HGSS battle behavior again.
+## Updating
 
-- **Battle Art / PotatoVoxel**
-  - Existing KIM compatibility with Battle Art and PotatoVoxel is preserved.
-  - Existing desktop/mobile KIM sizing and presentation behavior is unchanged.
+Replace your previous Kanto in Motion package with v1.5.0.
 
-## Installation
-
-Replace your previous Kanto in Motion package with v1.4.1. The internal mod ID is unchanged, so existing KIM settings can carry forward.
-
+The internal mod ID remains `animated_menu_pokemon`, so existing KIM settings can carry forward.

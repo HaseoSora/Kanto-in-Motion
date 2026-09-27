@@ -3,9 +3,45 @@
 -- GIF source packs are converted locally into optimized sprite sheets with
 -- tools/import_hd_pokemon.py.
 return function(mod)
-  -- Gen 1-only HD rebuild. Gen 2 presentation support is intentionally
-  -- disabled for now; the manifest also restricts this package to Gen 1.
-  local IS_GEN2 = false
+  -- FireRed / LeafGreen run on Gen1Recomp's separate Game3 engine.  Keep the
+  -- existing R/B/Y implementation isolated: Gen 3 gets its own provider and
+  -- returns before any Gen 1 BattleState / Modern UI code is loaded.
+  if tonumber(mod.generation) == 3 then
+    local source, err = mod:read("lib/gen3_frlg.lua")
+    if not source then
+      if mod.log and mod.log.error then
+        mod.log:error("cannot read FireRed/LeafGreen bridge: %s", tostring(err))
+      end
+      return
+    end
+    local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_frlg.lua")
+    if not loader then
+      if mod.log and mod.log.error then
+        mod.log:error("cannot compile FireRed/LeafGreen bridge: %s", tostring(compileErr))
+      end
+      return
+    end
+    local ok, bridge = pcall(loader)
+    if not ok or type(bridge) ~= "function" then
+      if mod.log and mod.log.error then
+        mod.log:error("cannot load FireRed/LeafGreen bridge: %s", tostring(bridge))
+      end
+      return
+    end
+    local okRun, runErr = pcall(bridge, mod)
+    if not okRun and mod.log and mod.log.error then
+      mod.log:error("FireRed/LeafGreen bridge failed: %s", tostring(runErr))
+    end
+    return
+  end
+  -- Red/Blue/Yellow and Gold/Silver/Crystal share KIM's long-standing
+  -- animated-provider path. FireRed/LeafGreen already returned through the
+  -- isolated Game3 bridge above.
+  --
+  -- IMPORTANT: Gen 2 must continue through this file. KIM's proven Gen 2
+  -- Summary/Pokedex/Clean-UI bridges live below and are deliberately guarded
+  -- by IS_GEN2. Returning early here disables all of that working support.
+  local IS_GEN2 = tonumber(mod.generation) == 2
   local MOD_ID = "animated_menu_pokemon"
 
   -- Open compatibility registry. Third-party UI and battle mods can register
@@ -198,6 +234,8 @@ return function(mod)
 
   local optionSchema = {
     { key = "enabled", label = "MENU SPRITES", type = "toggle", default = true },
+    { key = "menuIcons", label = "POKEMON ICONS", type = "toggle", default = true,
+      description = "Use Kanto in Motion HD-derived Pokemon icons in party and other native icon slots. OFF yields icon presentation back to the game or another icon mod such as HGSS_SPRITES." },
     { key = "animate", label = "ANIMATION", type = "toggle", default = true },
     { key = "titleScreen", label = "TITLE SCREEN", type = "toggle", default = true },
     { key = "titleTrainer", label = "TITLE TRAINER", type = "choice",
@@ -217,6 +255,18 @@ return function(mod)
         { "120%", "120" }, { "125%", "125" },
       }, description = "Scale only the cycling Pokemon on the Red/Blue title screen. 75% is the new default for the HD Pokemon art; Red and the custom logo are unchanged." },
   }
+
+  -- Gen 2 keeps the original KIM menu/Pokedex provider architecture and now
+  -- gains only the missing native-battle Pokemon bridge. Expose that feature
+  -- as a simple Gen2 main-menu toggle; the full Gen1 battle submenu remains
+  -- intentionally unavailable.
+  if IS_GEN2 then
+    optionSchema[#optionSchema + 1] = {
+      key = "battleSprites", label = "BATTLE SPRITES", type = "toggle",
+      default = true,
+      description = "Use Kanto in Motion HD animated Pokemon in native Gold/Silver/Crystal battles. The Gen 2 battle HUD, trainers, commands, backgrounds and move animations remain native.",
+    }
+  end
 
   -- Kanto in Motion's battle presenter owns the optional HD background,
   -- HD animated Pokemon, HUD, and Modern lower battle UI.
@@ -426,6 +476,7 @@ return function(mod)
   -- tools/import_hd_pokemon.py. Missing local assets are safe: KIM falls back
   -- to the game's native sprite for that surface.
   hdSprites = loadTable(HD_SPRITE_DATA_FILE, true)
+  local nationalHdSprites = loadTable("data/hd_pokemon_national.lua", true)
   local titlePlayer = loadTable("data/title_player_red.lua", true)
 
   local function selectedGeneration()
@@ -473,9 +524,35 @@ return function(mod)
       or nil
   end
 
+  local function gen2NationalDex(species, normalized)
+    if not IS_GEN2 then return nil end
+    local game = mod.game
+    local pokemon = game and game.data and game.data.pokemon
+    if type(pokemon) ~= "table" then return nil end
+
+    local def = pokemon[species]
+    if type(def) ~= "table" and normalized then
+      def = pokemon[normalized]
+    end
+    local dex = type(def) == "table" and tonumber(def.index) or nil
+    if dex and dex >= 1 and dex <= 251 then return math.floor(dex) end
+    return nil
+  end
+
   local function hdRecord(species, side, color, mon)
+    local originalSpecies = species
     species = normalizedSpecies(species)
     local entry = species and hdSprites and hdSprites[species]
+
+    -- v1.2/v1.3's working Gen 2 menu bridge used species-keyed Gen 5 data.
+    -- The new HD import is National-Dex keyed for #152+, so adapt only the
+    -- provider lookup; keep every existing Gen 2 screen bridge unchanged.
+    if type(entry) ~= "table" and IS_GEN2 then
+      local dex = gen2NationalDex(originalSpecies, species)
+      local national = dex and nationalHdSprites and nationalHdSprites[dex]
+      if type(national) == "table" then entry = national end
+    end
+
     local sideData = type(entry) == "table" and entry[side] or nil
     local variants = type(sideData) == "table" and sideData[color] or nil
     local record = chooseHdVariant(variants, mon)
@@ -586,7 +663,11 @@ return function(mod)
   end
 
   local function battleRecord(species, side, mon)
-    if mod.options:get("battleSprites") == false then return nil end
+    if IS_GEN2 then
+      if mod.options:get("enabled") == false then return nil end
+    elseif mod.options:get("battleSprites") == false then
+      return nil
+    end
     if side == "back" then
       local generation = battleBackGeneration()
       if isBattleShiny(mon) then
@@ -965,7 +1046,13 @@ return function(mod)
   end
 
   local function battleLiteOwnsSprites()
-    return not IS_GEN2 and mod.options:get("battleSprites") ~= false
+    if IS_GEN2 then
+      -- Gen 2 keeps the native G/S/C battle system. KIM supplies only the
+      -- Pokemon image through Gen1Recomp's existing pokemon.sprite seam.
+      return mod.options:get("enabled") ~= false
+        and mod.options:get("battleSprites") ~= false
+    end
+    return mod.options:get("battleSprites") ~= false
       and not externalBattleSpritesBlocked()
   end
 
@@ -997,8 +1084,19 @@ return function(mod)
     if not battleLiteOwnsSprites() then return nil end
     local record, generation, normalized, shiny = battleRecord(species, side, mon)
     if not record then return nil end
+
+    local variant = shiny and "shiny" or "normal"
+
+    -- BattleState:pic() asks pokemon.sprite every draw but caches the drawable
+    -- returned by Assets.image(path). Refresh KIM's mutable native-slot Canvas
+    -- here before returning the stable virtual path, so that cached object keeps
+    -- advancing through the HD animation frames.
+    if IS_GEN2 then
+      battleProxy(record, generation, side, variant, normalized)
+    end
+
     return BATTLE_BRIDGE_PREFIX .. generation .. "/" .. side .. "/"
-      .. (shiny and "shiny" or "normal") .. "/" .. normalized .. ".png"
+      .. variant .. "/" .. normalized .. ".png"
   end
 
   local function decodeBattleBridgePath(path)
@@ -4550,15 +4648,369 @@ return function(mod)
     end
 
     local function drawCenteredPortrait(image, x, y, w, h)
-      image = fitStockPortrait(image, w, h)
-      if not image then return false end
+      if not image or type(image.getDimensions) ~= "function" then return false end
       local iw, ih = image:getDimensions()
+      if not iw or not ih or iw <= 0 or ih <= 0 then return false end
+
+      -- Gen 2's Summary/Pokedex drawWidescreen path already scales the native
+      -- 160x144 coordinate system directly into the window. Draw KIM's original
+      -- HD frame HERE instead of first rasterizing it into a 56x56 Canvas.
+      -- The outer Gen 2 transform then samples the source art at final window
+      -- resolution, which preserves the HD detail.
+      local scale = math.min(w / iw, h / ih)
+      local dw, dh = iw * scale, ih * scale
+      local dx = x + (w - dw) * 0.5
+      local dy = y + (h - dh) * 0.5
+
       fillPortraitBox(x, y, w, h)
       love.graphics.setShader()
       love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.draw(image, x + math.floor((w - iw) / 2),
-        y + math.max(0, h - ih))
+      if image.setFilter then pcall(image.setFilter, image, "linear", "linear") end
+      love.graphics.draw(image, dx, dy, 0, scale, scale)
+      if image.setFilter then pcall(image.setFilter, image, "nearest", "nearest") end
+      love.graphics.setColor(1, 1, 1, 1)
       return true
+    end
+
+    -- Native Gold/Silver/Crystal battle image bridge.
+    --
+    -- The pokemon.sprite virtual-path bridge can feed Assets.image(), but that
+    -- still means a modded frame may be reduced to the native 48x48/56x56 slot
+    -- before the widescreen panel enlarges it. Patch BattleState:drawPic()
+    -- itself instead. Gen 2 calls this method inside its final panel transform,
+    -- so drawing the original KIM frame here keeps the art HD while preserving
+    -- the native HUD, trainers, move objects and command/menu ordering.
+    local okBattleState, BattleState = pcall(require, "src.ui.gen2.BattleState")
+    if okBattleState and type(BattleState) == "table"
+        and type(BattleState.drawPic) == "function"
+        and not BattleState._kantoInMotionGen2HdDrawPic then
+      local nativeDrawPic = BattleState.drawPic
+      BattleState._kantoInMotionGen2HdDrawPic = nativeDrawPic
+
+      local RESIZE_TILES = {
+        [0] = 6, [1] = 4, [2] = 2,
+        [3] = 7, [4] = 5, [5] = 3,
+      }
+
+      -- KIM's HD front atlases visually fill much more of their source frame
+      -- than native G/S/C 7x7 front sprites. Keep the player/back baseline at
+      -- 1.00, but reduce enemy/front Pokémon internally so 100% feels neutral.
+      local GEN2_ENEMY_HD_BASELINE = 0.70
+
+      -- Some native G/S/C move BG effects bake the whole 160x144 field into
+      -- BattleAnimView.canvas so they can shift individual scanlines. If KIM's
+      -- HD art is included in that bake, it is permanently rasterized to Game
+      -- Boy resolution for those frames. Suppress only KIM's battlers during
+      -- that low-resolution bake, then redraw them directly afterward.
+      local gen2AnimBakePass = false
+      local gen2CurrentBattleState = nil
+
+      local function signedGen2Byte(value)
+        value = (tonumber(value) or 0) % 256
+        return value < 0x80 and value or value - 256
+      end
+
+      -- Gen 2 attack "movement" such as Tackle and Wobble/Tail Whip is not a
+      -- normal sprite x/y transform. The cart writes SCX/SCY values into
+      -- wLYOverridesBackup and BattleAnimView moves the affected scanlines.
+      --
+      -- KIM's post-canvas HD redraw cannot be baked through those scanlines
+      -- without becoming 160x144 again, so sample the native displacement at
+      -- the vertical centre of this battler's own box and apply that same
+      -- motion to the intact HD image.
+      local function gen2HdAnimMotion(runner, boxY, boxH)
+        local bg = runner and runner.bg
+        if type(bg) ~= "table" then return 0, 0 end
+
+        local dx = -signedGen2Byte(bg.scx)
+        local dy = -signedGen2Byte(bg.scy)
+
+        local row = math.floor((tonumber(boxY) or 0)
+          + (tonumber(boxH) or 0) * 0.5)
+
+        -- BattleAnimView's LCD window is strict on the upper bound in the
+        -- original hLCD interrupt model: row > lyStart and row <= lyEnd.
+        local lyStart = tonumber(bg.lyStart) or 0
+        local lyEnd = tonumber(bg.lyEnd) or 0
+        local inWindow = bg.lcdc
+          and bg.lcdc ~= "BGP"
+          and row > lyStart and row <= lyEnd
+
+        if inWindow then
+          local byte = type(bg.lyBackup) == "table"
+            and (bg.lyBackup[row - 1] or 0) or 0
+          local offset = signedGen2Byte(byte)
+
+          if bg.lcdc == "SCX" then
+            -- BattleAnimView draws at baseX - signed(override).
+            dx = dx - offset
+          elseif bg.lcdc == "SCY" then
+            -- scanlines() samples src=row+scy+override, so the visible image
+            -- moves by the inverse amount at the destination row.
+            dy = dy - offset
+          end
+        end
+
+        return dx, dy
+      end
+
+      local function hdBattleImage(mon, back)
+        if not mon or mod.options:get("enabled") == false
+            or mod.options:get("battleSprites") == false then
+          return nil
+        end
+        local side = back and "back" or "front"
+        local record, generation, normalized, shiny =
+          battleRecord(mon.species, side, mon)
+        if not record then return nil end
+        return renderPresentationFrame(record, generation, normalized, nil,
+          side, shiny and "shiny" or "normal", false)
+      end
+
+      local function drawHdBattleMon(self, mon, back, overlayPass)
+        if not mon then return false end
+
+        local overlayRunner
+        if type(overlayPass) == "table" then
+          overlayRunner = overlayPass.runner
+          overlayPass = true
+        end
+
+        -- Native trainer pictures own these slots until the real Pokemon is
+        -- sent out. Do not replace trainer art.
+        if (back and self.showPlayerTrainer)
+            or ((not back) and self.showEnemyTrainer) then
+          return false
+        end
+
+        -- BattleAnimView is currently capturing the background into its
+        -- 160x144 scanline canvas. Leave KIM's Pokémon OUT of that canvas.
+        -- Returning true tells our BattleState.drawPic wrapper that this frame
+        -- is intentionally handled, so it must not fall through to the native
+        -- low-resolution Pokémon either.
+        if gen2AnimBakePass then return true end
+
+        -- During the intro slide the player's picture is drawn by the native
+        -- presentSlide callback. The callback re-enters drawPic after clearing
+        -- slidingBackpic, so simply obey the native early-out here.
+        if back and self.slidingBackpic then return true end
+
+        local sideName = back and "player" or "enemy"
+        if type(self.picBoxCleared) == "function"
+            and self:picBoxCleared(sideName) then
+          return true
+        end
+
+        local anim = type(self.animPicState) == "function"
+          and self:animPicState(sideName) or nil
+
+        if type(self.isUnderground) == "function"
+            and self:isUnderground(sideName, mon)
+            and not (self.vanishAnim and self.vanishAnim == self.anim) then
+          return true
+        end
+
+        -- Substitute dolls are a real native G/S/C battle object. Yield this
+        -- frame to the stock renderer so the doll remains exact.
+        local over = anim and anim.pic
+        local substitute
+        if over ~= nil then
+          substitute = over == "substitute"
+        else
+          substitute = mon.volatile and (tonumber(mon.volatile.substitute) or 0) > 0
+        end
+        if substitute then return false end
+
+        local image = hdBattleImage(mon, back)
+        if not image or type(image.getDimensions) ~= "function" then return false end
+        local iw, ih = image:getDimensions()
+        if not iw or not ih or iw <= 0 or ih <= 0 then return false end
+
+        local boxTiles = back
+          and (tonumber(BattleState.PLAYER_PIC_TILES) or 6)
+          or (tonumber(BattleState.ENEMY_PIC_TILES) or 7)
+        local box = boxTiles * 8
+        local boxX = (back
+          and (tonumber(BattleState.PLAYER_PIC_TILE_X) or 2)
+          or (tonumber(BattleState.ENEMY_PIC_TILE_X) or 12)) * 8
+        local boxY = (back
+          and (tonumber(BattleState.PLAYER_PIC_TILE_Y) or 6)
+          or (tonumber(BattleState.ENEMY_PIC_TILE_Y) or 0)) * 8
+
+        local scale = math.min(box / iw, box / ih)
+
+        -- Enemy fronts need a smaller neutral presentation than player backs.
+        -- Keep the same native anchor/ground point; only reduce the image size.
+        if not back then
+          scale = scale * GEN2_ENEMY_HD_BASELINE
+        end
+
+        if anim and anim.size and RESIZE_TILES[anim.size] then
+          scale = scale * (RESIZE_TILES[anim.size] / boxTiles)
+        end
+
+        local dw, dh = iw * scale, ih * scale
+        local px = boxX + (box - dw) * 0.5
+        local py = boxY + box - dh
+
+        -- BattleBGEffect slide offsets move the Pokemon itself. Keep KIM on the
+        -- same native target coordinates so move effects remain synchronized.
+        if anim and not self.liftedPass then
+          px = px + (tonumber(anim.slide) or 0)
+        end
+
+        -- v7 kept these frames HD by redrawing after BattleAnimView's 160x144
+        -- canvas, but that lost the native BG-effect movement. Reapply the
+        -- same SCX/SCY displacement to the final-resolution KIM sprite.
+        if overlayRunner then
+          local motionX, motionY = gen2HdAnimMotion(overlayRunner, boxY, box)
+          px = px + motionX
+          py = py + motionY
+        end
+
+        local sunk = type(self.faintSink) == "function"
+          and (tonumber(self:faintSink(sideName)) or 0) or 0
+
+        local G = love.graphics
+        local function paint()
+          if sunk > 0 then
+            -- Fainting sinks the image through the bottom of its native box.
+            -- Scissor the remaining field exactly like the native row-removal
+            -- effect, but keep the HD source intact.
+            G.push("all")
+            local clipY = boxY
+            local clipH = math.max(0, box - sunk)
+            if type(require("src.ui.gen2.Chrome").clipTo) == "function" then
+              require("src.ui.gen2.Chrome").clipTo(boxX, clipY, box, clipH)
+            else
+              G.setScissor(boxX, clipY, box, clipH)
+            end
+            G.draw(image, px, py + sunk, 0, scale, scale)
+            G.pop()
+            return
+          end
+          G.draw(image, px, py, 0, scale, scale)
+        end
+
+        G.setColor(1, 1, 1, 1)
+        if image.setFilter then pcall(image.setFilter, image, "linear", "linear") end
+
+        local lifted = (not overlayPass) and anim and anim.lifted or nil
+        if not lifted then
+          paint()
+        else
+          -- Preserve the native ClearBoxed lifted band used by attacks such as
+          -- Earthquake-style BG effects. Draw KIM through the same band split.
+          local Chrome = require("src.ui.gen2.Chrome")
+          local bandY = boxY + lifted[1] * 8
+          local bandH = lifted[2] * 8
+          local function band(y, h)
+            if h <= 0 then return end
+            G.push("all")
+            Chrome.clipTo(0, y, 160, h)
+            paint()
+            G.pop()
+          end
+          if self.liftedPass then
+            band(bandY, bandH)
+          else
+            if bandY > 0 then band(0, bandY) end
+            local below = 144 - bandY - bandH
+            if below > 0 then band(bandY + bandH, below) end
+          end
+        end
+
+        if image.setFilter then pcall(image.setFilter, image, "nearest", "nearest") end
+        G.setColor(1, 1, 1, 1)
+        return true
+      end
+
+      BattleState.drawPic = function(self, mon, back)
+        if drawHdBattleMon(self, mon, back, false) then return end
+        return nativeDrawPic(self, mon, back)
+      end
+
+      -- Track the BattleState whose BattleAnimView is drawing. The state is
+      -- needed because BattleAnimView:present receives the battle model, not
+      -- the UI BattleState that owns drawPic/animPicState.
+      if type(BattleState.drawSceneBody) == "function"
+          and not BattleState._kantoInMotionGen2HdSceneBody then
+        local nativeDrawSceneBody = BattleState.drawSceneBody
+        BattleState._kantoInMotionGen2HdSceneBody = nativeDrawSceneBody
+        BattleState.drawSceneBody = function(self, ...)
+          local previous = gen2CurrentBattleState
+          gen2CurrentBattleState = self
+          local result = { pcall(nativeDrawSceneBody, self, ...) }
+          gen2CurrentBattleState = previous
+          if not result[1] then error(result[2], 0) end
+          return unpack(result, 2)
+        end
+      end
+
+      local okAnimView, BattleAnimView = pcall(require, "src.ui.gen2.BattleAnimView")
+      if okAnimView and type(BattleAnimView) == "table"
+          and type(BattleAnimView.present) == "function"
+          and type(BattleAnimView.needsCanvas) == "function"
+          and not BattleAnimView._kantoInMotionGen2HdPresent then
+        local nativePresent = BattleAnimView.present
+        BattleAnimView._kantoInMotionGen2HdPresent = nativePresent
+
+        BattleAnimView.present = function(view, runner, drawBg, battle, ...)
+          local needsCanvas = BattleAnimView.needsCanvas(runner)
+
+          if not needsCanvas then
+            -- Plain move animations never rasterize the battle field, so the
+            -- normal direct-HD drawPic path is already perfect.
+            return nativePresent(view, runner, drawBg, battle, ...)
+          end
+
+          -- Let Gen1Recomp build and scanline-shift the native 160x144 field,
+          -- but exclude KIM's battlers from that low-resolution capture.
+          gen2AnimBakePass = true
+          local result = { pcall(nativePresent, view, runner, drawBg, battle, ...) }
+          gen2AnimBakePass = false
+          if not result[1] then error(result[2], 0) end
+
+          -- We are still inside Gen2's final battle-panel transform here.
+          -- Repaint the two KIM battlers from the original HD atlas before
+          -- BattleState calls drawObjects(), so attack particles/OBJs remain
+          -- above the Pokémon exactly as in the native renderer.
+          local state = gen2CurrentBattleState
+          if state then
+            local enemy = type(state.activeMon) == "function"
+              and state:activeMon("enemy") or nil
+            local player = type(state.activeMon) == "function"
+              and state:activeMon("player") or nil
+            local overlay = { runner = runner }
+            if enemy then drawHdBattleMon(state, enemy, false, overlay) end
+            if player then drawHdBattleMon(state, player, true, overlay) end
+            state._kantoInMotionSkipLowResLiftedRows = true
+          end
+
+          return unpack(result, 2)
+        end
+      end
+
+      -- drawLiftedRows normally re-rasterizes lifted battler bands into another
+      -- 160x144 Canvas. On a frame where the direct-HD post-bake overlay was
+      -- used, skip that low-resolution copy; the complete HD battler is already
+      -- present and the native OBJ attack layer will be drawn immediately next.
+      if type(BattleState.drawLiftedRows) == "function"
+          and not BattleState._kantoInMotionGen2HdLiftedRows then
+        local nativeDrawLiftedRows = BattleState.drawLiftedRows
+        BattleState._kantoInMotionGen2HdLiftedRows = nativeDrawLiftedRows
+        BattleState.drawLiftedRows = function(self, ...)
+          if self._kantoInMotionSkipLowResLiftedRows then
+            self._kantoInMotionSkipLowResLiftedRows = nil
+            return
+          end
+          return nativeDrawLiftedRows(self, ...)
+        end
+      end
+
+      if mod.log and mod.log.info then
+        mod.log:info("Gen2 direct-HD BattleState.drawPic + HD motion bridge enabled")
+      end
     end
 
     -- Stats screen: Gen2 SummaryMenu.new takes an opts table; hooking drawPic
@@ -4575,10 +5027,8 @@ return function(mod)
           if mon and mon.isEgg ~= true and mon.species then
             local animated = getSprite(mon.species,
               { kind = "summary", mon = mon })
-            animated = animated and fitStockPortrait(animated, 56, 56) or nil
-            if animated then
-              -- nil colours = true-colour art; no Gen 2 CGB palette remap.
-              return self:drawPicBlock(animated, nil)
+            if animated and drawCenteredPortrait(animated, 0, 0, 56, 56) then
+              return
             end
           end
         end
@@ -5880,6 +6330,45 @@ return function(mod)
       end
     end
 
+  end
+
+  -- HD Rescaled menu-icon bridge. Install this last so it wraps the final
+  -- native icon chain assembled above on both Gen 1 and Gen 2.
+  do
+    local okIcons, iconInstaller = pcall(function()
+      local src = assert(mod:read("lib/menu_icons.lua"))
+      local loader = loadstring or load
+      return assert(loader(src, "@" .. mod.path .. "/lib/menu_icons.lua"))()
+    end)
+    if okIcons and type(iconInstaller) == "function" then
+      okIcons, iconInstaller = pcall(iconInstaller, mod)
+    end
+    if okIcons and iconInstaller then
+      mod._kantoInMotionMenuIcons = true
+    elseif not okIcons and mod.log and mod.log.error then
+      mod.log:error("HD menu icon bridge failed: %s", tostring(iconInstaller))
+    end
+  end
+
+  -- HGSS_SPRITES loads after KIM and otherwise reclaims Gen 1/2 Party/PC icon
+  -- presentation. Keep KIM as the icon owner only while POKEMON ICONS is ON;
+  -- switching it OFF live restores HGSS's normal post-load path.
+  do
+    local okBlock, block = pcall(function()
+      local src = assert(mod:read("lib/hgss_icon_hard_block.lua"))
+      local loader = loadstring or load
+      return assert(loader(src, "@" .. mod.path .. "/lib/hgss_icon_hard_block.lua"))()
+    end)
+    if okBlock and type(block) == "function" then
+      okBlock, block = pcall(block, mod, function()
+        return mod.options:get("menuIcons") ~= false
+      end)
+    end
+    if okBlock and block then
+      mod._kantoInMotionHgssIconHardBlock = block
+    elseif not okBlock and mod.log and mod.log.error then
+      mod.log:error("HGSS icon hard-block bridge failed: %s", tostring(block))
+    end
   end
 
 end

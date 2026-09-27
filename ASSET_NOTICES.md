@@ -1,55 +1,64 @@
-# Asset notices — Gen 1 HD rebuild
+# Asset notices — Kanto in Motion v1.5.0
 
-## HD Pokémon
+## Animated Pokémon battle sprites
 
-`assets/battle/hd-pokemon/` contains sprite-sheet PNGs generated locally from the supplied **Pokémon HD 1–151** GIF pack with `tools/import_hd_pokemon.py`.
+Kanto in Motion's HD animated Pokémon presentation uses artwork sourced from:
 
-The generated package covers National Dex **#001–151 only** in this build. Kanto in Motion does not claim ownership of Pokémon-derived artwork. Anyone redistributing the artwork is responsible for having the necessary rights or permission.
+**Battle Sprites Reloded — JDChaos**  
+https://forums.pokemmo.com/index.php?/topic/142585-battle-sprites-reloded/
+
+The imported KIM sprite pipeline supports the game-appropriate National Dex range:
+
+- Red / Blue / Yellow: #001–151
+- Gold / Silver / Crystal: #001–251
+- FireRed / LeafGreen: #001–386
+
+The source is used for front/back, normal/shiny, and available male/female variants. Kanto in Motion does not claim ownership of Pokémon-derived artwork.
+
+## HD Rescaled Pokémon menu icons
+
+Kanto in Motion uses the **HD Rescaled Icons** artwork for National Dex **#001–386**.
+
+Original pack / thread credit: **LockeGriss and contributors**  
+https://forums.pokemmo.com/index.php?/topic/183919-hd-rescaled-icons/
+
+**HaseoSora** contributed the non-flying Charizard icon and the Cyndaquil-family flame edits used by this set:  
+https://forums.pokemmo.com/index.php?/topic/183919-hd-rescaled-icons/#comment-2173491
+
+KIM stores normalized native/Modern UI versions plus original-resolution source images used by the final-resolution G/S/C and FR/LG rendering paths.
+
+Separate shiny menu-icon artwork is not yet included; shiny Pokémon currently fall back to the normal HD menu icon.
 
 ## HD battle backgrounds
 
-`assets/battle/backgrounds/hd/` contains the supplied 1920×950 HD battle-background set used by **HD BATTLE BACKGROUNDS**.
-
-The current implementation uses complete sunrise/day/sunset/night variants where available and static scenes for caves/fixed locations.
+Kanto in Motion uses supplied HD battle-background assets for its Gen 1 and supported FR/LG HD background paths. Timed outdoor scenes can provide sunrise/day/sunset/night variants; caves and fixed interiors use static routing.
 
 ## Trainer Card badges
 
-The retained animated badge artwork is credited to **xpixelpriorx**:
+The retained animated badge artwork is credited to **xpixelpriorx**:  
 https://www.deviantart.com/xpixelpriorx
-
-Custom Trainer Card player/Gym Leader portraits are not included in this rebuild.
 
 ## Gen1 Modern UI assets
 
-`assets/pixel_frame1.png`, `assets/pixel_frame2.png`, and `assets/pixel_frame3.png` come from the customized Gen1 Modern UI build used by this project.
-
-Original project credit: **ArmstrongThomas**
+Original project credit: **ArmstrongThomas**  
 https://github.com/ArmstrongThomas/gen1-modern-ui
 
 ## Poké Ball Colorfix
 
-Integrated Poké Ball presentation fixes are credited to **keberos**:
+Integrated Poké Ball presentation fixes are credited to **keberos**:  
 https://github.com/keberos/pokeball-colorfix
 
-## Shiny encounter assets
+## Kanto Rework
 
-The build keeps:
+Kanto in Motion integrates adapted Kanto Rework / Pokémon Essentials-style move-animation and routing work.
 
-- `assets/effects/shiny_sparkle.png`
-- `assets/sfx/shiny.wav`
+Project credit: **Faendra**  
+https://github.com/Faendra/kanto-rework-suite
 
-These are used only for KIM's one-shot shiny encounter cue. Kanto in Motion does not claim ownership of the supplied assets.
+## Shiny encounter presentation
 
-## Removed asset families
-
-v1.4.1 does not ship the old generation-based Battle Art sprite folders, the old Gen 6/Battle Art arena pack, or custom Trainer Card player/Gym Leader portraits. The Gen 1 move-animation art/SFX have been restored from the scanner-remediated asset package.
+KIM retains its shiny sparkle image and audio cue for the one-shot shiny encounter presentation. Kanto in Motion does not claim ownership of supplied Pokémon-derived/audio assets.
 
 ## Trademark / affiliation notice
 
 Pokémon and related characters, names, and artwork are trademarks and copyrights of their respective owners. Kanto in Motion is an unofficial fan-made mod and is not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc., or The Pokémon Company.
-
-## Restored move-animation assets
-
-- `assets/animations/` — remediated Kanto Rework / Pokémon Essentials-style move effect art.
-- `assets/sfx/` — remediated move SFX plus the retained KIM shiny cue.
-- The two WAV false-positive byte signatures and all scanner similarity flags identified during remediation were addressed before reintegration.

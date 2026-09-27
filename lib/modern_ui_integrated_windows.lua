@@ -9537,6 +9537,25 @@ return function(mod)
   end
 
   iconFor = function(game, mon)
+    -- KIM icon ownership is resolved before the mutable game icon registry.
+    -- HGSS_SPRITES replaces icons.bySpecies after KIM loads with 32x64 sheet
+    -- descriptors; reading those first made Modern UI display the entire sheet.
+    -- The direct KIM provider keeps the selected 32x32 frame and also makes the
+    -- POKEMON ICONS toggle authoritative regardless of mod load order.
+    if type(mod._kantoInMotionMenuIconForModernUi) == "function"
+        and (not mod.options or mod.options:get("menuIcons") ~= false) then
+      local okKim, kimPath = pcall(mod._kantoInMotionMenuIconForModernUi, game, mon)
+      if okKim and type(kimPath) == "string" and kimPath ~= "" then
+        local kimImage = runtime.imageFor(kimPath)
+        if kimImage then
+          paletteRuntime.setImage(kimImage, nil)
+          return runtime.markAnimated(kimImage, {
+            animated = true, frames = 2, detectSheet = true, duration = 0.45,
+          })
+        end
+      end
+    end
+
     local def = mon and game.data and game.data.pokemon and
       game.data.pokemon[mon.species]
     local icons = game.data and game.data.icons
@@ -9568,10 +9587,12 @@ return function(mod)
     local replaced = false
     if spriteResolver and type(spriteResolver.iconPath) == "function" then
       local original = entry
-      local ok, hooked = pcall(spriteResolver.iconPath, game.data, mon, entry, {})
+      local ok, hooked, hookedTrueColor = pcall(
+        spriteResolver.iconPath, game.data, mon, entry, {})
       if ok then
         entry = hooked
         replaced = hooked ~= original
+        trueColor = trueColor or hookedTrueColor == true
       end
     end
 
@@ -9599,7 +9620,17 @@ return function(mod)
 
     local followerSheet = runtime.knownSheetOptions(originalEntry or entry, image, 0)
     if followerSheet then image = runtime.markAnimated(image, followerSheet) end
-    if hasDescriptor then
+    -- Generic two-frame icon descriptors (notably HGSS_SPRITES) must be
+    -- cropped to one frame instead of scaling the entire vertical sheet.
+    -- This also keeps HGSS usable when KIM's POKEMON ICONS option is OFF.
+    if hasDescriptor and not replaced and type(originalEntry) == "table"
+        and tonumber(originalEntry.frames) and tonumber(originalEntry.frames) >= 2 then
+      return runtime.markAnimated(image, {
+        animated = true, frames = tonumber(originalEntry.frames), detectSheet = true,
+        duration = tonumber(originalEntry.duration) or 0.45,
+      })
+    end
+    if hasDescriptor and not replaced then
       return image
     end
     if replaced then
