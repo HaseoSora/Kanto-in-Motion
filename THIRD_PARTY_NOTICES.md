@@ -35,7 +35,7 @@ Kanto in Motion integrates a customized Gen1 Modern UI presentation adapted to K
 **ArmstrongThomas**  
 https://github.com/ArmstrongThomas/gen2-clean-ui
 
-Kanto in Motion v1.5.2 vendors the Gen2 Clean UI 0.4.1 Pokédex adapter/presenter pieces used by KIM's Gen 2 Pokédex presentation. The supplied Gen2 Clean UI package identifies the project as MIT licensed. KIM's remaining Gen 2 Modern UI presentation and integration code is Kanto in Motion-specific.
+Kanto in Motion v1.5.3 vendors the Gen2 Clean UI 0.4.1 Pokédex adapter/presenter pieces used by KIM's Gen 2 Pokédex presentation. The supplied Gen2 Clean UI package identifies the project as MIT licensed. KIM's remaining Gen 2 Modern UI presentation and integration code is Kanto in Motion-specific.
 
 ## Kanto Rework Suite
 

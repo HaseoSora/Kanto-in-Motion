@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.5.3
+
+- Added a dedicated Gen 2 UI SETTINGS submenu inside KANTO IN MOTION.
+- Added applicable Gen 1 UI customization parity for G/S/C: themes, frame controls, density, UI scale, font scale, font selection, dialogue scale, layout, panel/text opacity, Start Menu controls, minimal UI, and per-surface toggles.
+- Changed Gen 2's default Modern UI font from the forced pixel font to the normal scalable font; PIXEL ART FONT can still be enabled manually.
+- Added Gen 2 UI SCALE with 100% calibrated to a cleaner Gen 1-like footprint.
+- Replaced the Gen 2 MENU SPRITES ON/OFF behavior with KIM HD / VANILLA source selection.
+- Added native G/S/C sprite fallback for menu/Party/Pokédex presentation so vanilla sprites remain visible when KIM HD menu sprites are not selected.
+- Kept menu sprite source, UI sprite animation, HD icons, and battle sprites independently configurable.
+- Moved Gen 2 Modern Battle UI size/opacity/text/layout/info controls into UI SETTINGS.
+- Added RESET TO DEFAULT to the Gen 2 UI SETTINGS submenu.
+- Preserved native Gen 2 gameplay/battle state ownership and the native HP/status HUD.
+
 ## v1.5.2
 
 - Added integrated Modern UI presentation for Gold / Silver / Crystal.

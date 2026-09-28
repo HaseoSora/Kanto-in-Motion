@@ -1,4 +1,4 @@
--- Kanto in Motion v1.5.2 - Gen 2 Modern Pokedex UI v17
+-- Kanto in Motion v1.5.3 - Gen 2 Modern Pokedex UI v28
 --
 -- The Pokédex data model and presentation conversion below are the exact
 -- Gen2 Clean UI 0.4.1 adapter/presenter supplied by the user, vendored into
@@ -6,6 +6,8 @@
 -- KIM only owns final-window Modern UI styling and HD Pokémon art.
 return function(mod)
   local G=love.graphics
+  local Style=mod._kantoInMotionGen2Ui
+  local imageCache={}
   local okDex,PokedexMenu=pcall(require,"src.ui.gen2.PokedexMenu")
   local okChrome,Chrome=pcall(require,"src.ui.gen2.Chrome")
   if not (okDex and type(PokedexMenu)=="table") then return false end
@@ -44,22 +46,32 @@ return function(mod)
     if not(mod.options and mod.options.get) then return d end
     local ok,v=pcall(mod.options.get,mod.options,k); return ok and v~=nil and v or d
   end
-  local function enabled() return opt("gen2IntegratedModernUi",true)~=false end
+  local function enabled()
+    return Style and Style.presenterEnabled and Style.presenterEnabled("pokemon")
+      or opt("gen2IntegratedModernUi",true)~=false
+  end
+  local function hideOriginal()
+    return Style and Style.hideOriginal and Style.hideOriginal() or true
+  end
   local function theme()
+    if Style and Style.theme then return Style.theme() end
     local t=mod._kantoInMotionGen2Themes
     return type(t)=="table" and (t[tostring(opt("gen2UiTheme","default"))] or t.default) or FALLBACK
   end
-  local function color(c,a)
+  local function color(c,a,foreground)
+    if Style and Style.color then return Style.color(c,a,foreground) end
     c=c or {1,1,1,1}; G.setColor(c[1],c[2],c[3],a==nil and (c[4] or 1) or a)
   end
   local function font(px)
+    if Style and Style.font then return Style.font(px) end
     px=math.max(8,math.floor(px+.5)); if fonts[px] then return fonts[px] end
     local ok,f=pcall(G.newFont,FONT_PATH,px,"mono",1); if not ok then ok,f=pcall(G.newFont,px) end
     if ok and f then if f.setFilter then pcall(f.setFilter,f,"nearest","nearest") end fonts[px]=f return f end
     return G.getFont()
   end
   local function text(s,f,x,y,w,align,c)
-    G.setFont(f); color(c); s=tostring(s or "")
+    if Style and Style.text then return Style.text(s,f,x,y,w,align,c) end
+    G.setFont(f); color(c,nil,true); s=tostring(s or "")
     if w then
       local ok=pcall(G.printf,s,x,y,w,align or "left")
       if not ok then G.printf(s:gsub("[\128-\255]","?"),x,y,w,align or "left") end
@@ -74,10 +86,27 @@ return function(mod)
     return 0,0,ww,wh
   end
   local function panel(x,y,w,h,c,alpha)
+    if Style and Style.panel then return Style.panel(x,y,w,h,c,alpha) end
     local r=math.max(8,math.min(w,h)*.018)
     color(c.frameShadow or {0,0,0,.4},.18); G.rectangle("fill",x+2,y+3,w,h,r,r)
     color(c.surface,math.min(1,(c.surface[4] or 1)*(alpha or .95))); G.rectangle("fill",x,y,w,h,r,r)
     color(c.frame or c.accent); G.setLineWidth(math.max(2,math.min(w,h)*.0045)); G.rectangle("line",x,y,w,h,r,r)
+  end
+  local function loadImage(path)
+    if not path or path=="" then return nil end
+    if imageCache[path]~=nil then return imageCache[path] or nil end
+    local ok,img=false,nil
+    if mod.assets and type(mod.assets.image)=="function" then
+      ok,img=pcall(mod.assets.image,mod.assets,path)
+    end
+    if (not ok or not img) and G and type(G.newImage)=="function" then
+      ok,img=pcall(G.newImage,path)
+    end
+    if ok and img then
+      if img.setFilter then pcall(img.setFilter,img,"nearest","nearest") end
+      imageCache[path]=img; return img
+    end
+    imageCache[path]=false; return nil
   end
   local function hdSprite(species)
     if not species or not mod.exports or type(mod.exports.getSprite)~="function" then return nil end
@@ -97,7 +126,10 @@ return function(mod)
   end
   local function drawSpriteFor(prepared,x,y,w,h)
     local current=selectedSource(prepared)
-    local img=current and hdSprite(current.species)
+    if not current then return end
+    local source=tostring(opt("gen2MenuSpriteSource","kim"))
+    local img=source=="vanilla" and loadImage(current.art and current.art.sprite) or hdSprite(current.species)
+    if not img then img=loadImage(current.art and current.art.sprite) end
     if not img then return end
     local iw,ih=img:getDimensions(); local fit=math.min(w/iw,h/ih)
     color({1,1,1,1}); G.draw(img,x+(w-iw*fit)/2,y+h-ih*fit,0,fit,fit)
@@ -129,7 +161,8 @@ return function(mod)
     local rows=m.rows or {}
     local selected=tonumber(m.selected) or 1
     local scroll=tonumber(m.scroll) or 0
-    local visible=7
+    local den=Style and Style.density and Style.density() or 1
+    local visible=math.max(5,math.min(9,math.floor(7/den+.5)))
     local rowH=availableH/visible
 
     for slot=1,visible do
@@ -296,10 +329,13 @@ return function(mod)
   local function drawDex(state)
     local prepared=prepare(state); if not prepared then return end
     local c=theme(); local sx,sy,sw,sh=playfield()
-    local pw=sw>=1000 and math.min(1240,sw*.74) or sw*.96
-    local ph=sh>=700 and math.min(780,sh*.82) or sh*.89
+    local uiScale=Style and Style.uiScale and Style.uiScale(sw,sh) or 1
+    local layout=Style and Style.layoutStyle and Style.layoutStyle() or "floating"
+    local pw=sw>=1000 and math.min(1240*uiScale,sw*.82) or sw*.96
+    local ph=sh>=700 and math.min(780*uiScale,sh*.88) or sh*.89
+    local scale=uiScale
+    if layout=="full" then pw=sw*.94; ph=sh*.92; scale=math.min(pw/1240,ph/780) end
     local x=sx+(sw-pw)/2; local y=sy+(sh-ph)/2; panel(x,y,pw,ph,c,.95)
-    local scale=math.max(.95,math.min(1.55,pw/960))
     -- v14 keeps the text larger than the original implementation but backs
     -- off the v13 oversize tier; measured spacing now does the readability work.
     local big,body,small=font(34*scale),font(25*scale),font(19*scale)
@@ -312,11 +348,11 @@ return function(mod)
 
   local upstreamNew=PokedexMenu.new
   PokedexMenu.new=function(game,...)
-    local self=upstreamNew(game,...); if enabled() then self.isOpaque=false end; return self
+    local self=upstreamNew(game,...); if enabled() and hideOriginal() then self.isOpaque=false end; return self
   end
   local upstreamUpdate=PokedexMenu.update
   PokedexMenu.update=function(self,...)
-    self.isOpaque=not enabled(); return upstreamUpdate(self,...)
+    self.isOpaque=not (enabled() and hideOriginal()); return upstreamUpdate(self,...)
   end
   local upstreamWide=PokedexMenu.drawsWidescreen
   PokedexMenu.drawsWidescreen=function(self)
@@ -326,7 +362,7 @@ return function(mod)
   local function isDex(s) return type(s)=="table" and getmetatable(s)==PokedexMenu end
   if mod.hooks and type(mod.hooks.wrap)=="function" then
     mod.hooks:wrap("screen.render_visible",function(nextFn,state)
-      if enabled() and isDex(state) then return false end
+      if enabled() and hideOriginal() and isDex(state) then return false end
       return nextFn(state)
     end,100000)
     mod.hooks:wrap("render.hud",function(nextFn,game,viewport)

@@ -1,20 +1,21 @@
-# Kanto in Motion v1.5.2
+# Kanto in Motion v1.5.3
 
-v1.5.2 expands Kanto in Motion's Modern UI into **Pokémon Gold / Silver / Crystal**.
+v1.5.3 is the **Gen 2 UI parity** update for Kanto in Motion's Gold / Silver / Crystal Modern UI.
 
 ## Highlights
 
-- Gen 2 **MODERN UI** master setting.
-- Modern battle dialogue, command, and move-selection presentation while retaining the native Gen 2 HP/status HUD and battle logic.
-- Modern Start Menu, Party, Pokédex, Pack, PokéGear, Trainer Card, Save Menu, Options, and Kanto in Motion settings.
-- Modern NPC/dialogue, YES/NO prompts, Poké Mart flows, and supported level-up/stat messages.
-- Shared Gen 1-style theme choices for the Gen 2 Modern UI.
-- New Gen 2 battle UI size, opacity, text-size, move-layout, and move-info controls.
-- Gen2 Clean UI 0.4.1 Pokédex adapter/presenter integrated into KIM's Gen 2 Pokédex presentation.
-- Larger, cleaner Gen 2 UI text and improved menu/dialog layout.
+- Added a dedicated **UI SETTINGS** submenu inside KANTO IN MOTION for Gen 2.
+- Brought over the applicable Gen 1 Modern UI customization controls, including theme, frame style, density, UI scale, font scale, opacity, layout, Start Menu, minimal-UI, and per-surface controls.
+- Added **PIXEL ART FONT** as an option instead of forcing the pixel font; the normal scalable font is now the Gen 2 default.
+- Added **UI SCALE** with 100% calibrated to a cleaner Gen 1-like footprint.
+- Added independent **MENU SPRITES: KIM HD / VANILLA** selection.
+- Added native Gen 2 sprite fallback so disabling KIM menu artwork no longer leaves blank Pokémon preview areas.
+- Kept menu sprite source, sprite animation, HD icons, and battle sprites independently configurable.
+- Grouped Gen 2 Modern Battle UI presentation controls under UI SETTINGS.
+- Preserved native G/S/C HP/status HUD, battle logic, trainers, backgrounds, move animations, scripts, shops, save logic, option logic, and state transitions.
 
 ## Updating
 
-Replace the previous Kanto in Motion code with v1.5.2. The internal mod ID remains `animated_menu_pokemon`, so compatible saved settings can carry forward.
+Replace the previous Kanto in Motion code with v1.5.3. The internal mod ID remains `animated_menu_pokemon`, so compatible saved settings can carry forward.
 
-This development release package is **code-only** because the large existing KIM art payload was not part of the working upload. Keep the asset folders from your existing full KIM installation when applying this package.
+This release package is **code-only** because the large existing KIM art payload was not part of the development upload. Keep the asset folders from your existing full KIM installation when applying this package.

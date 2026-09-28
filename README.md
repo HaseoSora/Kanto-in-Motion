@@ -1,4 +1,4 @@
-# Kanto in Motion v1.5.2
+# Kanto in Motion v1.5.3
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -10,19 +10,19 @@ It supports:
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
 
-## What’s new in v1.5.2
+## What’s new in v1.5.3
 
-v1.5.2 brings Kanto in Motion’s **Modern UI to Gold / Silver / Crystal** while keeping Gen 2 gameplay logic native.
+v1.5.3 expands the Gen 2 Modern UI introduced in v1.5.2 with a dedicated **UI SETTINGS** submenu and brings over the applicable Gen 1 UI customization controls.
 
-- Added a **MODERN UI** master setting for G/S/C.
-- Added Modern UI presentation for Gen 2 battle dialogue, command selection, and move selection while retaining the native Gen 2 HP/status HUD, battle logic, trainers, backgrounds, and move animations.
-- Added Modern UI presentation for the **Start Menu, Party, Pokédex, Pack, PokéGear, Trainer Card, Save Menu, Options Menu, and Kanto in Motion settings**.
-- Added Modern UI presentation for common Gen 2 dialogue and choice flows, including **NPC dialogue, PokéCenter prompts, Poké Mart buy/sell screens, item/field text, phone text, level-up/stat messages, and supported YES/NO prompts**.
-- Added Gen 2 **UI THEME**, **BATTLE UI SIZE**, **BATTLE UI OPACITY**, **BATTLE TEXT SIZE**, **MOVE LAYOUT**, and **MOVE INFO** settings.
-- Added a KIM-styled Gen 2 Pokédex presentation based on the **Gen2 Clean UI 0.4.1 Pokédex adapter/presenter**.
-- Improved Gen 2 menu readability with larger fonts and responsive final-window rendering.
-- Removed Gen 1 title-animation controls from the Gen 2 settings menu.
-- Keeps the v1.5.1 G/S/C and FR/LG Pokémon shadows, HD sprite fixes, HD icons, and all existing multi-generation compatibility work.
+- Added a dedicated **UI SETTINGS → OPEN** submenu inside **KANTO IN MOTION** for Gold / Silver / Crystal.
+- Added Gen 2 **UI SCALE** with a 100% neutral default calibrated for a cleaner Gen 1-like footprint.
+- Added **FONT SCALE**, **PIXEL ART FONT**, and **DIALOGUE TEXT SCALE** controls. The normal scalable font is now the default; the pixel font is optional.
+- Added Gen 1-style frame, density, layout, opacity, Start Menu, minimal-UI, and per-surface Modern UI controls to Gen 2.
+- Moved the Gen 2 Modern Battle UI presentation controls into the new UI Settings submenu so UI customization is kept together.
+- Replaced Gen 2's old MENU SPRITES ON/OFF behavior with **MENU SPRITES: KIM HD / VANILLA**.
+- Added native G/S/C sprite fallback when **VANILLA** is selected or KIM menu artwork is unavailable, preventing blank Pokémon preview areas.
+- Kept menu sprite source, menu sprite animation, HD icons, and battle sprites independently configurable.
+- Preserves native Gen 2 gameplay state, HP/status HUD, trainers, battle timing, backgrounds, move animations, scripts, shops, save logic, and option logic underneath KIM's presentation layer.
 
 ## Main features
 
@@ -46,7 +46,7 @@ v1.5.2 brings Kanto in Motion’s **Modern UI to Gold / Silver / Crystal** while
 - HD animated Pokémon through National Dex **#251**
 - Integrated KIM **Modern UI** for menus, dialogue, shops, save/options, Pokédex, Party, and supported battle UI surfaces
 - Native Gen 2 battle logic, HP/status HUD, trainers, backgrounds, and move animations
-- Modern UI themes shared with KIM’s Gen 1 presentation
+- Modern UI themes and applicable UI customization controls shared with KIM’s Gen 1 presentation
 - HD animated battle Pokémon
 - HD Summary-screen Pokémon
 - HD Pokédex Pokémon
@@ -126,22 +126,55 @@ Open **KANTO IN MOTION** from the mod settings screen. On **Red / Blue / Yellow*
 
 Gold / Silver / Crystal retain their native gameplay and battle logic. KIM's Modern UI is a presentation layer: the native Gen 2 HP/status HUD, trainers, battle timing, backgrounds, move animations, scripts, shops, save logic, option logic, and state transitions remain authoritative underneath it.
 
+#### Main Kanto in Motion settings
+
 | Setting | Choices | Default | What it does |
 | --- | --- | --- | --- |
-| **MENU SPRITES** | ON / OFF | ON | Enables KIM's HD animated Pokémon on supported Gen 2 menu, Summary/Status, Pokédex, evolution, and presentation surfaces. |
+| **MENU SPRITES** | KIM HD / VANILLA | KIM HD | Chooses KIM's HD animated menu Pokémon or the native Gold/Silver/Crystal Pokémon artwork. This is independent from POKEMON ICONS and BATTLE SPRITES. |
 | **POKEMON ICONS** | ON / OFF | ON | Uses KIM's HD Pokémon icons in native G/S/C icon slots. OFF restores the game or another compatible icon provider. |
-| **ANIMATION** | ON / OFF | ON | Enables animated KIM Pokémon on supported G/S/C presentation and battle surfaces. OFF holds supported artwork on the first frame. |
+| **ANIMATION** | ON / OFF | ON | Master animation control for supported KIM Pokémon/trainer presentation. OFF holds supported animated KIM artwork on its first frame. |
 | **MODERN UI** | ON / OFF | ON | Master switch for KIM's Gen 2 Modern UI across menus, Party, Pokédex, Pack, PokéGear, Trainer Card, Save, Options/KIM settings, dialogue, shops, choices, level-up messages, and supported battle UI surfaces. OFF yields those presentation surfaces to the native game. |
-| **MODERN BATTLE UI** | ON / OFF | ON | Replaces the native lower battle dialogue, command menu, and move menu with KIM Modern UI while keeping the native Gen 2 HP/status HUD, battle logic, trainers, backgrounds, and move animations. |
-| **UI THEME** | GEN1 MODERN / CLASSIC MONO / CRIMSON / CRIMSON GLASS / MODERN GLASS / POCKET GREEN / MIDNIGHT / MIDNIGHT GLASS / FROST / LIGHT / DARK | GEN1 MODERN | Chooses the palette used across the Gen 2 Modern UI. |
-| **BATTLE UI SIZE** | 60%–100% in 5% steps | 100% | Adjusts the Gen 2 Modern lower battle panel footprint while keeping it bottom-anchored. |
-| **BATTLE UI OPACITY** | 25%–100% in 5% steps | 100% | Adjusts only the Gen 2 Modern lower battle panel background opacity. |
-| **BATTLE TEXT SIZE** | 100%–400% in 25% steps | 150% | Scales Gen 2 Modern battle command, move, and message text independently of the native HP/status HUD. |
-| **MOVE LAYOUT** | GRID / VERTICAL | GRID | GRID uses a 2×2 move selector. VERTICAL lists the four moves top-to-bottom. |
-| **MOVE INFO** | ON / OFF | OFF | Shows the selected Gen 2 move's type, PP, power, and accuracy beside the move list. |
+| **UI SETTINGS** | OPEN | — | Opens the dedicated Gen 2 UI customization submenu described below. |
 | **BATTLE SPRITES** | ON / OFF | ON | Uses KIM HD animated Pokémon in native G/S/C battles while retaining native Gen 2 battle logic and move animations. |
 | **PKMN SHADOWS** | OFF / LOW / MEDIUM / HIGH / ULTRA | MEDIUM | Controls ground-contact shadow quality for KIM HD battle Pokémon. |
 | **SHADOW OPACITY** | 50%–150% in 10% steps | 100% | Adjusts Gen 2 battle shadow darkness without changing Pokémon size or position. |
+
+#### Gold / Silver / Crystal — UI SETTINGS
+
+These controls are grouped under **KANTO IN MOTION → UI SETTINGS**. They mirror the applicable Gen 1 Modern UI customization options while keeping Gen 2 game/state ownership native.
+
+| Setting | Choices | Default | What it does |
+| --- | --- | --- | --- |
+| **UI THEME** | GEN1 MODERN / CLASSIC MONO / CRIMSON / CRIMSON GLASS / MODERN GLASS / POCKET GREEN / MIDNIGHT / MIDNIGHT GLASS / FROST / LIGHT / DARK | GEN1 MODERN | Chooses the palette used across the Gen 2 Modern UI. |
+| **UI FRAME STYLE** | THEME / PIXEL / SOFT / PLAIN | PIXEL | Chooses the Modern UI panel border treatment. |
+| **PIXEL FRAME** | FRAME 1 / FRAME 2 / FRAME 3 | FRAME 2 | Chooses the authored PNG frame used when PIXEL framing is active. |
+| **PIXEL FRAME SCALE** | 1X / 2X / 3X / 4X | 2X | Scales the pixel-frame artwork by a whole-number multiplier. |
+| **UI DENSITY** | AUTO / COMPACT / COMFORTABLE | AUTO | Adjusts panel spacing and row height. |
+| **UI SCALE** | AUTO; 75%–150% in 5% steps; 175%–400% in 25% steps | 100% | Scales Gen 2 Modern UI panels and control spacing. 100% is calibrated to the cleaner Gen 1-like footprint. |
+| **FONT SCALE** | AUTO; 80%–200% in 5% steps; 225%–400% in 25% steps | 100% | Scales Modern UI title, body, caption, value, and hint text independently of panel size. |
+| **PIXEL ART FONT** | ON / OFF | OFF | ON uses the Plain Pixel font. OFF uses the normal scalable system font, matching the cleaner Gen 1-style presentation. |
+| **DIALOGUE TEXT SCALE** | INHERIT / 110% / 125% / 150% / 175% / 200% | INHERIT | Boosts dialogue, choices, quantities, and confirmation text separately from general font scale. |
+| **LAYOUT STYLE** | ADAPTIVE / FLOATING / FULL SCREEN | ADAPTIVE | Chooses responsive/floating cards or a larger full-screen presentation. |
+| **PANEL OPACITY** | 0%–100% in 5% steps | 100% | Adjusts panel-background opacity independently from text and borders. |
+| **TEXT / LINE OPACITY** | 0%–100% in 5% steps | 100% | Adjusts text, labels, borders, dividers, and accent opacity. |
+| **HIDE ORIGINAL UI** | ON / OFF | ON | Hides the native Gen 2 UI where KIM supplies the complete Modern UI presentation. |
+| **START MENU FAST JUMP** | ON / OFF | ON | Lets left/right directional presses jump five rows in the Gen 2 Start Menu. |
+| **START MENU PARTY VIEW** | ON / OFF | OFF | Shows a compact party summary beside the Start Menu. |
+| **SIDE MENU INSET** | 0 / 10 / 20 / 30 / 40 / 50 | 0 | Moves the floating Start Menu inward on wide displays. |
+| **MINIMAL UI** | ON / OFF | OFF | Uses tighter spacing and less secondary detail. |
+| **DIALOGUE UI** | ON / OFF | ON | Enables Modern UI for Gen 2 text boxes, choices, quantities, and confirmation prompts. |
+| **MENU UI** | ON / OFF | ON | Enables Modern UI for Gen 2 Start, Pack, PokéGear, Save, and Options screens. |
+| **POKEMON SCREENS** | ON / OFF | ON | Enables Modern UI for Party, Pokédex, Trainer Card, and supported Pokémon screens. |
+| **MOD MANAGER UI** | ON / OFF | ON | Enables Modern UI presentation for Kanto in Motion's own settings screens. |
+| **SPRITE ANIMATION** | ON / OFF | ON | Animates supported KIM menu/Party/Pokédex artwork without changing the selected MENU SPRITES source. |
+| **MODERN BATTLE UI** | ON / OFF | ON | Replaces only the native lower battle dialogue/command/move surface; the native Gen 2 HP/status HUD and battle logic remain unchanged. |
+| **BATTLE UI SIZE** | 60%–100% in 5% steps | 100% | Adjusts the Gen 2 Modern lower battle-panel footprint while keeping it bottom-anchored. |
+| **BATTLE UI OPACITY** | 25%–100% in 5% steps | 100% | Adjusts only the Gen 2 Modern lower battle-panel background opacity. |
+| **BATTLE TEXT SIZE** | 100%–400% in 25% steps | 150% | Scales Gen 2 Modern battle command, move, and message text independently of the native HP/status HUD. |
+| **MOVE LAYOUT** | GRID / VERTICAL | GRID | GRID uses a 2×2 move selector. VERTICAL lists the four moves top-to-bottom. |
+| **MOVE INFO** | ON / OFF | OFF | Shows the selected Gen 2 move's type, PP, power, and accuracy beside the move list. |
+
+The UI Settings submenu also includes **RESET TO DEFAULT** for restoring the Gen 2 Modern UI controls to their v1.5.3 defaults.
 
 #### Gen 2 Modern UI coverage
 
@@ -205,15 +238,15 @@ Kanto in Motion includes compatibility paths for optional external mods such as:
 - HGSS_SPRITES
 - supported translation/UI mods
 
-External compatibility mod packages are not bundled. v1.5.2 directly vendors only the Gen2 Clean UI 0.4.1 Pokédex adapter/presenter pieces used by KIM's Gen 2 Pokédex presentation; the separate Gen2 Clean UI mod is not required for that Pokédex presentation.
+External compatibility mod packages are not bundled. v1.5.3 directly vendors only the Gen2 Clean UI 0.4.1 Pokédex adapter/presenter pieces used by KIM's Gen 2 Pokédex presentation; the separate Gen2 Clean UI mod is not required for that Pokédex presentation.
 
 ## Installation
 
-Replace the previous Kanto in Motion package with **v1.5.2** and enable it from Gen1Recomp's mod menu.
+Replace the previous Kanto in Motion package with **v1.5.3** and enable it from Gen1Recomp's mod menu.
 
 Existing KIM settings can carry forward because the internal mod ID is unchanged.
 
-If you are updating a full-assets installation with the **CODE-ONLY** package, keep your existing KIM asset folders and replace the code/documentation files with the v1.5.2 package contents.
+If you are updating a full-assets installation with the **CODE-ONLY** package, keep your existing KIM asset folders and replace the code/documentation files with the v1.5.3 package contents.
 
 ## Credits
 
@@ -235,7 +268,7 @@ If you are updating a full-assets installation with the **CODE-ONLY** package, k
 
 - **Gen2 Clean UI — ArmstrongThomas**
   - https://github.com/ArmstrongThomas/gen2-clean-ui
-  - v1.5.2 vendors the Gen2 Clean UI 0.4.1 Pokédex adapter/presenter used by KIM's Gen 2 Pokédex presentation.
+  - v1.5.3 vendors the Gen2 Clean UI 0.4.1 Pokédex adapter/presenter used by KIM's Gen 2 Pokédex presentation.
 
 - **Kanto Rework Suite — Faendra**
   - https://github.com/Faendra/kanto-rework-suite

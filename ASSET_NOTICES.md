@@ -1,4 +1,4 @@
-# Asset notices — Kanto in Motion v1.5.2
+# Asset notices — Kanto in Motion v1.5.3
 
 ## Animated Pokémon battle sprites
 

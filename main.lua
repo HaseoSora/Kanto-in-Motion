@@ -261,6 +261,10 @@ return function(mod)
   if IS_GEN2 then
     local gen2Main = {}
     local gen1TitleKeys = {
+      -- Gen 2 replaces the legacy MENU SPRITES boolean with an explicit
+      -- KIM HD / VANILLA source choice. Keep the old saved key defined only
+      -- as a compatibility field so existing installs can migrate cleanly.
+      enabled = true,
       titleScreen = true,
       titleTrainer = true,
       titleCycleSpeed = true,
@@ -272,82 +276,26 @@ return function(mod)
       end
     end
     optionSchema = gen2Main
+    table.insert(optionSchema, 1, {
+      key = "gen2MenuSpriteSource", label = "MENU SPRITES", type = "choice",
+      default = "kim", choices = {
+        { "KIM HD", "kim" }, { "VANILLA", "vanilla" },
+      },
+      description = "Choose Kanto in Motion HD animated menu Pokemon or the native Gold/Silver/Crystal Pokemon artwork. This is independent from POKEMON ICONS and BATTLE SPRITES.",
+    })
   end
 
-  -- Gen 2 uses KIM's shared HD Pokemon providers plus its own Modern UI
-  -- presentation layer. The full Gen 1 battle submenu remains intentionally
-  -- unavailable because Gen 2 keeps its native battle logic and HP/status HUD.
+  local gen2UiOptionSchema = {}
+
+  -- Gen 2 keeps native game/state ownership while exposing the same practical
+  -- Modern UI presentation controls as Gen 1 through a dedicated UI submenu.
+  -- Battle-state/HUD logic remains native; these rows only control KIM-owned
+  -- final-window presentation.
   if IS_GEN2 then
     optionSchema[#optionSchema + 1] = {
       key = "gen2IntegratedModernUi", label = "MODERN UI",
       type = "toggle", default = true,
-      description = "Master switch for Kanto in Motion's Gen 2 Modern UI across battles, menus, dialogue, shops, Save, Options and KIM settings. OFF yields those presentation surfaces back to native Gold/Silver/Crystal.",
-    }
-    optionSchema[#optionSchema + 1] = {
-      key = "battleUiWip", label = "MODERN BATTLE UI", type = "toggle",
-      default = true,
-      description = "Replace the native Gen 2 battle dialogue, command menu and move menu with Kanto in Motion's Modern UI presentation. The native HP/status HUD, battle logic, trainers, backgrounds and move animations remain unchanged.",
-    }
-    optionSchema[#optionSchema + 1] = {
-      key = "gen2UiTheme", label = "UI THEME", type = "choice",
-      default = "default", choices = {
-        { "GEN1 MODERN", "default" },
-        { "CLASSIC MONO", "gen1_modern_ui:classic_mono" },
-        { "CRIMSON", "gen1_modern_ui:crimson" },
-        { "CRIMSON GLASS", "gen1_modern_ui:crimson_glass" },
-        { "MODERN GLASS", "gen1_modern_ui:modern_glass" },
-        { "POCKET GREEN", "gen1_modern_ui:pocket_green" },
-        { "MIDNIGHT", "gen1_modern_ui:midnight" },
-        { "MIDNIGHT GLASS", "gen1_modern_ui:midnight_glass" },
-        { "FROST", "gen1_modern_ui:frost" },
-        { "LIGHT", "gen1_modern_ui:light" },
-        { "DARK", "gen1_modern_ui:dark" },
-      },
-      description = "Choose the color theme used across Kanto in Motion's Gen 2 Modern UI. These palettes match KIM's built-in Gen 1 Modern UI themes.",
-    }
-    optionSchema[#optionSchema + 1] = {
-      key = "battleUiSize", label = "BATTLE UI SIZE", type = "choice",
-      default = "100", choices = {
-        { "60%", "60" }, { "65%", "65" }, { "70%", "70" },
-        { "75%", "75" }, { "80%", "80" }, { "85%", "85" },
-        { "90%", "90" }, { "95%", "95" }, { "100%", "100" },
-      },
-      description = "Adjust the Gen 2 Modern lower battle panel footprint while keeping it bottom-anchored.",
-    }
-    optionSchema[#optionSchema + 1] = {
-      key = "battleUiOpacity", label = "BATTLE UI OPACITY", type = "choice",
-      default = "100", choices = {
-        { "25%", "25" }, { "30%", "30" }, { "35%", "35" },
-        { "40%", "40" }, { "45%", "45" }, { "50%", "50" },
-        { "55%", "55" }, { "60%", "60" }, { "65%", "65" },
-        { "70%", "70" }, { "75%", "75" }, { "80%", "80" },
-        { "85%", "85" }, { "90%", "90" }, { "95%", "95" },
-        { "100%", "100" },
-      },
-      description = "Adjust only the Gen 2 Modern lower panel background opacity. Frame, selection and text remain fully readable.",
-    }
-    optionSchema[#optionSchema + 1] = {
-      key = "battleTextScale", label = "BATTLE TEXT SIZE", type = "choice",
-      default = "150", choices = {
-        { "100%", "100" }, { "125%", "125" }, { "150%", "150" },
-        { "175%", "175" }, { "200%", "200" }, { "225%", "225" },
-        { "250%", "250" }, { "275%", "275" }, { "300%", "300" },
-        { "325%", "325" }, { "350%", "350" }, { "375%", "375" },
-        { "400%", "400" },
-      },
-      description = "Scale the Gen 2 Modern battle command, move and message text independently of the native HP/status HUD.",
-    }
-    optionSchema[#optionSchema + 1] = {
-      key = "battleMoveLayout", label = "MOVE LAYOUT", type = "choice",
-      default = "grid", choices = {
-        { "GRID", "grid" }, { "VERTICAL", "vertical" },
-      },
-      description = "GRID uses a 2x2 move selector with matching Gen 2 cursor navigation. VERTICAL keeps the four moves in a list.",
-    }
-    optionSchema[#optionSchema + 1] = {
-      key = "battleMoveInfo", label = "MOVE INFO", type = "toggle",
-      default = false,
-      description = "Show the selected Gen 2 move's type, PP, power and accuracy beside the move list.",
+      description = "Master switch for Kanto in Motion's Gen 2 Modern UI. OFF restores the native Gold/Silver/Crystal presentation for battles and menus.",
     }
     optionSchema[#optionSchema + 1] = {
       key = "battleSprites", label = "BATTLE SPRITES", type = "toggle",
@@ -371,6 +319,117 @@ return function(mod)
         { "140%", "140" }, { "150%", "150" },
       },
       description = "Adjust Kanto in Motion battle shadow darkness without changing Pokemon size or position. 100% matches the Gen 1 calibrated reference.",
+    }
+
+    local function percentChoices(a, b, step)
+      local out = {}
+      for n = a, b, step do out[#out + 1] = { n .. "%", tostring(n) } end
+      return out
+    end
+    local uiScaleChoices = { { "AUTO", "auto" } }
+    for n = 75, 150, 5 do uiScaleChoices[#uiScaleChoices + 1] = { n .. "%", tostring(n) } end
+    for n = 175, 400, 25 do uiScaleChoices[#uiScaleChoices + 1] = { n .. "%", tostring(n) } end
+    local fontScaleChoices = { { "AUTO", "auto" } }
+    for n = 80, 200, 5 do fontScaleChoices[#fontScaleChoices + 1] = { n .. "%", tostring(n) } end
+    for n = 225, 400, 25 do fontScaleChoices[#fontScaleChoices + 1] = { n .. "%", tostring(n) } end
+    local opacityChoices = percentChoices(0, 100, 5)
+
+    gen2UiOptionSchema = {
+      { key = "gen2UiTheme", label = "UI THEME", type = "choice",
+        default = "default", choices = {
+          { "GEN1 MODERN", "default" },
+          { "CLASSIC MONO", "gen1_modern_ui:classic_mono" },
+          { "CRIMSON", "gen1_modern_ui:crimson" },
+          { "CRIMSON GLASS", "gen1_modern_ui:crimson_glass" },
+          { "MODERN GLASS", "gen1_modern_ui:modern_glass" },
+          { "POCKET GREEN", "gen1_modern_ui:pocket_green" },
+          { "MIDNIGHT", "gen1_modern_ui:midnight" },
+          { "MIDNIGHT GLASS", "gen1_modern_ui:midnight_glass" },
+          { "FROST", "gen1_modern_ui:frost" },
+          { "LIGHT", "gen1_modern_ui:light" },
+          { "DARK", "gen1_modern_ui:dark" },
+        }, description = "Choose the palette used across the Gen 2 Modern UI." },
+      { key = "frameStyle", label = "UI FRAME STYLE", type = "choice",
+        default = "pixel", choices = {
+          { "THEME", "theme" }, { "PIXEL", "pixel" },
+          { "SOFT", "soft" }, { "PLAIN", "plain" },
+        }, description = "Choose the same panel border treatment offered by Gen 1 Modern UI." },
+      { key = "frameAsset", label = "PIXEL FRAME", type = "choice",
+        default = "2", choices = {
+          { "FRAME 1", "1" }, { "FRAME 2", "2" }, { "FRAME 3", "3" },
+        }, description = "Choose the authored PNG used when PIXEL framing is active." },
+      { key = "frameScale", label = "PIXEL FRAME SCALE", type = "choice",
+        default = "2", choices = {
+          { "1X", "1" }, { "2X", "2" }, { "3X", "3" }, { "4X", "4" },
+        }, description = "Scale PNG pixel frames by a whole-number multiplier." },
+      { key = "density", label = "UI DENSITY", type = "choice",
+        default = "auto", choices = {
+          { "AUTO", "auto" }, { "COMPACT", "compact" },
+          { "COMFORTABLE", "comfortable" },
+        }, description = "Adjust spacing and row height used by Gen 2 Modern UI panels." },
+      { key = "uiScale", label = "UI SCALE", type = "choice",
+        default = "100", choices = uiScaleChoices,
+        description = "Scale Gen 2 Modern UI panels and control spacing. 100% is calibrated to the cleaner Gen 1-like footprint." },
+      { key = "fontScale", label = "FONT SCALE", type = "choice",
+        default = "100", choices = fontScaleChoices,
+        description = "Scale Modern UI title, body, caption, value and hint text independently of panel size." },
+      { key = "pixelFont", label = "PIXEL ART FONT", type = "toggle", default = false,
+        description = "Use the Plain Pixel font. OFF uses the normal scalable system font like Gen 1 Modern UI." },
+      { key = "dialogueTextScale", label = "DIALOGUE TEXT SCALE", type = "choice",
+        default = "inherit", choices = {
+          { "INHERIT", "inherit" }, { "110%", "110" }, { "125%", "125" },
+          { "150%", "150" }, { "175%", "175" }, { "200%", "200" },
+        }, description = "Boost dialogue, choices, quantities and confirmation text separately." },
+      { key = "layoutStyle", label = "LAYOUT STYLE", type = "choice",
+        default = "auto", choices = {
+          { "ADAPTIVE", "auto" }, { "FLOATING", "floating" },
+          { "FULL SCREEN", "full" },
+        }, description = "Choose adaptive/floating cards or a larger full-screen presentation." },
+      { key = "panelOpacity", label = "PANEL OPACITY", type = "choice",
+        default = "100", choices = opacityChoices,
+        description = "Set panel-background opacity independently from text and borders." },
+      { key = "foregroundOpacity", label = "TEXT / LINE OPACITY", type = "choice",
+        default = "100", choices = opacityChoices,
+        description = "Set the opacity of text, labels, borders, dividers and accents." },
+      { key = "hideOriginalUi", label = "HIDE ORIGINAL UI", type = "toggle", default = true,
+        description = "Hide the native Gen 2 UI where KIM supplies the complete Modern UI presentation." },
+      { key = "startMenuFastJump", label = "START MENU FAST JUMP", type = "toggle", default = true,
+        description = "Let left/right directional presses jump five rows in the Gen 2 Start Menu." },
+      { key = "startMenuQuickView", label = "START MENU PARTY VIEW", type = "toggle", default = false,
+        description = "Show a compact party summary beside the Start Menu." },
+      { key = "startMenuInset", label = "SIDE MENU INSET", type = "choice",
+        default = "0", choices = {
+          { "0", "0" }, { "10", "10" }, { "20", "20" },
+          { "30", "30" }, { "40", "40" }, { "50", "50" },
+        }, description = "Move the floating Start Menu toward the center on wide displays." },
+      { key = "minimalUi", label = "MINIMAL UI", type = "toggle", default = false,
+        description = "Use a tighter presentation with reduced spacing and less secondary detail." },
+      { key = "dialogueUi", label = "DIALOGUE UI", type = "toggle", default = true,
+        description = "Use Modern UI for Gen 2 text boxes, choices, quantities and confirmation prompts." },
+      { key = "menuUi", label = "MENU UI", type = "toggle", default = true,
+        description = "Use Modern UI for Gen 2 Start, Pack, PokéGear, Save and Options screens." },
+      { key = "pokemonUi", label = "POKEMON SCREENS", type = "toggle", default = true,
+        description = "Use Modern UI for Gen 2 Party, Pokédex, Trainer Card and supported Pokémon screens." },
+      { key = "managerUi", label = "MOD MANAGER UI", type = "toggle", default = true,
+        description = "Use Modern UI presentation for Kanto in Motion's settings screens." },
+      { key = "spriteAnimation", label = "SPRITE ANIMATION", type = "toggle", default = true,
+        description = "Animate supported KIM Pokémon artwork while preserving the selected menu sprite source." },
+      { key = "battleUiWip", label = "MODERN BATTLE UI", type = "toggle",
+        default = true, description = "Replace only the native Gen 2 lower battle dialogue/command/move surface; the HP/status HUD and battle logic remain native." },
+      { key = "battleUiSize", label = "BATTLE UI SIZE", type = "choice",
+        default = "100", choices = percentChoices(60, 100, 5),
+        description = "Adjust the Gen 2 Modern lower battle-panel footprint while keeping it bottom-anchored." },
+      { key = "battleUiOpacity", label = "BATTLE UI OPACITY", type = "choice",
+        default = "100", choices = percentChoices(25, 100, 5),
+        description = "Adjust only the Gen 2 Modern lower battle-panel background opacity." },
+      { key = "battleTextScale", label = "BATTLE TEXT SIZE", type = "choice",
+        default = "150", choices = percentChoices(100, 400, 25),
+        description = "Scale Gen 2 Modern battle command, move and message text independently of the native HP/status HUD." },
+      { key = "battleMoveLayout", label = "MOVE LAYOUT", type = "choice",
+        default = "grid", choices = { { "GRID", "grid" }, { "VERTICAL", "vertical" } },
+        description = "GRID uses a 2x2 move selector. VERTICAL lists the four moves top-to-bottom." },
+      { key = "battleMoveInfo", label = "MOVE INFO", type = "toggle",
+        default = false, description = "Show the selected Gen 2 move's type, PP, power and accuracy beside the move list." },
     }
   end
 
@@ -541,6 +600,15 @@ return function(mod)
   local combinedKantoOptionSchema = {}
   for _, row in ipairs(optionSchema) do
     combinedKantoOptionSchema[#combinedKantoOptionSchema + 1] = row
+  end
+  for _, row in ipairs(gen2UiOptionSchema) do
+    combinedKantoOptionSchema[#combinedKantoOptionSchema + 1] = row
+  end
+  -- Keep the old Gen 2 MENU SPRITES boolean defined for save compatibility,
+  -- but do not expose it now that Gen 2 has an explicit source choice.
+  if IS_GEN2 then
+    combinedKantoOptionSchema[#combinedKantoOptionSchema + 1] =
+      { key = "enabled", label = "LEGACY MENU SPRITES", type = "toggle", default = true }
   end
   for _, row in ipairs(battleOptionSchema) do
     combinedKantoOptionSchema[#combinedKantoOptionSchema + 1] = row
@@ -772,7 +840,9 @@ return function(mod)
 
   local function battleRecord(species, side, mon)
     if IS_GEN2 then
-      if mod.options:get("enabled") == false then return nil end
+      -- Gen 2 menu artwork and battle artwork are independent choices.
+      -- MENU SPRITES may be VANILLA while BATTLE SPRITES stays ON.
+      if mod.options:get("battleSprites") == false then return nil end
     elseif mod.options:get("battleSprites") == false then
       return nil
     end
@@ -978,6 +1048,13 @@ return function(mod)
     return canvas
   end
 
+  local function menuSpritesEnabled()
+    if IS_GEN2 then
+      return tostring(mod.options:get("gen2MenuSpriteSource") or "kim") == "kim"
+    end
+    return mod.options:get("enabled") ~= false
+  end
+
   -- HD sheets are already authored at their intended presentation size, so
   -- no cross-generation normalization or resampling is required.
   local function renderPresentationFrame(front, generation, species, forcedFrame,
@@ -987,25 +1064,29 @@ return function(mod)
   end
 
   local function getSprite(species, opts)
-    if not mod.options:get("enabled") then return nil end
+    if not menuSpritesEnabled() then return nil end
     local generation = opts and opts.generation or selectedGeneration()
     local mon = opts and opts.mon
+    local forcedFrame = nil
+    -- Gen 2's SPRITE ANIMATION setting is presentation-only: it freezes KIM
+    -- menu/Pokedex/party artwork on frame 1 without changing battle animation.
+    if IS_GEN2 and mod.options:get("spriteAnimation") == false then forcedFrame = 1 end
     if isBattleShiny(mon) then
       local shiny, actualGeneration, normalized = localShinyFrontRecord(species, generation, mon)
       if shiny then
         return renderPresentationFrame(shiny, actualGeneration, normalized,
-          nil, "front", "shiny", false)
+          forcedFrame, "front", "shiny", false)
       end
     end
     local front, actualGeneration, normalized = localFrontRecord(species, generation, mon)
     if not front then return nil end
     return renderPresentationFrame(front, actualGeneration, normalized,
-      nil, "front", "normal", false)
+      forcedFrame, "front", "normal", false)
   end
 
   -- Title-only alternate-color lookup uses the same HD metadata as battles.
   local function getTitleShinySprite(species, generation)
-    if not mod.options:get("enabled") then return nil end
+    if not menuSpritesEnabled() then return nil end
     local shinyFront, actualGeneration, normalized = localShinyFrontRecord(species, "hd")
     if not shinyFront then return nil end
     return renderPresentationFrame(shinyFront, actualGeneration, normalized,
@@ -1157,8 +1238,7 @@ return function(mod)
     if IS_GEN2 then
       -- Gen 2 keeps the native G/S/C battle system. KIM supplies only the
       -- Pokemon image through Gen1Recomp's existing pokemon.sprite seam.
-      return mod.options:get("enabled") ~= false
-        and mod.options:get("battleSprites") ~= false
+      return mod.options:get("battleSprites") ~= false
     end
     return mod.options:get("battleSprites") ~= false
       and not externalBattleSpritesBlocked()
@@ -1703,10 +1783,15 @@ return function(mod)
     return nil
   end
 
+  local function menuPresentationFrame(front)
+    if IS_GEN2 and mod.options:get("spriteAnimation") == false then return 1 end
+    return currentFrame(front)
+  end
+
   local function bridgePath(species, generation, mon)
     local front, actualGeneration, normalized, shiny = bridgeFront(species, generation, mon)
     if not front then return nil end
-    local frame = currentFrame(front)
+    local frame = menuPresentationFrame(front)
     return FRAME_BRIDGE_PREFIX .. actualGeneration .. "/"
       .. (shiny and "shiny" or "normal") .. "/" .. normalized .. "/"
       .. tostring(frame) .. ".png"
@@ -1803,7 +1888,7 @@ return function(mod)
     local front, shiny = frontForCleanUi(proxy.generation, proxy.species)
     if type(front) ~= "table" then return proxy.canvas end
     local source = renderPresentationFrame(front, proxy.generation, proxy.species,
-      nil, "front", shiny and "shiny" or "normal", false)
+      menuPresentationFrame(front), "front", shiny and "shiny" or "normal", false)
     if not source then return proxy.canvas end
     local sw, sh = source:getDimensions()
     local dx = math.floor((proxy.width - sw) / 2)
@@ -1888,7 +1973,7 @@ return function(mod)
     bridge.resolver = cleanUiProxy
 
     local function withCleanUiPokemonDefinitions(game, nextFn, ...)
-      if mod.options:get("enabled") == false or not gen2CleanUiHandle() then
+      if not menuSpritesEnabled() or not gen2CleanUiHandle() then
         return nextFn(...)
       end
 
@@ -1963,7 +2048,7 @@ return function(mod)
         mod._kantoInMotionCleanUiHudHook = mod.hooks:wrap(
           "render.hud",
           function(nextFn, game, viewport)
-            if mod.options:get("enabled") ~= false and gen2CleanUiHandle() then
+            if menuSpritesEnabled() and gen2CleanUiHandle() then
               markVisibleShiny(game)
               refreshCleanUiProxies()
             end
@@ -2073,7 +2158,7 @@ return function(mod)
         end
         return resolved
       end
-      if mod.options:get("enabled") == false or type(ctx) ~= "table"
+      if not menuSpritesEnabled() or type(ctx) ~= "table"
           or ctx.side ~= "front" or not FRAME_BRIDGE_KINDS[kind] then
         return resolved
       end
@@ -4624,7 +4709,7 @@ return function(mod)
     end
 
     local function provider(_, mon, kind)
-      if mod.options:get("enabled") == false or type(mon) ~= "table" or not mon.species then
+      if not menuSpritesEnabled() or type(mon) ~= "table" or not mon.species then
         return nil
       end
       kind = tostring(kind or ""):lower()
@@ -4632,7 +4717,7 @@ return function(mod)
       local front, generation, species, shiny = bridgeFront(
         mon.species, selectedGeneration(), mon)
       if not front then return nil end
-      local image = renderPresentationFrame(front, generation, species, currentFrame(front),
+      local image = renderPresentationFrame(front, generation, species, menuPresentationFrame(front),
         "front", shiny and "shiny" or "normal", true)
       if not image then return nil end
       return image, { trueColor = true, kantoInMotion = true }
@@ -4863,8 +4948,7 @@ return function(mod)
       end
 
       local function hdBattleImage(mon, back)
-        if not mon or mod.options:get("enabled") == false
-            or mod.options:get("battleSprites") == false then
+        if not mon or mod.options:get("battleSprites") == false then
           return nil
         end
         local side = back and "back" or "front"
@@ -5154,7 +5238,7 @@ return function(mod)
       local nativeDrawPic = SummaryMenu.drawPic
       SummaryMenu._kantoInMotionGen2DrawPic = nativeDrawPic
       SummaryMenu.drawPic = function(self, ...)
-        if mod.options:get("enabled") ~= false then
+        if menuSpritesEnabled() then
           local mon = self and self.mon
           if mon and mon.isEgg ~= true and mon.species then
             local animated = getSprite(mon.species,
@@ -5178,7 +5262,7 @@ return function(mod)
       local nativeDrawPic = PokedexMenu.drawPic
       PokedexMenu._kantoInMotionGen2DrawPic = nativeDrawPic
       PokedexMenu.drawPic = function(self, row, tx, ty, ownColors, ...)
-        if mod.options:get("enabled") ~= false and row and row.seen
+        if menuSpritesEnabled() and row and row.seen
             and row.species then
           local animated = getSprite(row.species, { kind = "dex" })
           if animated and drawCenteredPortrait(animated, (tx or 0) * 8,
@@ -5200,7 +5284,7 @@ return function(mod)
       local nativeDrawPic = EvolutionAnim.drawPic
       EvolutionAnim._kantoInMotionGen2DrawPic = nativeDrawPic
       EvolutionAnim.drawPic = function(self, ...)
-        if mod.options:get("enabled") ~= false and self and not self.blackout then
+        if menuSpritesEnabled() and self and not self.blackout then
           local species = self.showNew and self.newSpecies or self.oldSpecies
           local animated = species and getSprite(species,
             { kind = "evolution", mon = self.mon })
@@ -5234,7 +5318,7 @@ return function(mod)
       if not okDraw then error(drawErr, 0) end
 
       if integratedModernUiEnabled()
-          or mod.options:get("enabled") == false
+          or not menuSpritesEnabled()
           or knownExternalUiPresent() then
         return
       end
@@ -5290,7 +5374,7 @@ return function(mod)
       local originalDraw = EvolutionState.draw
       EvolutionState._animatedMenuPokemonDraw = originalDraw
       EvolutionState.draw = function(self, ...)
-        if not (self and mod.options:get("enabled")) then
+        if not (self and menuSpritesEnabled()) then
           return originalDraw(self, ...)
         end
 
@@ -5549,7 +5633,7 @@ return function(mod)
     local function isLiveTitle(state)
       if not (state and getmetatable(state) == TitleState) then return false end
       if state.yellowLayout then return false end
-      if not mod.options:get("enabled") or not mod.options:get("titleScreen") then
+      if not menuSpritesEnabled() or not mod.options:get("titleScreen") then
         return false
       end
       ensureFullKantoTitleCycle(state)
@@ -5947,6 +6031,7 @@ return function(mod)
   end
 
   local SETTINGS_SCREEN = "animated_menu_pokemon:settings"
+  local UI_SETTINGS_SCREEN = "animated_menu_pokemon:ui_settings"
   local BATTLE_SETTINGS_SCREEN = "animated_menu_pokemon:battle_settings"
   local function buildItems()
     local items = {}
@@ -5955,6 +6040,12 @@ return function(mod)
         id = MOD_ID .. ":" .. row.key, label = row.label,
         right = optionLabel(row), option = row,
       }
+      if IS_GEN2 and row.key == "gen2IntegratedModernUi" and #gen2UiOptionSchema > 0 then
+        items[#items + 1] = {
+          id = MOD_ID .. ":ui_open", label = "UI SETTINGS",
+          right = "OPEN", submenu = UI_SETTINGS_SCREEN,
+        }
+      end
       if row.key == "animate" and #battleOptionSchema > 0 then
         items[#items + 1] = {
           id = MOD_ID .. ":battle_open", label = "BATTLE",
@@ -5963,6 +6054,22 @@ return function(mod)
       end
     end
     items[#items + 1] = { id = "cancel", label = "CANCEL", cancel = true }
+    return items
+  end
+
+  local function buildUiItems()
+    local items = {}
+    for _, row in ipairs(gen2UiOptionSchema) do
+      items[#items + 1] = {
+        id = MOD_ID .. ":" .. row.key, label = row.label,
+        right = optionLabel(row), option = row,
+      }
+    end
+    items[#items + 1] = {
+      id = MOD_ID .. ":ui_reset_defaults",
+      label = "RESET TO DEFAULT", right = "RESET", resetUiDefaults = true,
+    }
+    items[#items + 1] = { id = "cancel", label = "BACK", cancel = true }
     return items
   end
 
@@ -6009,6 +6116,56 @@ return function(mod)
       end,
     })
     menu._kimModernSettings = "main"
+    refresh()
+    local baseUpdate = menu.update
+    menu.update = function(self, dt)
+      local item = self.items and self.items[self.index]
+      if item and item.option then
+        local input = self.game and self.game.input
+        if input and input:wasPressed("left") then step(item, -1); return end
+        if input and input:wasPressed("right") then step(item, 1); return end
+      end
+      return baseUpdate(self, dt)
+    end
+    return menu
+  end
+
+  local function newUiSettingsMenu(game)
+    local menu
+    local function resetUiDefaults()
+      for _, row in ipairs(gen2UiOptionSchema) do
+        if row.default ~= nil then setOption(game, row.key, row.default) end
+      end
+    end
+    local function refresh(preferredId)
+      local oldIndex = menu and menu.index or 1
+      local items = buildUiItems()
+      if not menu then return items end
+      menu.items = items
+      local found
+      if preferredId then
+        for i, item in ipairs(items) do if item.id == preferredId then found = i break end end
+      end
+      menu.index = found or math.max(1, math.min(oldIndex, #items))
+    end
+    local function step(item, dir)
+      if not (item and item.option) then return end
+      stepOption(game, item.option, dir)
+      refresh(item.id)
+    end
+    menu = mod.ui.ListMenu.new(game, "UI SETTINGS", {}, {
+      wrap = true, keyRepeat = true,
+      onChoose = function(item, m)
+        if item and item.cancel then if m and m.close then m:close() end return end
+        if item and item.resetUiDefaults then
+          resetUiDefaults()
+          refresh(item.id)
+          return
+        end
+        step(item, 1)
+      end,
+    })
+    menu._kimModernSettings = "ui"
     refresh()
     local baseUpdate = menu.update
     menu.update = function(self, dt)
@@ -6080,6 +6237,9 @@ return function(mod)
     and mod.ui.ListMenu.new and mod.ui.push
   if submenuReady then
     mod.content.screens:register(SETTINGS_SCREEN, { new = function(game) return newSettingsMenu(game) end })
+    if IS_GEN2 and #gen2UiOptionSchema > 0 then
+      mod.content.screens:register(UI_SETTINGS_SCREEN, { new = function(game) return newUiSettingsMenu(game) end })
+    end
     mod.content.screens:register(BATTLE_SETTINGS_SCREEN, { new = function(game) return newBattleSettingsMenu(game) end })
   end
 
@@ -6118,6 +6278,36 @@ return function(mod)
 
   local function installIntegratedModernUi()
     if IS_GEN2 then
+      -- Shared Gen 2 Modern UI appearance/settings bridge. Load this before
+      -- every presenter so font, scale, opacity, frame and presenter toggles
+      -- resolve consistently across menus, Pokemon screens, dialogue and battle.
+      local styleSource, styleReadErr = mod:read("lib/gen2_modern_style.lua")
+      if styleSource then
+        local styleChunk, styleCompileErr = load(styleSource,
+          "@" .. mod.path .. "/lib/gen2_modern_style.lua")
+        if styleChunk then
+          local okStyleModule, styleSetup = pcall(styleChunk)
+          if okStyleModule and type(styleSetup) == "function" then
+            local okStyleInstall, styleInstallErr = pcall(styleSetup, mod)
+            if okStyleInstall then
+              mod.log:info("Gen2 Modern shared UI settings/style bridge installed")
+            else
+              mod.log:error("Gen2 Modern shared UI settings/style bridge failed: %s",
+                tostring(styleInstallErr))
+            end
+          else
+            mod.log:error("cannot load Gen2 Modern shared UI settings/style bridge: %s",
+              tostring(styleSetup))
+          end
+        else
+          mod.log:error("cannot compile Gen2 Modern shared UI settings/style bridge: %s",
+            tostring(styleCompileErr))
+        end
+      else
+        mod.log:error("cannot read Gen2 Modern shared UI settings/style bridge: %s",
+          tostring(styleReadErr))
+      end
+
       -- Gen 2 uses a dedicated adapter. It modernizes only the lower battle
       -- interface and deliberately leaves the native G/S/C HP/status HUD,
       -- battle state, commands, item/party flows and move animations intact.

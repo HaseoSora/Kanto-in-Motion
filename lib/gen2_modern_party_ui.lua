@@ -1,10 +1,11 @@
--- Kanto in Motion v1.5.2 - Gen 2 Modern Party UI v17
+-- Kanto in Motion v1.5.3 - Gen 2 Modern Party UI v28
 --
 -- The native PartyMenu remains the complete input/state owner. KIM makes the
 -- state transparent, hides only its native render, then draws a final-window
 -- Modern UI card over the live overworld through render.hud.
 return function(mod)
   local G = love.graphics
+  local Style = mod._kantoInMotionGen2Ui
   local okParty, PartyMenu = pcall(require, "src.ui.gen2.PartyMenu")
   local okChrome, Chrome = pcall(require, "src.ui.gen2.Chrome")
   if not (okParty and type(PartyMenu) == "table" and okChrome and Chrome) then
@@ -30,23 +31,31 @@ return function(mod)
   end
 
   local function enabled()
+    if Style and Style.presenterEnabled then return Style.presenterEnabled("pokemon") end
     return opt("gen2IntegratedModernUi", true) ~= false
   end
 
+  local function hideOriginal()
+    return Style and Style.hideOriginal and Style.hideOriginal() or true
+  end
+
   local function theme()
+    if Style and Style.theme then return Style.theme() end
     local themes = mod._kantoInMotionGen2Themes
     return type(themes) == "table"
       and (themes[tostring(opt("gen2UiTheme", "default"))] or themes.default)
       or FALLBACK
   end
 
-  local function color(c, a)
+  local function color(c, a, foreground)
+    if Style and Style.color then return Style.color(c,a,foreground) end
     c = c or {1,1,1,1}
     G.setColor(c[1] or 1, c[2] or 1, c[3] or 1,
       a == nil and (c[4] or 1) or a)
   end
 
   local function fontFor(px)
+    if Style and Style.font then return Style.font(px) end
     px = math.max(8, math.floor(px + 0.5))
     if fontCache[px] then return fontCache[px] end
     local ok, f = pcall(G.newFont, FONT_PATH, px, "mono", 1)
@@ -60,8 +69,9 @@ return function(mod)
   end
 
   local function drawText(text, font, x, y, w, align, c)
+    if Style and Style.text then return Style.text(text,font,x,y,w,align,c) end
     if font then G.setFont(font) end
-    color(c)
+    color(c,nil,true)
     text = tostring(text or "")
     if w then
       local ok = pcall(G.printf, text, x, y, w, align or "left")
@@ -84,9 +94,15 @@ return function(mod)
   local function loadImage(path)
     if not path then return nil end
     if imageCache[path] ~= nil then return imageCache[path] or nil end
-    local ok, image = pcall(G.newImage, path)
+    local ok, image = false, nil
+    if mod.assets and type(mod.assets.image)=="function" then
+      ok,image=pcall(mod.assets.image,mod.assets,path)
+    end
+    if (not ok or not image) and G and type(G.newImage)=="function" then
+      ok,image=pcall(G.newImage,path)
+    end
     if not ok or not image then imageCache[path] = false return nil end
-    if image.setFilter then pcall(image.setFilter, image, "linear", "linear") end
+    if image.setFilter then pcall(image.setFilter, image, "nearest", "nearest") end
     imageCache[path] = image
     return image
   end
@@ -101,6 +117,7 @@ return function(mod)
   end
 
   local function panel(x,y,w,h,colors,alpha)
+    if Style and Style.panel then return Style.panel(x,y,w,h,colors,alpha) end
     local radius = math.max(8, math.min(w,h) * 0.018)
     color(colors.frameShadow or {0,0,0,0.4}, 0.18)
     G.rectangle("fill", x+2, y+3, w,h,radius,radius)
@@ -130,10 +147,23 @@ return function(mod)
     return ok and loadImage(path) or nil
   end
 
-  local function preview(mon)
-    if not mon or not mod.exports or type(mod.exports.getSprite)~="function" then return nil end
-    local ok,image=pcall(mod.exports.getSprite,mon.species,{generation="hd",mon=mon})
-    return ok and image or nil
+  local function nativePreview(self,mon)
+    if not (self and mon and self.game and self.game.data and self.game.data.pokemon) then return nil end
+    local def=self.game.data.pokemon[mon.species]
+    return def and loadImage(def.spriteFront) or nil
+  end
+
+  local function preview(self,mon)
+    if not mon then return nil end
+    if tostring(opt("gen2MenuSpriteSource","kim"))=="vanilla" then
+      return nativePreview(self,mon)
+    end
+    if mod.exports and type(mod.exports.getSprite)=="function" then
+      local ok,image=pcall(mod.exports.getSprite,mon.species,{generation="hd",mon=mon})
+      if ok and image then return image end
+    end
+    -- Missing KIM art must never leave a blank Gen 2 preview.
+    return nativePreview(self,mon)
   end
 
   local function monName(self,mon)
@@ -160,16 +190,17 @@ return function(mod)
     local colors=theme()
     local sx,sy,sw,sh=playfield()
     local compact = sw >= 900 and sh >= 600
-    -- v10: the v9 card was intentionally compact but too small to read at
-    -- desktop resolutions.  Keep the Gen 1 "floating over the overworld"
-    -- composition while giving the party list/details enough physical pixels.
-    local pw = compact and math.min(1080, sw * 0.56) or sw * 0.94
-    local ph = compact and math.min(690, sh * 0.72)
+    local uiScale = Style and Style.uiScale and Style.uiScale(sw,sh) or 1
+    local layout = Style and Style.layoutStyle and Style.layoutStyle() or "floating"
+    local pw = compact and math.min(1080*uiScale, sw * 0.68) or sw * 0.94
+    local ph = compact and math.min(690*uiScale, sh * 0.82)
       or math.min(sh * 0.84, pw * 0.78)
+    local scale=compact and uiScale or math.max(0.78,math.min(1.2,pw/760))
+    if layout=="full" then
+      pw=sw*.94; ph=sh*.92; scale=math.min(pw/1080,ph/690)
+    end
     local x=sx+(sw-pw)/2; local y=sy+(sh-ph)/2
     panel(x,y,pw,ph,colors,0.92)
-
-    local scale=math.max(0.9,math.min(1.55,pw/760))
     local titleFont, bodyFont, smallFont =
       fontFor(34*scale), fontFor(26*scale), fontFor(19*scale)
     local pad=16*scale; local header=58*scale; local footer=44*scale
@@ -179,7 +210,7 @@ return function(mod)
 
     local contentY=y+header; local contentH=ph-header-footer
     local listW=pw*0.52; local detailX=x+listW; local detailW=pw-listW
-    color(colors.divider,0.7); G.rectangle("fill",detailX,contentY,1,contentH)
+    color(colors.divider,0.7,true); G.rectangle("fill",detailX,contentY,1,contentH)
 
     local rows=math.max(6,#self.party)
     local rowH=contentH/6
@@ -190,7 +221,7 @@ return function(mod)
         local selected=self.index==i
         if selected then
           color(colors.selected,0.96); G.rectangle("fill",x+6,ry+2,listW-12,rowH-4,5,5)
-          color(colors.accent); G.rectangle("fill",x+6,ry+2,3,rowH-4,2,2)
+          color(colors.accent,nil,true); G.rectangle("fill",x+6,ry+2,3,rowH-4,2,2)
         end
         local iconSize=math.min(rowH-8,30*scale)
         drawIcon(self,mon,x+14*scale,ry+(rowH-iconSize)/2,iconSize,selected)
@@ -207,7 +238,7 @@ return function(mod)
     if selected then
       local name,def=monName(self,selected)
       local px=detailX+pad; local py=contentY+pad
-      local portrait=preview(selected)
+      local portrait=preview(self,selected)
       local portraitBox=88*scale
       if portrait then
         local iw,ih=portrait:getDimensions(); local s=math.min(portraitBox/iw,portraitBox/ih)
@@ -275,13 +306,13 @@ return function(mod)
   local upstreamNew=PartyMenu.new
   PartyMenu.new=function(game,opts)
     local self=upstreamNew(game,opts)
-    if enabled() then self.isOpaque=false end
+    if enabled() and hideOriginal() then self.isOpaque=false end
     return self
   end
 
   local upstreamUpdate=PartyMenu.update
   PartyMenu.update=function(self,...)
-    self.isOpaque=not enabled()
+    self.isOpaque=not (enabled() and hideOriginal())
     return upstreamUpdate(self,...)
   end
 
@@ -297,7 +328,7 @@ return function(mod)
 
   if mod.hooks and type(mod.hooks.wrap)=="function" then
     mod.hooks:wrap("screen.render_visible",function(nextFn,state)
-      if enabled() and isParty(state) then return false end
+      if enabled() and hideOriginal() and isParty(state) then return false end
       return nextFn(state)
     end,100000)
 

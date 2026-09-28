@@ -1,4 +1,4 @@
--- Kanto in Motion v1.5.2 - Gen 2 Modern Battle UI adapter v7
+-- Kanto in Motion v1.5.3 - Gen 2 Modern Battle UI adapter v28
 --
 -- Presentation-only: Gold/Silver/Crystal keep their native BattleState,
 -- input, battle logic, HP/status HUD, trainers, child menus and move
@@ -7,6 +7,7 @@
 -- final window resolution through render.hud. v2 follows the native battle\n-- panel width (160px normal / 304px WideBattle) instead of a fixed card.
 return function(mod)
   local G = love.graphics
+  local Style = mod._kantoInMotionGen2Ui
   local okStrings, Strings = pcall(require, "src.core.Strings")
   local okTypeChart, TypeChart = pcall(require, "src.battle.TypeChart")
   local okChrome, Chrome = pcall(require, "src.ui.gen2.Chrome")
@@ -158,11 +159,17 @@ return function(mod)
   end
 
   local function enabled()
+    if Style and Style.presenterEnabled then return Style.presenterEnabled("battle") end
     return opt("gen2IntegratedModernUi", true) ~= false
       and opt("battleUiWip", true) ~= false
   end
 
-  local function color(c, alpha)
+  local function hideOriginal()
+    return Style and Style.hideOriginal and Style.hideOriginal() or true
+  end
+
+  local function color(c, alpha, foreground)
+    if Style and Style.color then return Style.color(c,alpha,foreground) end
     local a = alpha == nil and (c[4] or 1) or alpha
     G.setColor(c[1] or 1, c[2] or 1, c[3] or 1, a)
   end
@@ -261,6 +268,7 @@ return function(mod)
   end
 
   local function fontFor(px)
+    if Style and Style.font then return Style.font(px) end
     px = math.max(8, math.floor(px + 0.5))
     local hit = fontCache[px]
     if hit then return hit end
@@ -298,8 +306,9 @@ return function(mod)
   end
 
   local function drawText(text, font, x, y, maxW, align, c)
+    if Style and Style.text then return Style.text(text,font,x,y,maxW,align,c or COLORS.text) end
     if font then G.setFont(font) end
-    color(c or COLORS.text)
+    color(c or COLORS.text,nil,true)
     text = tostring(text or "")
     if maxW and maxW > 0 then
       local ok = pcall(G.printf, text, x, y, maxW, align or "left")
@@ -313,6 +322,7 @@ return function(mod)
   end
 
   local function roundedPanel(x, y, w, h, alpha, scale)
+    if Style and Style.panel then return Style.panel(x,y,w,h,COLORS,alpha) end
     local r = math.max(3, 3.0 * scale)
     local shadow = COLORS.frameShadow or { 0.01, 0.02, 0.04, 0.42 }
     local lineW = math.max(1, scale * 0.65)
@@ -345,7 +355,7 @@ return function(mod)
     local r = math.max(2, 2 * scale)
     color(COLORS.selected)
     G.rectangle("fill", x, y, w, h, r, r)
-    color(COLORS.accent)
+    color(COLORS.accent,nil,true)
     G.rectangle("fill", x, y, math.max(2, 1.5 * scale), h, r, r)
   end
 
@@ -445,7 +455,7 @@ return function(mod)
     local menuW = w - messageW - gap
     drawMessage(state, x, y, messageW, h, bodyFont, captionFont, scale)
 
-    color(COLORS.divider)
+    color(COLORS.divider,nil,true)
     G.rectangle("fill", menuX - gap * 0.5, y + pad, math.max(1, scale * 0.45),
       h - pad * 2)
 
@@ -503,7 +513,7 @@ return function(mod)
       listX = x
       listW = w - infoW - gap
       local infoX = x + w - infoW
-      color(COLORS.divider)
+      color(COLORS.divider,nil,true)
       G.rectangle("fill", dividerX, y + 3 * scale,
         math.max(1, scale * 0.45), h - 6 * scale)
       drawMoveInfo(state, moves[selected], infoX, y, infoW, h,
@@ -562,7 +572,7 @@ return function(mod)
 
     -- Theme changes are live; no restart/reinstall is needed while testing.
     local themeId = tostring(opt("gen2UiTheme", "default"))
-    COLORS = THEMES[themeId] or THEMES.default
+    COLORS = (Style and Style.theme and Style.theme()) or THEMES[themeId] or THEMES.default
 
     local gx, gy, gw, gh, fit = battleRect(state, viewport)
     fit = tonumber(fit) or math.max(0.5, math.min(gw / 160, gh / 144))
@@ -615,10 +625,10 @@ return function(mod)
   end
 
   -- Hide ONLY the native lower battle surface. The Gen 2 HP/status HUD stays
-  -- fully native, which is intentional for v1.5.2.
+  -- fully native, which is intentional for v1.5.3.
   if mod.hooks and type(mod.hooks.wrap) == "function" then
     mod.hooks:wrap("battle.bottom_ui_visible", function(nextFn, state)
-      if supportedSurface(state) then return false end
+      if supportedSurface(state) and hideOriginal() then return false end
       return nextFn(state)
     end, 25000)
 

@@ -1,4 +1,4 @@
--- Kanto in Motion v1.5.2 - Gen 2 Modern Dialog UI v4
+-- Kanto in Motion v1.5.3 - Gen 2 Modern Dialog UI v28
 --
 -- Shared Modern UI presentation for Gen 2 dialogue/choice surfaces.
 --
@@ -10,9 +10,10 @@
 --   * BattleState keeps its level-up/learn-move state machine.
 --
 -- KIM only hides the vanilla draw and mirrors the live state into the same
--- themed final-window Modern UI used by the rest of v1.5.2.
+-- themed final-window Modern UI used by the rest of v1.5.3.
 return function(mod)
   local G = love.graphics
+  local Style = mod._kantoInMotionGen2Ui
   local okFont, Font = pcall(require, "src.render.Font")
   local okText, TextBox = pcall(require, "src.render.TextBox")
   local okChoice, ChoiceBox = pcall(require, "src.ui.ChoiceBox")
@@ -49,24 +50,48 @@ return function(mod)
   end
 
   local function enabled()
-    return opt("gen2IntegratedModernUi", true) ~= false
+    return Style and Style.masterEnabled and Style.masterEnabled()
+      or opt("gen2IntegratedModernUi", true) ~= false
+  end
+  local function dialogueEnabled()
+    return Style and Style.presenterEnabled and Style.presenterEnabled("dialogue") or enabled()
+  end
+  local function menuEnabled()
+    return Style and Style.presenterEnabled and Style.presenterEnabled("menu") or enabled()
+  end
+
+  local function hideOriginal()
+    return Style and Style.hideOriginal and Style.hideOriginal() or true
+  end
+
+  local function uiScale(sw,sh)
+    return Style and Style.uiScale and Style.uiScale(sw,sh)
+      or math.max(.85, math.min(1.5,(sh or 760)/760))
+  end
+
+  local function dialogueScale()
+    return Style and Style.dialogueScale and Style.dialogueScale() or 1
   end
 
   local function theme()
+    if Style and Style.theme then return Style.theme() end
     local themes = mod._kantoInMotionGen2Themes
     if type(themes) ~= "table" then return FALLBACK end
     return themes[tostring(opt("gen2UiTheme", "default"))]
       or themes.default or FALLBACK
   end
 
-  local function color(c, alpha)
+  local function color(c, alpha, foreground)
+    if Style and Style.color then return Style.color(c,alpha,foreground) end
     c = c or {1,1,1,1}
     G.setColor(c[1] or 1, c[2] or 1, c[3] or 1,
       alpha == nil and (c[4] or 1) or alpha)
   end
 
   local function fontFor(px)
-    px = math.max(9, math.floor((tonumber(px) or 12) + 0.5))
+    px=(tonumber(px) or 12)*dialogueScale()
+    if Style and Style.font then return Style.font(px) end
+    px = math.max(9, math.floor(px + 0.5))
     if fontCache[px] then return fontCache[px] end
     local ok, f = pcall(G.newFont, FONT_PATH, px, "mono", 1)
     if not ok or not f then ok, f = pcall(G.newFont, px) end
@@ -79,8 +104,9 @@ return function(mod)
   end
 
   local function drawText(value, font, x, y, w, align, c)
+    if Style and Style.text then return Style.text(value,font,x,y,w,align,c) end
     if font then G.setFont(font) end
-    color(c)
+    color(c,nil,true)
     value = tostring(value or "")
     if w then
       local ok = pcall(G.printf, value, x, y, w, align or "left")
@@ -93,6 +119,7 @@ return function(mod)
   end
 
   local function panel(x, y, w, h, c, alpha)
+    if Style and Style.panel then return Style.panel(x,y,w,h,c,alpha) end
     local r = math.max(8, math.min(w,h) * 0.025)
     color(c.frameShadow or {0,0,0,.4}, 0.20)
     G.rectangle("fill", x + 2, y + 3, w, h, r, r)
@@ -153,11 +180,11 @@ return function(mod)
   local function drawDialogBox(box, choice)
     local c = theme()
     local sx, sy, sw, sh = playfield()
-    local scale = math.max(.85, math.min(1.55, sh / 760))
+    local scale = uiScale(sw,sh)
     local body = fontFor(28 * scale)
     local small = fontFor(18 * scale)
 
-    local w = math.min(sw * .90, 1500)
+    local w = math.min(sw * .90, 1500 * scale)
     local lineH = body:getHeight()
     local h = math.max(150 * scale, lineH * 2 + 56 * scale)
     local x = sx + (sw - w) / 2
@@ -226,7 +253,7 @@ return function(mod)
   local function drawBareChoice(choice)
     local c=theme()
     local sx,sy,sw,sh=playfield()
-    local scale=math.max(.85,math.min(1.55,sh/760))
+    local scale=uiScale(sw,sh)
     local body=fontFor(28*scale)
     local labels=choice.labels or {"YES","NO"}
     local rowH=math.max(52*scale,body:getHeight()+16*scale)
@@ -249,7 +276,7 @@ return function(mod)
   local function drawScriptMenu(menu)
     local c=theme()
     local sx,sy,sw,sh=playfield()
-    local scale=math.max(.85,math.min(1.5,sh/760))
+    local scale=uiScale(sw,sh)
     local titleFont=fontFor(25*scale)
     local body=fontFor(23*scale)
     local small=fontFor(17*scale)
@@ -310,14 +337,14 @@ return function(mod)
   local function drawMart(mart)
     local c=theme()
     local sx,sy,sw,sh=playfield()
-    local scale=math.max(.85,math.min(1.5,sh/760))
+    local scale=uiScale(sw,sh)
     local big=fontFor(30*scale)
     local body=fontFor(23*scale)
     local small=fontFor(17*scale)
     local priceFont=fontFor(22*scale)
     local moneyFont=fontFor(23*scale)
-    local w=math.min(sw*.76,1220)
-    local h=math.min(sh*.72,720)
+    local w=math.min(sw*.82,1220*scale)
+    local h=math.min(sh*.82,720*scale)
     local x=sx+(sw-w)/2
     local y=sy+(sh-h)/2
     panel(x,y,w,h,c,.97)
@@ -486,11 +513,11 @@ return function(mod)
   local function drawBattleSpecial(state)
     local c=theme()
     local sx,sy,sw,sh=playfield()
-    local scale=math.max(.85,math.min(1.5,sh/760))
+    local scale=uiScale(sw,sh)
     local body=fontFor(28*scale)
     local small=fontFor(18*scale)
 
-    local w=math.min(sw*.88,1480)
+    local w=math.min(sw*.88,1480*scale)
     local dh=math.max(145*scale,body:getHeight()*2+52*scale)
     local x=sx+(sw-w)/2
     local y=sy+sh-dh-20*scale
@@ -570,13 +597,13 @@ return function(mod)
     local oldUpdate=MartMenu.update
     MartMenu.update=function(self,...)
       local result={oldUpdate(self,...)}
-      if enabled() then self.isOpaque=false end
+      if menuEnabled() and hideOriginal() then self.isOpaque=false end
       return unpack(result)
     end
     local oldNew=MartMenu.new
     MartMenu.new=function(game,opts)
       local self=oldNew(game,opts)
-      if enabled() then self.isOpaque=false end
+      if menuEnabled() and hideOriginal() then self.isOpaque=false end
       return self
     end
     MartMenu.__kimModernDialogUpdateWrapped=true
@@ -610,7 +637,8 @@ return function(mod)
 
   if mod.hooks and type(mod.hooks.wrap)=="function" then
     mod.hooks:wrap("screen.render_visible",function(nextFn,state)
-      if enabled() and (isText(state) or isChoice(state) or isScript(state) or isMart(state)) then
+      if hideOriginal() and ((dialogueEnabled() and (isText(state) or isChoice(state)))
+          or (menuEnabled() and (isScript(state) or isMart(state)))) then
         return false
       end
       return nextFn(state)
@@ -619,7 +647,7 @@ return function(mod)
     -- Battle level-up / YES-NO phases are drawn inside BattleState.drawBottom,
     -- so hide that whole native lower surface and redraw it in Modern UI.
     mod.hooks:wrap("battle.bottom_ui_visible",function(nextFn,state)
-      if enabled() and isBattleSpecial(state) then return false end
+      if dialogueEnabled() and hideOriginal() and isBattleSpecial(state) then return false end
       return nextFn(state)
     end,45000)
 
@@ -628,23 +656,23 @@ return function(mod)
       local ok=table.remove(result,1)
       if not ok then error(result[1],0) end
 
-      if not enabled() then return unpack(result) end
+      if not (dialogueEnabled() or menuEnabled()) then return unpack(result) end
 
       local top=game and game.stack and type(game.stack.top)=="function"
         and game.stack:top() or nil
 
       G.push("all")
       G.origin()
-      if isChoice(top) then
+      if dialogueEnabled() and isChoice(top) then
         local box=findTextBelow(game)
         if box then drawDialogBox(box,top) else drawBareChoice(top) end
-      elseif isText(top) then
+      elseif dialogueEnabled() and isText(top) then
         drawDialogBox(top,nil)
-      elseif isScript(top) then
+      elseif menuEnabled() and isScript(top) then
         drawScriptMenu(top)
-      elseif isMart(top) then
+      elseif menuEnabled() and isMart(top) then
         drawMart(top)
-      elseif isBattleSpecial(top) then
+      elseif dialogueEnabled() and isBattleSpecial(top) then
         drawBattleSpecial(top)
       end
       G.pop()
@@ -655,7 +683,7 @@ return function(mod)
 
   mod.exports.gen2ModernDialogs={
     apiVersion=1,
-    active=function() return enabled() end,
+    active=function() return dialogueEnabled() or menuEnabled() end,
   }
   return true
 end

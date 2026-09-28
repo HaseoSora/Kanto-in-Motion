@@ -1,4 +1,4 @@
--- Kanto in Motion v1.5.2 - Gen 2 Modern Core Menus v27 -- 23
+-- Kanto in Motion v1.5.3 - Gen 2 Modern Core Menus v28 -- UI parity
 --
 -- Modern overlay presentation for the native Gen 2 Start Menu, Pack,
 -- Pokegear, Trainer Card, Save Menu, Options Menu and KIM Mod Settings. Their original objects remain authoritative for
@@ -21,6 +21,7 @@ return function(mod)
     return false
   end
 
+  local Style=mod._kantoInMotionGen2Ui
   local FONT_PATH="assets/fonts/plainpixel/PlainPixel-Regular.ttf"
   local fonts={}
   local FALLBACK={
@@ -30,36 +31,47 @@ return function(mod)
     text={.96,.98,1,1},muted={.74,.82,.92,1},divider={.38,.5,.68,.94},
   }
   local function opt(k,d)
+    if Style and Style.opt then return Style.opt(k,d) end
     if not(mod.options and mod.options.get) then return d end
     local ok,v=pcall(mod.options.get,mod.options,k); return ok and v~=nil and v or d
   end
-  local function enabled() return opt("gen2IntegratedModernUi",true)~=false end
+  local function enabled()
+    return Style and Style.masterEnabled and Style.masterEnabled()
+      or opt("gen2IntegratedModernUi",true)~=false
+  end
+  local function presenterEnabled(kind)
+    return Style and Style.presenterEnabled and Style.presenterEnabled(kind) or enabled()
+  end
+  local function hideOriginal()
+    return Style and Style.hideOriginal and Style.hideOriginal() or true
+  end
   local function theme()
+    if Style and Style.theme then return Style.theme() end
     local t=mod._kantoInMotionGen2Themes
     return type(t)=="table" and (t[tostring(opt("gen2UiTheme","default"))] or t.default) or FALLBACK
   end
-  local function color(c,a)
+  local function color(c,a,foreground)
+    if Style and Style.color then return Style.color(c,a,foreground) end
     c=c or {1,1,1,1}; G.setColor(c[1],c[2],c[3],a==nil and (c[4] or 1) or a)
   end
   local function font(px)
+    if Style and Style.font then return Style.font(px) end
     px=math.max(8,math.floor(px+.5)); if fonts[px] then return fonts[px] end
     local ok,f=pcall(G.newFont,FONT_PATH,px,"mono",1); if not ok then ok,f=pcall(G.newFont,px) end
     if ok and f then if f.setFilter then pcall(f.setFilter,f,"nearest","nearest") end fonts[px]=f return f end
     return G.getFont()
   end
   local function text(s,f,x,y,w,align,c)
-    G.setFont(f); color(c); s=tostring(s or "")
+    if Style and Style.text then return Style.text(s,f,x,y,w,align,c) end
+    G.setFont(f); color(c,nil,true); s=tostring(s or "")
     if w then
       local ok=pcall(G.printf,s,x,y,w,align or "left")
       if not ok then G.printf(s:gsub("[\128-\255]","?"),x,y,w,align or "left") end
     else G.print(s,x,y) end
   end
   local function boldText(s,f,x,y,c)
-    G.setFont(f); color(c); s=tostring(s or "")
-    -- PlainPixel has one weight, so double-strike by one pixel to make
-    -- controller button glyphs read like the bold prompts in Modern UI.
-    G.print(s,x,y)
-    G.print(s,x+1,y)
+    G.setFont(f); color(c,nil,true); s=tostring(s or "")
+    G.print(s,x,y); G.print(s,x+1,y)
   end
   local function playfield()
     local ww,wh=G.getDimensions()
@@ -69,7 +81,18 @@ return function(mod)
     end
     return 0,0,ww,wh
   end
+  local function uiScale(sw,sh)
+    if Style and Style.uiScale then return Style.uiScale(sw,sh) end
+    return math.max(.88,math.min(1.42,(sh or 720)/760))
+  end
+  local function density()
+    return Style and Style.density and Style.density() or 1
+  end
+  local function layoutStyle()
+    return Style and Style.layoutStyle and Style.layoutStyle() or "floating"
+  end
   local function panel(x,y,w,h,c,alpha)
+    if Style and Style.panel then return Style.panel(x,y,w,h,c,alpha) end
     local r=math.max(8,math.min(w,h)*.018)
     color(c.frameShadow or {0,0,0,.4},.18); G.rectangle("fill",x+2,y+3,w,h,r,r)
     color(c.surface,math.min(1,(c.surface[4] or 1)*(alpha or .94))); G.rectangle("fill",x,y,w,h,r,r)
@@ -106,27 +129,27 @@ return function(mod)
     end
   end
 
-  local function makeTransparent(Class)
+  local function makeTransparent(Class,presenterKind)
     if not Class or Class.__kimModernTransparent then return end
     local oldNew=Class.new
     if type(oldNew)=="function" then
       Class.new=function(...)
         local self=oldNew(...)
-        if enabled() and type(self)=="table" then self.isOpaque=false end
+        if presenterEnabled(presenterKind) and hideOriginal() and type(self)=="table" then self.isOpaque=false end
         return self
       end
     end
     local oldUpdate=Class.update
     if type(oldUpdate)=="function" then
       Class.update=function(self,...)
-        self.isOpaque=not enabled()
+        self.isOpaque=not (presenterEnabled(presenterKind) and hideOriginal())
         return oldUpdate(self,...)
       end
     end
     Class.__kimModernTransparent=true
   end
-  makeTransparent(PackMenu); makeTransparent(Pokegear); makeTransparent(TrainerCard)
-  makeTransparent(SaveMenu); makeTransparent(OptionsMenu)
+  makeTransparent(PackMenu,"menu"); makeTransparent(Pokegear,"menu"); makeTransparent(TrainerCard,"pokemon")
+  makeTransparent(SaveMenu,"menu"); makeTransparent(OptionsMenu,"menu")
 
   -- The category pages created by OptionsMenu's local pushGroup() still use
   -- OptionsMenu:drawsWidescreen().  Disable that path only while KIM owns
@@ -135,7 +158,7 @@ return function(mod)
       and not OptionsMenu.__kimModernWideWrapped then
     local oldDrawsWidescreen=OptionsMenu.drawsWidescreen
     OptionsMenu.drawsWidescreen=function(self,...)
-      if enabled() then return false end
+      if presenterEnabled("menu") then return false end
       return oldDrawsWidescreen(self,...)
     end
     OptionsMenu.__kimModernWideWrapped=true
@@ -168,11 +191,12 @@ return function(mod)
 
   local function drawStart(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
-    local scale=math.max(.9,math.min(1.35,sh/720))
+    local scale=uiScale(sw,sh); local den=density()
     local rows=s.items or {}; local count=#rows
-    local w=math.min(520*scale,sw*.40); local rh=60*scale
+    local w=math.min(520*scale,sw*.44); local rh=60*scale*den
     local h=math.min(sh*.88,94*scale+math.min(count,9)*rh+76*scale)
-    local x=sx+sw-w-28*scale; local y=sy+(sh-h)/2
+    local inset=(tonumber(opt("startMenuInset","0")) or 0)/100
+    local x=sx+sw-w-28*scale-(sw-w)*inset; local y=sy+(sh-h)/2
     panel(x,y,w,h,c,.95)
     local big, body, small = font(40*scale), font(31*scale), font(23*scale)
     text("START",big,x+18*scale,y+15*scale,w-36*scale,"left",c.text)
@@ -190,8 +214,32 @@ return function(mod)
       text(label,body,x+28*scale,yy+11*scale,w-56*scale,"left",i==index and c.text or c.muted)
     end
     local row=rows[index]; local desc=row and row.desc or {}
-    color(c.divider); G.rectangle("fill",x+16*scale,y+h-86*scale,w-32*scale,1)
+    color(c.divider,nil,true); G.rectangle("fill",x+16*scale,y+h-86*scale,w-32*scale,1)
     text(type(desc)=="table" and table.concat(desc,"  ") or "",small,x+18*scale,y+h-66*scale,w-36*scale,"left",c.muted)
+
+    -- Gen 1 parity: optional compact party quick-view beside the Start Menu.
+    if opt("startMenuQuickView",true)~=false then
+      local party=s.game and s.game.party
+      if type(party)=="table" and #party>0 then
+        local gap=14*scale
+        local qw=math.min(310*scale,math.max(0,x-sx-gap-16*scale))
+        if qw>150*scale then
+          local qh=math.min(h,74*scale+math.min(#party,6)*48*scale)
+          local qx=x-gap-qw; local qy=y+(h-qh)/2
+          panel(qx,qy,qw,qh,c,.90)
+          text("PARTY",small,qx+14*scale,qy+12*scale,qw-28*scale,"left",c.accent)
+          for i=1,math.min(#party,6) do
+            local mon=party[i] or {}
+            local name=mon.name or mon.nickname or mon.species or ("POKéMON "..i)
+            local level=mon.level and ("Lv"..tostring(mon.level)) or ""
+            local yy=qy+50*scale+(i-1)*48*scale
+            text(name,small,qx+14*scale,yy,qw*.64,"left",c.text)
+            text(level,small,qx+qw*.66,yy,qw*.27,"right",c.muted)
+          end
+        end
+      end
+    end
+
     if s.phase=="confirm" or s.phase=="confirmContest" then
       modal(x,y,w,h,c,s.phase=="confirm" and "Return to the title screen?" or "End the Contest?",
         {"YES","NO"},tonumber(s.confirmChoice) or 2,body,small)
@@ -207,9 +255,10 @@ return function(mod)
   end
   local function drawPack(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
-    local w=math.min(1080,sw*.64); local h=math.min(690,sh*.76)
+    local scale=uiScale(sw,sh); local den=density()
+    local w=math.min(1080*scale,sw*.72); local h=math.min(690*scale,sh*.82)
+    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/1080,h/690) end
     local x=sx+(sw-w)/2; local y=sy+(sh-h)/2; panel(x,y,w,h,c,.95)
-    local scale=math.max(.95,math.min(1.5,w/900))
     local big, body, small = font(35*scale), font(26*scale), font(19*scale)
     local tabFont = font(23*scale)
     local countFont = font(22*scale)
@@ -227,9 +276,9 @@ return function(mod)
 
     local contentY=y+112*scale; local contentH=h-176*scale
     local listW=w*.57; local detailX=x+listW+16*scale
-    color(c.divider); G.rectangle("fill",x+listW+8*scale,contentY,1,contentH)
+    color(c.divider,nil,true); G.rectangle("fill",x+listW+8*scale,contentY,1,contentH)
     local rows=s.rows or {}; local idx=tonumber(s.index) or 1; local scroll=tonumber(s.scroll) or 0
-    local visible=8; local rh=contentH/visible
+    local visible=math.max(5,math.min(10,math.floor(8/den+.5))); local rh=contentH/visible
     for slot=1,visible do
       local i=scroll+slot; local row=rows[i]
       if i==#rows+1 then row={name="CANCEL"} end
@@ -274,9 +323,10 @@ return function(mod)
   local function badgeOwned(tbl,name,i) return type(tbl)=="table" and (tbl[name]==true or tbl[i]==true) end
   local function drawCard(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
-    local w=math.min(940,sw*.58); local h=math.min(620,sh*.70)
+    local scale=uiScale(sw,sh); local den=density()
+    local w=math.min(940*scale,sw*.68); local h=math.min(620*scale,sh*.80)
+    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/940,h/620) end
     local x=sx+(sw-w)/2; local y=sy+(sh-h)/2; panel(x,y,w,h,c,.95)
-    local scale=math.max(.95,math.min(1.45,w/850))
     local big, body, small = font(35*scale), font(26*scale), font(20*scale)
     local pageFont = font(23*scale)
     local footerFont = font(22*scale)
@@ -346,9 +396,10 @@ return function(mod)
   end
   local function drawGear(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
-    local w=math.min(1080,sw*.64); local h=math.min(680,sh*.74)
+    local scale=uiScale(sw,sh); local den=density()
+    local w=math.min(1080*scale,sw*.72); local h=math.min(680*scale,sh*.82)
+    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/1080,h/680) end
     local x=sx+(sw-w)/2; local y=sy+(sh-h)/2; panel(x,y,w,h,c,.95)
-    local scale=math.max(.95,math.min(1.45,w/900))
     local big, body, small = font(35*scale), font(26*scale), font(19*scale)
     local tabFont = font(23*scale)
     local footerFont = font(21*scale)
@@ -451,9 +502,10 @@ return function(mod)
 
   local function drawSave(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
-    local scale=math.max(.9,math.min(1.45,sh/760))
-    local w=math.min(980*scale,sw*.62)
-    local h=math.min(610*scale,sh*.72)
+    local scale=uiScale(sw,sh); local den=density()
+    local w=math.min(980*scale,sw*.70)
+    local h=math.min(610*scale,sh*.80)
+    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/980,h/610) end
     local x=sx+(sw-w)/2; local y=sy+(sh-h)/2
     panel(x,y,w,h,c,.97)
 
@@ -572,9 +624,10 @@ return function(mod)
 
   local function drawOptions(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
-    local scale=math.max(.88,math.min(1.42,sh/760))
-    local w=math.min(1080*scale,sw*.66)
-    local h=math.min(700*scale,sh*.78)
+    local scale=uiScale(sw,sh); local den=density()
+    local w=math.min(1080*scale,sw*.72)
+    local h=math.min(700*scale,sh*.84)
+    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/1080,h/700) end
     local x=sx+(sw-w)/2; local y=sy+(sh-h)/2
     panel(x,y,w,h,c,.97)
 
@@ -589,7 +642,7 @@ return function(mod)
     local rows=type(s.visible)=="function" and s:visible() or (s.view or s.rows or {})
     local idx=tonumber(s.index) or 1
     local scroll=tonumber(s.scroll) or 0
-    local visible=7
+    local visible=math.max(5,math.min(9,math.floor(7/den+.5)))
     local top=y+86*scale
     local footerH=62*scale
     local listH=h-(top-y)-footerH
@@ -604,7 +657,7 @@ return function(mod)
       if selected then
         color(c.selected)
         G.rectangle("fill",x+22*scale,yy,w-44*scale,rh-6*scale,7,7)
-        color(c.accent)
+        color(c.accent,nil,true)
         G.rectangle("fill",x+22*scale,yy,5*scale,rh-6*scale,2,2)
       end
 
@@ -673,9 +726,10 @@ return function(mod)
 
   local function drawModOptions(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
-    local scale=math.max(.88,math.min(1.42,sh/760))
-    local w=math.min(1160*scale,sw*.70)
-    local h=math.min(720*scale,sh*.80)
+    local scale=uiScale(sw,sh); local den=density()
+    local w=math.min(1160*scale,sw*.76)
+    local h=math.min(720*scale,sh*.86)
+    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/1160,h/720) end
     local x=sx+(sw-w)/2; local y=sy+(sh-h)/2
     panel(x,y,w,h,c,.97)
 
@@ -694,7 +748,7 @@ return function(mod)
     local rows=s.optionRows or {}
     local idx=tonumber(s.cursor) or 1
     local scroll=tonumber(s.scroll) or 0
-    local visible=7
+    local visible=math.max(5,math.min(9,math.floor(7/den+.5)))
 
     local listTop=y+86*scale
     local footerH=128*scale
@@ -711,7 +765,7 @@ return function(mod)
       if selected then
         color(c.selected)
         G.rectangle("fill",x+22*scale,yy,w-44*scale,rh-6*scale,7,7)
-        color(c.accent)
+        color(c.accent,nil,true)
         G.rectangle("fill",x+22*scale,yy,5*scale,rh-6*scale,2,2)
       end
 
@@ -754,9 +808,10 @@ return function(mod)
 
   local function drawKimSettings(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
-    local scale=math.max(.88,math.min(1.42,sh/760))
-    local w=math.min(1120*scale,sw*.70)
-    local h=math.min(720*scale,sh*.80)
+    local scale=uiScale(sw,sh); local den=density()
+    local w=math.min(1120*scale,sw*.76)
+    local h=math.min(720*scale,sh*.86)
+    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/1120,h/720) end
     local x=sx+(sw-w)/2; local y=sy+(sh-h)/2
     panel(x,y,w,h,c,.97)
 
@@ -768,13 +823,15 @@ return function(mod)
 
     local title=tostring(s.title or "KANTO IN MOTION")
     text(title,titleFont,x+28*scale,y+18*scale,w*.62,"left",c.text)
-    text(rawget(s,"_kimModernSettings")=="battle" and "BATTLE SETTINGS" or "MOD SETTINGS",
-      small,x+w*.60,y+30*scale,w*.33,"right",c.accent)
+    local section=rawget(s,"_kimModernSettings")
+    local sectionLabel=section=="battle" and "BATTLE SETTINGS"
+      or section=="ui" and "UI SETTINGS" or "MOD SETTINGS"
+    text(sectionLabel,small,x+w*.60,y+30*scale,w*.33,"right",c.accent)
 
     local rows=s.items or {}
     local idx=tonumber(s.index) or 1
     local scroll=tonumber(s.scroll) or 0
-    local visible=7
+    local visible=math.max(5,math.min(9,math.floor(7/den+.5)))
     local listTop=y+86*scale
     local footerH=132*scale
     local listH=h-(listTop-y)-footerH
@@ -790,7 +847,7 @@ return function(mod)
       if selected then
         color(c.selected)
         G.rectangle("fill",x+22*scale,yy,w-44*scale,rh-6*scale,7,7)
-        color(c.accent)
+        color(c.accent,nil,true)
         G.rectangle("fill",x+22*scale,yy,5*scale,rh-6*scale,2,2)
       end
 
@@ -816,10 +873,15 @@ return function(mod)
     local desc=selected and selected.option and selected.option.description or ""
     if selected and selected.resetBattleDefaults then
       desc="Restore all battle settings to their defaults."
+    elseif selected and selected.resetUiDefaults then
+      desc="Restore all Modern UI settings to their defaults."
     elseif selected and selected.submenu then
-      desc="Open the Kanto in Motion battle settings."
+      desc=selected.submenu and tostring(selected.submenu):find("ui_settings",1,true)
+        and "Open the Kanto in Motion Modern UI settings."
+        or "Open the Kanto in Motion battle settings."
     elseif selected and selected.cancel then
-      desc=rawget(s,"_kimModernSettings")=="battle"
+      local section=rawget(s,"_kimModernSettings")
+      desc=(section=="battle" or section=="ui")
         and "Return to Kanto in Motion settings."
         or "Close Kanto in Motion settings."
     end
@@ -847,10 +909,36 @@ return function(mod)
     kimsettings=drawKimSettings,
   }
 
+  -- Gen 1 parity: LEFT/RIGHT can jump five Start Menu rows when enabled.
+  if StartMenu and type(StartMenu.update)=="function" and not StartMenu.__kimFastJumpWrapped then
+    local oldStartUpdate=StartMenu.update
+    StartMenu.update=function(self,dt,...)
+      if presenterEnabled("menu") and opt("startMenuFastJump",true)~=false
+          and self and self.list and type(self.items)=="table" then
+        local input=self.game and self.game.input
+        local delta=0
+        if input and input:wasPressed("left") then delta=-5
+        elseif input and input:wasPressed("right") then delta=5 end
+        if delta~=0 and #self.items>0 then
+          local idx=math.max(1,math.min(#self.items,(tonumber(self.list.index) or 1)+delta))
+          self.list.index=idx
+          local scroll=tonumber(self.list.scroll) or 0
+          local visible=9
+          if idx<=scroll then scroll=idx-1 end
+          if idx>scroll+visible then scroll=idx-visible end
+          self.list.scroll=math.max(0,math.min(scroll,math.max(0,#self.items-visible)))
+          return
+        end
+      end
+      return oldStartUpdate(self,dt,...)
+    end
+    StartMenu.__kimFastJumpWrapped=true
+  end
+
   if mod.hooks and type(mod.hooks.wrap)=="function" then
     mod.hooks:wrap("ui.start_menu.items",function(nextFn,game,items)
       local rows=nextFn(game,items)
-      if not enabled() then return rows end
+      if not presenterEnabled("menu") then return rows end
       if type(rows)~="table" then return rows end
       local out={}
       for _,row in ipairs(rows) do
@@ -862,16 +950,24 @@ return function(mod)
       end
       return out
     end,100000)
+    local function presenterForKind(kind)
+      if kind=="card" then return "pokemon" end
+      if kind=="kimsettings" or kind=="modoptions" then return "manager" end
+      return "menu"
+    end
     mod.hooks:wrap("screen.render_visible",function(nextFn,state)
-      if enabled() and target(state) then return false end
+      local kind=target(state)
+      if kind and presenterEnabled(presenterForKind(kind)) and hideOriginal() then return false end
       return nextFn(state)
     end,100000)
     mod.hooks:wrap("render.hud",function(nextFn,game,viewport)
       local result={pcall(nextFn,game,viewport)}; local ok=table.remove(result,1)
       if not ok then error(result[1],0) end
       local top=game and game.stack and type(game.stack.top)=="function" and game.stack:top()
-      local kind=enabled() and target(top)
-      if kind then G.push("all"); G.origin(); pcall(renderers[kind],top); G.pop() end
+      local kind=target(top)
+      if kind and presenterEnabled(presenterForKind(kind)) then
+        G.push("all"); G.origin(); pcall(renderers[kind],top); G.pop()
+      end
       return unpack(result)
     end,100000)
   end
