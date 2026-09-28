@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -25,7 +25,8 @@
     "advanced_box_system",
     "weather_fx",
     "potato_voxel",
-    "HGSS_SPRITES"
+    "HGSS_SPRITES",
+    "gen2_clean_ui"
   ],
   "conflicts": [
     "gen1_modern_ui",
@@ -37,6 +38,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen; Gen 1 keeps the full KIM battle/UI stack while Gen 2 and Gen 3 retain their native UI systems.",
+  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen; Gen 1 keeps the full KIM battle/UI stack, Gen 2 adds KIM Modern UI presentation while retaining native battle logic and HP/status HUD behavior, and Gen 3 keeps its native UI systems.",
   "github": "HaseoSora/Kanto-in-Motion"
 }

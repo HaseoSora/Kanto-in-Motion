@@ -247,6 +247,15 @@ return function(mod)
     return absolute(rel), size or 32, 2
   end
 
+  -- Final-window Gen 2 Modern UI can use the untouched HD Rescaled Icon PNG
+  -- directly instead of first shrinking it through the 16x16 native canvas.
+  mod._kantoInMotionHdMenuIconForModernUi = function(game, mon)
+    if not enabled() then return nil end
+    local image, rel, dex = hdForMon(game, mon)
+    if not image or not rel then return nil end
+    return absolute(rel), dex
+  end
+
   ---------------------------------------------------------------------------
   -- Gen 1 / Gen 2 pokemon.icon seam
 

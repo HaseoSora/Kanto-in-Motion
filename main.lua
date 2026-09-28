@@ -256,11 +256,99 @@ return function(mod)
       }, description = "Scale only the cycling Pokemon on the Red/Blue title screen. 75% is the new default for the HD Pokemon art; Red and the custom logo are unchanged." },
   }
 
-  -- Gen 2 keeps the original KIM menu/Pokedex provider architecture and now
-  -- gains only the missing native-battle Pokemon bridge. Expose that feature
-  -- as a simple Gen2 main-menu toggle; the full Gen1 battle submenu remains
-  -- intentionally unavailable.
+  -- The title animation controls above belong to the Gen 1 title screen.
+  -- Do not expose them in Gold/Silver/Crystal's settings menu.
   if IS_GEN2 then
+    local gen2Main = {}
+    local gen1TitleKeys = {
+      titleScreen = true,
+      titleTrainer = true,
+      titleCycleSpeed = true,
+      titlePokemonSize = true,
+    }
+    for _, row in ipairs(optionSchema) do
+      if not gen1TitleKeys[row.key] then
+        gen2Main[#gen2Main + 1] = row
+      end
+    end
+    optionSchema = gen2Main
+  end
+
+  -- Gen 2 uses KIM's shared HD Pokemon providers plus its own Modern UI
+  -- presentation layer. The full Gen 1 battle submenu remains intentionally
+  -- unavailable because Gen 2 keeps its native battle logic and HP/status HUD.
+  if IS_GEN2 then
+    optionSchema[#optionSchema + 1] = {
+      key = "gen2IntegratedModernUi", label = "MODERN UI",
+      type = "toggle", default = true,
+      description = "Master switch for Kanto in Motion's Gen 2 Modern UI across battles, menus, dialogue, shops, Save, Options and KIM settings. OFF yields those presentation surfaces back to native Gold/Silver/Crystal.",
+    }
+    optionSchema[#optionSchema + 1] = {
+      key = "battleUiWip", label = "MODERN BATTLE UI", type = "toggle",
+      default = true,
+      description = "Replace the native Gen 2 battle dialogue, command menu and move menu with Kanto in Motion's Modern UI presentation. The native HP/status HUD, battle logic, trainers, backgrounds and move animations remain unchanged.",
+    }
+    optionSchema[#optionSchema + 1] = {
+      key = "gen2UiTheme", label = "UI THEME", type = "choice",
+      default = "default", choices = {
+        { "GEN1 MODERN", "default" },
+        { "CLASSIC MONO", "gen1_modern_ui:classic_mono" },
+        { "CRIMSON", "gen1_modern_ui:crimson" },
+        { "CRIMSON GLASS", "gen1_modern_ui:crimson_glass" },
+        { "MODERN GLASS", "gen1_modern_ui:modern_glass" },
+        { "POCKET GREEN", "gen1_modern_ui:pocket_green" },
+        { "MIDNIGHT", "gen1_modern_ui:midnight" },
+        { "MIDNIGHT GLASS", "gen1_modern_ui:midnight_glass" },
+        { "FROST", "gen1_modern_ui:frost" },
+        { "LIGHT", "gen1_modern_ui:light" },
+        { "DARK", "gen1_modern_ui:dark" },
+      },
+      description = "Choose the color theme used across Kanto in Motion's Gen 2 Modern UI. These palettes match KIM's built-in Gen 1 Modern UI themes.",
+    }
+    optionSchema[#optionSchema + 1] = {
+      key = "battleUiSize", label = "BATTLE UI SIZE", type = "choice",
+      default = "100", choices = {
+        { "60%", "60" }, { "65%", "65" }, { "70%", "70" },
+        { "75%", "75" }, { "80%", "80" }, { "85%", "85" },
+        { "90%", "90" }, { "95%", "95" }, { "100%", "100" },
+      },
+      description = "Adjust the Gen 2 Modern lower battle panel footprint while keeping it bottom-anchored.",
+    }
+    optionSchema[#optionSchema + 1] = {
+      key = "battleUiOpacity", label = "BATTLE UI OPACITY", type = "choice",
+      default = "100", choices = {
+        { "25%", "25" }, { "30%", "30" }, { "35%", "35" },
+        { "40%", "40" }, { "45%", "45" }, { "50%", "50" },
+        { "55%", "55" }, { "60%", "60" }, { "65%", "65" },
+        { "70%", "70" }, { "75%", "75" }, { "80%", "80" },
+        { "85%", "85" }, { "90%", "90" }, { "95%", "95" },
+        { "100%", "100" },
+      },
+      description = "Adjust only the Gen 2 Modern lower panel background opacity. Frame, selection and text remain fully readable.",
+    }
+    optionSchema[#optionSchema + 1] = {
+      key = "battleTextScale", label = "BATTLE TEXT SIZE", type = "choice",
+      default = "150", choices = {
+        { "100%", "100" }, { "125%", "125" }, { "150%", "150" },
+        { "175%", "175" }, { "200%", "200" }, { "225%", "225" },
+        { "250%", "250" }, { "275%", "275" }, { "300%", "300" },
+        { "325%", "325" }, { "350%", "350" }, { "375%", "375" },
+        { "400%", "400" },
+      },
+      description = "Scale the Gen 2 Modern battle command, move and message text independently of the native HP/status HUD.",
+    }
+    optionSchema[#optionSchema + 1] = {
+      key = "battleMoveLayout", label = "MOVE LAYOUT", type = "choice",
+      default = "grid", choices = {
+        { "GRID", "grid" }, { "VERTICAL", "vertical" },
+      },
+      description = "GRID uses a 2x2 move selector with matching Gen 2 cursor navigation. VERTICAL keeps the four moves in a list.",
+    }
+    optionSchema[#optionSchema + 1] = {
+      key = "battleMoveInfo", label = "MOVE INFO", type = "toggle",
+      default = false,
+      description = "Show the selected Gen 2 move's type, PP, power and accuracy beside the move list.",
+    }
     optionSchema[#optionSchema + 1] = {
       key = "battleSprites", label = "BATTLE SPRITES", type = "toggle",
       default = true,
@@ -462,7 +550,9 @@ return function(mod)
 
   -- Gen 1 Modern UI ownership follows the saved preference (default ON).
   local function integratedModernUiEnabled()
-    if IS_GEN2 then return false end
+    if IS_GEN2 then
+      return mod.options:get("gen2IntegratedModernUi") ~= false
+    end
     return mod.options:get("integratedModernUi") ~= false
   end
 
@@ -5918,6 +6008,7 @@ return function(mod)
         step(item, 1)
       end,
     })
+    menu._kimModernSettings = "main"
     refresh()
     local baseUpdate = menu.update
     menu.update = function(self, dt)
@@ -5969,6 +6060,7 @@ return function(mod)
         step(item, 1)
       end,
     })
+    menu._kimModernSettings = "battle"
     refresh()
     local baseUpdate = menu.update
     menu.update = function(self, dt)
@@ -6026,15 +6118,166 @@ return function(mod)
 
   local function installIntegratedModernUi()
     if IS_GEN2 then
+      -- Gen 2 uses a dedicated adapter. It modernizes only the lower battle
+      -- interface and deliberately leaves the native G/S/C HP/status HUD,
+      -- battle state, commands, item/party flows and move animations intact.
+      local source, readErr = mod:read("lib/gen2_modern_battle_ui.lua")
+      if source then
+        local chunk, compileErr = load(source,
+          "@" .. mod.path .. "/lib/gen2_modern_battle_ui.lua")
+        if chunk then
+          local okModule, setup = pcall(chunk)
+          if okModule and type(setup) == "function" then
+            local okInstall, installErr = pcall(setup, mod)
+            if okInstall then
+              mod._kantoInMotionGen2ModernBattleUiInstalled = true
+              mod.log:info("Gen2 Modern Battle UI adapter installed; native HP/status HUD retained")
+            else
+              mod.log:error("Gen2 Modern Battle UI failed to install: %s",
+                tostring(installErr))
+            end
+          else
+            mod.log:error("cannot load Gen2 Modern Battle UI: %s",
+              tostring(setup))
+          end
+        else
+          mod.log:error("cannot compile Gen2 Modern Battle UI: %s",
+            tostring(compileErr))
+        end
+      else
+        mod.log:error("cannot read Gen2 Modern Battle UI: %s", tostring(readErr))
+      end
+
+      -- Party is the first non-battle Gen 2 menu modernized in v1.5.2.
+      -- The adapter replaces presentation only; the native PartyMenu object
+      -- continues to own cursor/input, switching, items, field moves, battle
+      -- switching, HP animation, and every callback.
+      local partySource, partyReadErr = mod:read("lib/gen2_modern_party_ui.lua")
+      if partySource then
+        local partyChunk, partyCompileErr = load(partySource,
+          "@" .. mod.path .. "/lib/gen2_modern_party_ui.lua")
+        if partyChunk then
+          local okPartyModule, partySetup = pcall(partyChunk)
+          if okPartyModule and type(partySetup) == "function" then
+            local okPartyInstall, partyInstallErr = pcall(partySetup, mod)
+            if okPartyInstall then
+              mod._kantoInMotionGen2ModernPartyUiInstalled = true
+              mod.log:info("Gen2 Modern Party UI v6 installed; larger readable overworld overlay active")
+            else
+              mod.log:error("Gen2 Modern Party UI failed to install: %s",
+                tostring(partyInstallErr))
+            end
+          else
+            mod.log:error("cannot load Gen2 Modern Party UI: %s",
+              tostring(partySetup))
+          end
+        else
+          mod.log:error("cannot compile Gen2 Modern Party UI: %s",
+            tostring(partyCompileErr))
+        end
+      else
+        mod.log:error("cannot read Gen2 Modern Party UI: %s",
+          tostring(partyReadErr))
+      end
+
+      -- The Pokédex bridge deliberately consumes Gen2 Clean UI 0.4.1's
+      -- detached Pokedex model when that optional mod is installed, while KIM
+      -- owns the final Modern UI theme/layout and keeps source navigation native.
+      local dexSource, dexReadErr = mod:read("lib/gen2_modern_pokedex_ui.lua")
+      if dexSource then
+        local dexChunk, dexCompileErr = load(dexSource,
+          "@" .. mod.path .. "/lib/gen2_modern_pokedex_ui.lua")
+        if dexChunk then
+          local okDexModule, dexSetup = pcall(dexChunk)
+          if okDexModule and type(dexSetup) == "function" then
+            local okDexInstall, dexInstallErr = pcall(dexSetup, mod)
+            if okDexInstall then
+              mod._kantoInMotionGen2ModernPokedexUiInstalled = true
+              mod.log:info("Gen2 Modern Pokedex UI v4 installed; exact Gen2 Clean UI 0.4.1 adapter/presenter vendored")
+            else
+              mod.log:error("Gen2 Modern Pokedex bridge failed to install: %s",
+                tostring(dexInstallErr))
+            end
+          else
+            mod.log:error("cannot load Gen2 Modern Pokedex bridge: %s",
+              tostring(dexSetup))
+          end
+        else
+          mod.log:error("cannot compile Gen2 Modern Pokedex bridge: %s",
+            tostring(dexCompileErr))
+        end
+      else
+        mod.log:error("cannot read Gen2 Modern Pokedex bridge: %s",
+          tostring(dexReadErr))
+      end
+
+      local coreMenuSource, coreMenuReadErr =
+        mod:read("lib/gen2_modern_core_menus.lua")
+      if coreMenuSource then
+        local coreMenuChunk, coreMenuCompileErr = load(coreMenuSource,
+          "@" .. mod.path .. "/lib/gen2_modern_core_menus.lua")
+        if coreMenuChunk then
+          local okCoreModule, coreSetup = pcall(coreMenuChunk)
+          if okCoreModule and type(coreSetup) == "function" then
+            local okCoreInstall, coreInstallErr = pcall(coreSetup, mod)
+            if okCoreInstall then
+              mod._kantoInMotionGen2ModernCoreMenusInstalled = true
+              mod.log:info("Gen2 Modern Start/Pack/Pokegear/Trainer Card overlays v3 installed")
+            else
+              mod.log:error("Gen2 Modern core menus failed to install: %s",
+                tostring(coreInstallErr))
+            end
+          else
+            mod.log:error("cannot load Gen2 Modern core menus: %s",
+              tostring(coreSetup))
+          end
+        else
+          mod.log:error("cannot compile Gen2 Modern core menus: %s",
+            tostring(coreMenuCompileErr))
+        end
+      else
+        mod.log:error("cannot read Gen2 Modern core menus: %s",
+          tostring(coreMenuReadErr))
+      end
+
+      -- Shared Gen 2 dialogue layer: NPC speech, PokéCenter nurse prompts,
+      -- item/field text, phone text, script choices, Poké Mart flows and
+      -- battle level-up/stat prompts all use the same Modern UI presentation.
+      local dialogSource, dialogReadErr =
+        mod:read("lib/gen2_modern_dialog_ui.lua")
+      if dialogSource then
+        local dialogChunk, dialogCompileErr = load(dialogSource,
+          "@" .. mod.path .. "/lib/gen2_modern_dialog_ui.lua")
+        if dialogChunk then
+          local okDialogModule, dialogSetup = pcall(dialogChunk)
+          if okDialogModule and type(dialogSetup) == "function" then
+            local okDialogInstall, dialogInstallErr = pcall(dialogSetup, mod)
+            if okDialogInstall then
+              mod._kantoInMotionGen2ModernDialogsInstalled = true
+              mod.log:info("Gen2 Modern Dialog UI installed; shared TextBox/Choice/Mart/Script surfaces modernized")
+            else
+              mod.log:error("Gen2 Modern Dialog UI failed to install: %s",
+                tostring(dialogInstallErr))
+            end
+          else
+            mod.log:error("cannot load Gen2 Modern Dialog UI: %s",
+              tostring(dialogSetup))
+          end
+        else
+          mod.log:error("cannot compile Gen2 Modern Dialog UI: %s",
+            tostring(dialogCompileErr))
+        end
+      else
+        mod.log:error("cannot read Gen2 Modern Dialog UI: %s",
+          tostring(dialogReadErr))
+      end
+
       if gen2CleanUiHandle() then
         local okBridge, bridgeResult = pcall(installStockGen2CleanUiBridge)
         if not okBridge or bridgeResult ~= true then
           mod.log:warn("Gen2 Clean UI detected but animated portrait bridge did not install: %s",
             tostring(okBridge and bridgeResult or bridgeResult))
         end
-        mod.log:info("Gen2 detected: bundled Modern UI automatically OFF; Gen2 Clean UI owns presentation while Kanto in Motion animations remain active")
-      else
-        mod.log:info("Gen2 detected: bundled Modern UI automatically OFF; native Gen2 UI remains presentation owner")
       end
       return
     end

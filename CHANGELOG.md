@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.5.2
+
+- Added integrated Modern UI presentation for Gold / Silver / Crystal.
+- Added Gen 2 Modern UI coverage for battle dialogue/commands/moves, Start Menu, Party, Pokédex, Pack, PokéGear, Trainer Card, Save, Options, KIM settings, shops, common dialogue, choice prompts, and supported level-up/stat messages.
+- Added Gen 2 UI themes matching KIM's Gen 1 Modern UI palettes.
+- Added Gen 2 BATTLE UI SIZE, BATTLE UI OPACITY, BATTLE TEXT SIZE, MOVE LAYOUT, and MOVE INFO controls.
+- Integrated the Gen2 Clean UI 0.4.1 Pokédex adapter/presenter into KIM's Gen 2 Pokédex presentation.
+- Improved Gen 2 menu/dialog readability, spacing, shop presentation, save/quit prompts, and option submenu presentation.
+- Removed Gen 1 title-animation settings from the Gen 2 settings page.
+- Preserved native Gen 2 battle logic, HP/status HUD, trainers, backgrounds, move animations, save logic, shop logic, and option logic underneath KIM's presentation layer.
+
 ## v1.5.1
 
 - Added Pokémon shadows to Gold / Silver / Crystal.

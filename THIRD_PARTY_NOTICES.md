@@ -29,6 +29,14 @@ https://github.com/ArmstrongThomas/gen1-modern-ui
 
 Kanto in Motion integrates a customized Gen1 Modern UI presentation adapted to KIM's mod identity, animated sprite provider, battle presentation, and desktop/mobile behavior.
 
+
+## Gen2 Clean UI
+
+**ArmstrongThomas**  
+https://github.com/ArmstrongThomas/gen2-clean-ui
+
+Kanto in Motion v1.5.2 vendors the Gen2 Clean UI 0.4.1 Pokédex adapter/presenter pieces used by KIM's Gen 2 Pokédex presentation. The supplied Gen2 Clean UI package identifies the project as MIT licensed. KIM's remaining Gen 2 Modern UI presentation and integration code is Kanto in Motion-specific.
+
 ## Kanto Rework Suite
 
 **Faendra**  
@@ -45,6 +53,6 @@ Kanto in Motion integrates the Gen 1 Poké Ball palette/presentation fixes used 
 
 ## Optional external compatibility
 
-Kanto in Motion contains interoperability code for optional external mods such as Battle Art, PotatoVoxel, Typed Move Colors, Useful Bag, Advanced Box System, HGSS_SPRITES, translation mods, and other mods using KIM's compatibility interfaces.
+Kanto in Motion contains interoperability code for optional external mods such as Battle Art, PotatoVoxel, Typed Move Colors, Useful Bag, Advanced Box System, HGSS_SPRITES, the full external Gen2 Clean UI package, translation mods, and other mods using KIM's compatibility interfaces.
 
 Those external packages are not bundled with Kanto in Motion.
