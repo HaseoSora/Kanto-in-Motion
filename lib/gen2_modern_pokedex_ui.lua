@@ -44,14 +44,17 @@ return function(mod)
 
   local function opt(k,d)
     if not(mod.options and mod.options.get) then return d end
-    local ok,v=pcall(mod.options.get,mod.options,k); return ok and v~=nil and v or d
+    local ok,v=pcall(mod.options.get,mod.options,k)
+    if not ok or v == nil then return d end
+    return v
   end
   local function enabled()
     return Style and Style.presenterEnabled and Style.presenterEnabled("pokemon")
       or opt("gen2IntegratedModernUi",true)~=false
   end
   local function hideOriginal()
-    return Style and Style.hideOriginal and Style.hideOriginal() or true
+    if Style and Style.hideOriginal then return Style.hideOriginal() end
+    return true
   end
   local function theme()
     if Style and Style.theme then return Style.theme() end

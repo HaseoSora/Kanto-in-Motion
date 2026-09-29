@@ -451,7 +451,13 @@ return function(mod, DATA)
       local nf=math.floor(self.tick/3)
       if nf~=self.frame then
         self.frame=nf
-        if self.frame>=#self.anim.frames then self.done=true; return end
+        if self.frame>=#self.anim.frames then
+          self.done=true
+          self.bg.file=nil; self.bg.opacity=0
+          self.fg.file=nil; self.fg.opacity=0
+          self.bgTweens={}; self.fgTweens={}
+          return
+        end
         self:applyTimings(self.frame)
       end
     end
@@ -837,22 +843,35 @@ return function(mod, DATA)
         user=transformedAnchor(user,userSide)
         target=transformedAnchor(target,targetSide)
 
-        local mode = self.wideAnchorMode or "reflect"
-        if mode == "target" then
-          -- Keep the source animation's local geometry at the same scale as
-          -- its 192x192 effect art.  v43 translated the source offsets 1:1
-          -- while scaling the art by WIDE_EFFECT_SCALE, which compressed the
-          -- path around the target and could leave Slash/Gust beside it.
-          cx = target.x + (cx-SRC_TARGET_X)*WIDE_EFFECT_SCALE
-          cy = target.y + (cy-SRC_TARGET_Y)*WIDE_EFFECT_SCALE
-        elseif mode == "user" then
-          cx = user.x + (cx-SRC_USER_X)*WIDE_EFFECT_SCALE
-          cy = user.y + (cy-SRC_USER_Y)*WIDE_EFFECT_SCALE
+        if self.opponentVariant then
+          -- Dedicated opponent animations are authored in PHYSICAL battle
+          -- slots, not semantic USER/TARGET space: source -1/lower-left is
+          -- the player slot and source -2/upper-right is the enemy slot. Map
+          -- positive effect cels through those physical anchors directly.
+          -- This fixes enemy Fury Attack striking itself and enemy Growl /
+          -- Quick Attack originating from the player's side.
+          local player=transformedAnchor(kimAnchors.player,"player")
+          local enemy=transformedAnchor(kimAnchors.enemy,"enemy")
+          cx=remapAxis(cx,SRC_USER_X,SRC_TARGET_X,player.x,enemy.x)
+          cy=remapAxis(cy,SRC_USER_Y,SRC_TARGET_Y,player.y,enemy.y)
         else
-          -- Travelling/mixed effects (Ember, Water Gun, Leech Life, etc.)
-          -- continue to follow the full live USER->TARGET line.
-          cx=remapAxis(cx,SRC_USER_X,SRC_TARGET_X,user.x,target.x)
-          cy=remapAxis(cy,SRC_USER_Y,SRC_TARGET_Y,user.y,target.y)
+          local mode = self.wideAnchorMode or "reflect"
+          if mode == "target" then
+            -- Keep the source animation's local geometry at the same scale as
+            -- its 192x192 effect art.  v43 translated the source offsets 1:1
+            -- while scaling the art by WIDE_EFFECT_SCALE, which compressed the
+            -- path around the target and could leave Slash/Gust beside it.
+            cx = target.x + (cx-SRC_TARGET_X)*WIDE_EFFECT_SCALE
+            cy = target.y + (cy-SRC_TARGET_Y)*WIDE_EFFECT_SCALE
+          elseif mode == "user" then
+            cx = user.x + (cx-SRC_USER_X)*WIDE_EFFECT_SCALE
+            cy = user.y + (cy-SRC_USER_Y)*WIDE_EFFECT_SCALE
+          else
+            -- Travelling/mixed effects (Ember, Water Gun, Leech Life, etc.)
+            -- continue to follow the full live USER->TARGET line.
+            cx=remapAxis(cx,SRC_USER_X,SRC_TARGET_X,user.x,target.x)
+            cy=remapAxis(cy,SRC_USER_Y,SRC_TARGET_Y,user.y,target.y)
+          end
         end
       else
         if self.enemyFallbackMode then cx,cy=enemyFallbackPoint(self.enemyFallbackMode,cx,cy) end
@@ -1206,7 +1225,14 @@ return function(mod, DATA)
   end
 
   function AnimPlayer:update()
-    if self._krs then return self._krs:update() end
+    if self._krs then
+      local result=self._krs:update()
+      if self._krs.done and activeSession==self._krs then
+        -- A finished timing plane must not survive into the idle battle frame.
+        activeSession=nil
+      end
+      return result
+    end
     return original.update(self)
   end
   function AnimPlayer:isDone()
@@ -1219,6 +1245,7 @@ return function(mod, DATA)
   end
   function AnimPlayer:draw(colorFn)
     if self._krs then
+      if self._krs.done then return end
       -- Under Battle Art, its drawAnimLayer wrapper already projects this
       -- call onto the 3D battlers.  Only project particle cels here; full-field
       -- foreground planes (black/flash/weather layers) must remain in fixed

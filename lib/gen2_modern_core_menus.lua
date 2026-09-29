@@ -1,4 +1,4 @@
--- Kanto in Motion v1.5.3 - Gen 2 Modern Core Menus v28 -- UI parity
+-- Kanto in Motion v1.5.3 - Gen 2 Modern Core Menus v33 -- Dex Radar 1.2.0 compatibility
 --
 -- Modern overlay presentation for the native Gen 2 Start Menu, Pack,
 -- Pokegear, Trainer Card, Save Menu, Options Menu and KIM Mod Settings. Their original objects remain authoritative for
@@ -7,6 +7,8 @@ return function(mod)
   local G=love.graphics
   local okChrome,Chrome=pcall(require,"src.ui.gen2.Chrome")
   local okStart,StartMenu=pcall(require,"src.ui.gen2.StartMenu")
+  local okMain,MainMenu=pcall(require,"src.ui.gen2.MainMenu")
+  local okTitle,Gen2TitleState=pcall(require,"src.ui.gen2.TitleState")
   local okPack,PackMenu=pcall(require,"src.ui.gen2.PackMenu")
   local okGear,Pokegear=pcall(require,"src.ui.gen2.Pokegear")
   local okCard,TrainerCard=pcall(require,"src.ui.gen2.TrainerCard")
@@ -33,17 +35,24 @@ return function(mod)
   local function opt(k,d)
     if Style and Style.opt then return Style.opt(k,d) end
     if not(mod.options and mod.options.get) then return d end
-    local ok,v=pcall(mod.options.get,mod.options,k); return ok and v~=nil and v or d
+    local ok,v=pcall(mod.options.get,mod.options,k)
+    if not ok or v == nil then return d end
+    return v
   end
   local function enabled()
-    return Style and Style.masterEnabled and Style.masterEnabled()
-      or opt("gen2IntegratedModernUi",true)~=false
+    if Style and Style.masterEnabled then return Style.masterEnabled() end
+    return opt("gen2IntegratedModernUi",true)~=false
   end
   local function presenterEnabled(kind)
-    return Style and Style.presenterEnabled and Style.presenterEnabled(kind) or enabled()
+    -- MODERN UI is the master gate for every Gen 2 Modern presenter, including
+    -- the title/main menu.  Per-surface switches can only narrow that choice.
+    if not enabled() then return false end
+    if Style and Style.presenterEnabled then return Style.presenterEnabled(kind) end
+    return true
   end
   local function hideOriginal()
-    return Style and Style.hideOriginal and Style.hideOriginal() or true
+    if Style and Style.hideOriginal then return Style.hideOriginal() end
+    return true
   end
   local function theme()
     if Style and Style.theme then return Style.theme() end
@@ -165,13 +174,30 @@ return function(mod)
   end
 
   local function isClass(s,Class) return type(s)=="table" and getmetatable(s)==Class end
+
+  local function isDexRadarState(s)
+    if type(s)~="table" then return false end
+    local id=tostring(s.screenId or s.id or "")
+    local shape=type(s.rows)=="table"
+      and type(s.monIndex)=="table"
+      and type(s.cursor)=="number"
+      and type(s.mapLabel)=="string"
+      and type(s.ownedN)=="number"
+      and type(s.totalN)=="number"
+    if not shape then return false end
+    return id=="DexRadar"
+      or (type(s.reloadForTod)=="function" and type(s.moveCursor)=="function")
+  end
+
   local function target(s)
+    if okMain and isClass(s,MainMenu) then return "titlemenu" end
     if isClass(s,StartMenu) then return "start" end
     if isClass(s,PackMenu) then return "pack" end
     if isClass(s,Pokegear) then return "gear" end
     if isClass(s,TrainerCard) then return "card" end
     if isClass(s,SaveMenu) then return "save" end
     if isClass(s,OptionsMenu) then return "options" end
+    if isDexRadarState(s) then return "dexradar" end
     if type(s)=="table" and rawget(s,"_kimModernSettings") then
       return "kimsettings"
     end
@@ -189,7 +215,65 @@ return function(mod)
     end
   end
 
+  -- KIM's Gen 2 Start Menu intentionally omits the stray top-level MAPA row.
+  -- Keep this as a final state sanitizer as well as a ui.start_menu.items hook:
+  -- another wrapper can append a row after our hook returns, and StartMenu's
+  -- Chrome.List keeps its own item array.  Pruning both tables here prevents an
+  -- invisible/selectable ghost row and makes the cleanup independent of hook
+  -- ordering.
+  local function startRowIsMap(row)
+    if type(row)=="string" then
+      return tostring(row):upper():match("^%s*MAPA%s*$")~=nil
+    end
+    if type(row)~="table" then return false end
+    local id=tostring(row.value or row.id or row.key or ""):lower()
+    local label=tostring(row.label or row.text or row.name or ""):upper()
+    label=label:gsub("^%s+",""):gsub("%s+$","")
+    return label=="MAPA" or id=="mapa" or id=="map"
+      or id=="townmap" or id=="town_map"
+  end
+
+  local function pruneStartMapRow(s)
+    if not presenterEnabled("menu") or type(s)~="table" then return false end
+    local removed=false
+    local function prune(rows)
+      if type(rows)~="table" then return end
+      for i=#rows,1,-1 do
+        if startRowIsMap(rows[i]) then
+          table.remove(rows,i)
+          removed=true
+        end
+      end
+    end
+    prune(s.items)
+    if s.list then prune(s.list.items) end
+    if removed and s.list then
+      local n=type(s.list.items)=="table" and #s.list.items or 0
+      if n>0 then
+        s.list.index=math.max(1,math.min(tonumber(s.list.index) or 1,n))
+        s.list.rows=math.min(tonumber(s.list.rows) or n,n)
+      else
+        s.list.index=1
+        s.list.rows=0
+        s.list.scroll=0
+      end
+      if type(s.list.ensureVisible)=="function" then pcall(s.list.ensureVisible,s.list) end
+    end
+    return removed
+  end
+
+  if StartMenu and type(StartMenu.new)=="function" and not StartMenu.__kimMapRowPruneNewWrapped then
+    local oldStartNew=StartMenu.new
+    StartMenu.new=function(...)
+      local self=oldStartNew(...)
+      pruneStartMapRow(self)
+      return self
+    end
+    StartMenu.__kimMapRowPruneNewWrapped=true
+  end
+
   local function drawStart(s)
+    pruneStartMapRow(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
     local scale=uiScale(sw,sh); local den=density()
     local rows=s.items or {}; local count=#rows
@@ -243,6 +327,188 @@ return function(mod)
     if s.phase=="confirm" or s.phase=="confirmContest" then
       modal(x,y,w,h,c,s.phase=="confirm" and "Return to the title screen?" or "End the Contest?",
         {"YES","NO"},tonumber(s.confirmChoice) or 2,body,small)
+    end
+  end
+
+
+  -- Gen 2's title screen hands off to a separate MainMenu state, whereas
+  -- Gen 1 keeps its title artwork underneath the menu.  Recreate that same
+  -- presentation relationship here: MainMenu keeps all input/callback/state
+  -- ownership, while KIM draws an animated Gen 2 title backdrop and the
+  -- Modern UI navigation card above it.
+  local function ensureTitleBackdrop(s)
+    if not (okTitle and Gen2TitleState and type(Gen2TitleState.new)=="function") then
+      return nil
+    end
+    if type(s._kimModernTitleBackdrop)=="table" then return s._kimModernTitleBackdrop end
+    local game=s and s.game
+    local ok,bg=pcall(Gen2TitleState.new,game,{ title=game and game.titleData or {} })
+    if ok and type(bg)=="table" then
+      -- MainMenu is entered only after the real title entrance has completed.
+      -- A freshly constructed TitleState starts with the logo interlace/gem
+      -- entrance active, which produces split/duplicated title artwork when it
+      -- is used only as a backdrop.  Start this presentation copy at the
+      -- settled title state instead; MainMenu continues to own all logic.
+      bg.entranceScx=0
+      bg.gemY=bg.gemRestY or bg.gemY
+      bg.fadeStart=nil
+      bg.onContinue=nil
+      bg.onTimeout=nil
+      bg.timeoutStart=tonumber(bg.frameCounter) or 0
+      s._kimModernTitleBackdrop=bg
+      return bg
+    end
+    return nil
+  end
+
+  local function stepTitleBackdrop(s)
+    local bg=ensureTitleBackdrop(s)
+    if not bg then return end
+    -- Advance only the settled title animation.  Do not run TitleState:update
+    -- itself: that state owns title-screen input/timeouts, while MainMenu must
+    -- remain the sole owner once this screen is open.
+    bg.frameCounter=(tonumber(bg.frameCounter) or 0)+1
+    if type(bg.advanceHooh)=="function" then pcall(bg.advanceHooh,bg) end
+    if type(bg.advanceSuicune)=="function" then pcall(bg.advanceSuicune,bg) end
+    local every=math.max(1,tonumber(bg.cloudScrollEvery) or 8)
+    if bg.frameCounter%every==0 then
+      bg.cloudScroll=((tonumber(bg.cloudScroll) or 0)-1)%160
+    end
+    if type(bg.spawnTrail)=="function" then pcall(bg.spawnTrail,bg) end
+    if type(bg.stepTrails)=="function" then pcall(bg.stepTrails,bg) end
+  end
+
+  if okMain and MainMenu and type(MainMenu.update)=="function"
+      and not MainMenu.__kimModernTitleUpdateWrapped then
+    local oldMainUpdate=MainMenu.update
+    MainMenu.update=function(self,dt,...)
+      if presenterEnabled("menu") then stepTitleBackdrop(self) end
+      return oldMainUpdate(self,dt,...)
+    end
+    MainMenu.__kimModernTitleUpdateWrapped=true
+  end
+
+  -- Gold's ui.title_menu.items hook deliberately accepts the same descriptor
+  -- style as Gen 1, but its native MainMenu routes built-in rows by `value`.
+  -- Honor source-authored onSelect callbacks too so KIM ASSETS and third-party
+  -- title actions remain functional under the Modern presenter.
+  if okMain and MainMenu and type(MainMenu.choose)=="function"
+      and not MainMenu.__kimModernTitleChooseWrapped then
+    local oldMainChoose=MainMenu.choose
+    MainMenu.choose=function(self,value,...)
+      local item=self and self.list and type(self.list.items)=="table"
+        and self.list.items[tonumber(self.list.index) or 1] or nil
+      if type(item)=="table" and type(item.onSelect)=="function" then
+        return item.onSelect(self.game)
+      end
+      return oldMainChoose(self,value,...)
+    end
+    MainMenu.__kimModernTitleChooseWrapped=true
+  end
+
+  local function titleTimeText(s)
+    if not (s and s.hasSave and type(s.clockParts)=="function") then return "" end
+    local ok,hour,minute,weekday=pcall(s.clockParts,s)
+    if not ok then return "" end
+    local days={"SUN","MON","TUE","WED","THU","FRI","SAT"}
+    local clock
+    if MainMenu and type(MainMenu.timeString)=="function" then
+      local okClock,value=pcall(MainMenu.timeString,hour,minute)
+      if okClock then clock=tostring(value or "") end
+    end
+    if not clock or clock=="" then
+      local h=tonumber(hour) or 0; local m=tonumber(minute) or 0
+      local period=h>=12 and "PM" or "AM"; local h12=h%12; if h12==0 then h12=12 end
+      clock=("%d:%02d %s"):format(h12,m,period)
+    end
+    return ((days[tonumber(weekday) or 1] or "DAY").."  "..clock)
+  end
+
+  local function titleSaveSummary(s)
+    local save=s and s.save or nil
+    if okSaveCore and SaveCore and type(SaveCore.summary)=="function" then
+      local ok,summary=pcall(SaveCore.summary,save)
+      if ok and type(summary)=="table" then return summary end
+    end
+    if type(save)~="table" then return nil end
+    local player=save.player or {}; local pd=save.pokedex or {}; local pt=save.playTime or {}
+    local caught=0; for _,v in pairs(pd.caught or {}) do if v then caught=caught+1 end end
+    local badges=0; for _,v in pairs(player.badges or {}) do if v then badges=badges+1 end end
+    return { name=player.name or "GOLD", badges=badges, caught=caught,
+      hours=pt.hours or 0, minutes=pt.minutes or 0 }
+  end
+
+  local function drawTitleMainMenu(s)
+    local c=theme(); local ww,wh=G.getDimensions()
+    local bg=ensureTitleBackdrop(s)
+    local drewBackdrop=false
+    if bg and type(bg.drawWidescreen)=="function" then
+      drewBackdrop=pcall(bg.drawWidescreen,bg,ww,wh)
+    end
+    if not drewBackdrop then
+      color(c.surface,1); G.rectangle("fill",0,0,ww,wh)
+    end
+    -- Match Gen 1's title-menu treatment: keep the title artwork visible and
+    -- float a readable Modern navigation card over it rather than replacing
+    -- the whole screen with a native menu box.
+    color({0,0,0,1},.12); G.rectangle("fill",0,0,ww,wh)
+
+    local sx,sy,sw,sh=playfield(); local scale=uiScale(sw,sh); local den=density()
+    local rows=s and s.list and s.list.items or {}
+    local index=s and s.list and (tonumber(s.list.index) or 1) or 1
+    local full=layoutStyle()=="full"
+    local rh=64*scale*den
+    local footerH=s and s.hasSave and 78*scale or 58*scale
+    local w=full and sw*.70 or math.min(540*scale,sw*.44)
+    local h=math.min(sh*.84,28*scale+math.max(1,#rows)*rh+footerH)
+    -- Title/main-menu parity with Gen 1: this is a modal navigation card over
+    -- the title artwork, not the in-game side Start Menu, so always center it.
+    local x=sx+(sw-w)/2
+    local y=sy+(sh-h)/2
+    panel(x,y,w,h,c,.95)
+    local body,small=font(31*scale),font(21*scale)
+    local top=y+18*scale
+
+    if s and s.phase=="confirm" then
+      local summary=titleSaveSummary(s)
+      local titleFont=font(38*scale); local labelFont=font(24*scale)
+      text("CONTINUE",titleFont,x+26*scale,top,w-52*scale,"left",c.text)
+      local yy=top+62*scale
+      local info={
+        {"PLAYER",summary and summary.name or "----"},
+        {"BADGES",summary and tostring(summary.badges or 0) or "0"},
+        {"POKéDEX",summary and tostring(summary.caught or 0) or "0"},
+        {"TIME",summary and ("%d:%02d"):format(summary.hours or 0,summary.minutes or 0) or "0:00"},
+      }
+      local rowH=54*scale
+      for i,r in ipairs(info) do
+        local ry=yy+(i-1)*rowH
+        color(c.raised,.78); G.rectangle("fill",x+20*scale,ry,w-40*scale,rowH-5*scale,5,5)
+        text(r[1],labelFont,x+34*scale,ry+11*scale,w*.42,"left",c.muted)
+        text(r[2],labelFont,x+w*.50,ry+11*scale,w*.40,"right",c.text)
+      end
+      color(c.divider); G.rectangle("fill",x+20*scale,y+h-58*scale,w-40*scale,1)
+      text("A  CONTINUE    B  BACK",small,x+24*scale,y+h-42*scale,w-48*scale,"left",c.accent)
+      return
+    end
+
+    for i,row in ipairs(rows) do
+      local yy=top+(i-1)*rh
+      if i==index then
+        color(c.selected); G.rectangle("fill",x+12*scale,yy,w-24*scale,rh-5*scale,6,6)
+      end
+      local label=type(row)=="table" and (row.label or row.name or row.value) or row
+      text(label or "OPTION",body,x+28*scale,yy+12*scale,w-56*scale,"left",
+        i==index and c.text or c.muted)
+    end
+    local footerY=y+h-footerH
+    color(c.divider); G.rectangle("fill",x+18*scale,footerY,w-36*scale,1)
+    local clock=titleTimeText(s)
+    if clock~="" then
+      text(clock,small,x+22*scale,footerY+12*scale,w-44*scale,"left",c.muted)
+      text("A  SELECT",small,x+22*scale,footerY+38*scale,w-44*scale,"left",c.accent)
+    else
+      text("A  SELECT",small,x+22*scale,footerY+17*scale,w-44*scale,"left",c.accent)
     end
   end
 
@@ -903,16 +1169,222 @@ return function(mod)
     end
   end
 
+  -- Dex Radar 1.2.0 compatibility.  The source screen remains authoritative
+  -- for map collection, encounter rates, cursor movement, repeat behavior,
+  -- hotkeys and B-to-close.  KIM only replaces its final draw when Gen 2
+  -- Modern UI + MENU UI are enabled.
+  local radarImageCache={}
+  local function loadRadarImage(path)
+    if type(path)~="string" or path=="" then return nil end
+    if radarImageCache[path]~=nil then return radarImageCache[path] or nil end
+    local img=nil
+    local okA,Assets=pcall(require,"src.render.Assets")
+    if okA and Assets and type(Assets.image)=="function" then
+      local ok,value=pcall(Assets.image,path)
+      if ok then img=value end
+    end
+    if not img then
+      local ok,value=pcall(G.newImage,path)
+      if ok then img=value end
+    end
+    if img and img.setFilter then pcall(img.setFilter,img,"nearest","nearest") end
+    radarImageCache[path]=img or false
+    return img
+  end
+
+  local function radarIcon(game,row)
+    if type(row)~="table" then return nil,nil end
+    -- Respect KIM's own POKEMON ICONS switch first.  When it is OFF, fall
+    -- through to Dex Radar's native icon path instead of forcing KIM artwork.
+    if type(mod._kantoInMotionHdMenuIconForModernUi)=="function" and row.id then
+      local ok,path=pcall(mod._kantoInMotionHdMenuIconForModernUi,
+        game,{species=row.id})
+      if ok and path then
+        local img=loadRadarImage(path)
+        if img then return img,nil end
+      end
+    end
+    local img=loadRadarImage(row.iconPath)
+    if not img then return nil,nil end
+    local iw,ih=img:getDimensions()
+    if tostring(row.iconName or ""):sub(1,5)=="ICON_" and ih>=32
+        and type(G.newQuad)=="function" then
+      local ok,q=pcall(G.newQuad,0,0,math.min(16,iw),16,iw,ih)
+      if ok then return img,q end
+    end
+    return img,nil
+  end
+
+  local function radarLevel(row)
+    if type(row)~="table" then return "" end
+    local lo,hi=tonumber(row.minLv),tonumber(row.maxLv)
+    if not lo then return "" end
+    if not hi or hi==lo then return ("L%d"):format(lo) end
+    return ("L%d-%d"):format(lo,hi)
+  end
+
+  local function radarRate(row)
+    if type(row)~="table" or row.rate==nil then return "" end
+    local rate=tonumber(row.rate)
+    if not rate then return "" end
+    if row.todLabel then return ("RATE %d (%s)"):format(rate,tostring(row.todLabel)) end
+    return ("RATE %d"):format(rate)
+  end
+
+  local function drawDexRadar(s)
+    local c=theme(); local sx,sy,sw,sh=playfield()
+    local scale=uiScale(sw,sh); local den=density()
+    local w=math.min(1040*scale,sw*.78)
+    local h=math.min(720*scale,sh*.88)
+    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/1040,h/720) end
+    local x=sx+(sw-w)/2; local y=sy+(sh-h)/2
+
+    -- Keep Dex Radar feeling like the other Modern UI overlays rather than a
+    -- replacement white GB screen.  Its source object is made non-opaque while
+    -- this presenter is active so the live overworld remains behind the card.
+    color({0,0,0,1},.24); G.rectangle("fill",sx,sy,sw,sh)
+    panel(x,y,w,h,c,.97)
+
+    local titleFont=font(36*scale)
+    local body=font(25*scale)
+    local small=font(18*scale)
+    local tiny=font(16*scale)
+    local pad=26*scale
+    local headerH=94*scale
+    local footerH=52*scale
+
+    text("DEX RADAR",titleFont,x+pad,y+18*scale,w*.52,"left",c.text)
+    local owned=("%d/%d OWNED"):format(tonumber(s.ownedN) or 0,tonumber(s.totalN) or 0)
+    text(owned,small,x+w*.56,y+29*scale,w*.38-pad,"right",c.accent)
+    text(tostring(s.mapLabel or "UNKNOWN"):upper(),small,x+pad,
+      y+58*scale,w-pad*2,"left",c.muted)
+    color(c.divider); G.rectangle("fill",x+pad,y+headerH-8*scale,w-pad*2,1)
+
+    local listTop=y+headerH
+    local listBottom=y+h-footerH
+    local listH=math.max(1,listBottom-listTop)
+    local sectionH=math.max(28*scale,small:getHeight()+10*scale)
+    local rowH=math.max(64*scale,body:getHeight()+tiny:getHeight()+18*scale)
+    local rows=s.rows or {}; local monIndex=s.monIndex or {}
+    local cursor=math.max(1,math.min(#monIndex,tonumber(s.cursor) or 1))
+    local selectedRaw=monIndex[cursor]
+
+    local function rh(row) return row and row.kind=="header" and sectionH or rowH end
+    local first,last=1,#rows
+    if selectedRaw and #rows>0 then
+      first,last=selectedRaw,selectedRaw
+      local used=rh(rows[selectedRaw])
+      while first>1 do
+        local add=rh(rows[first-1]); if used+add>listH*.55 then break end
+        first=first-1; used=used+add
+      end
+      while last<#rows do
+        local add=rh(rows[last+1]); if used+add>listH then break end
+        last=last+1; used=used+add
+      end
+      while first>1 do
+        local add=rh(rows[first-1]); if used+add>listH then break end
+        first=first-1; used=used+add
+      end
+    end
+
+    local cursorByRaw={}
+    for i,raw in ipairs(monIndex) do cursorByRaw[raw]=i end
+    G.setScissor(x+10*scale,listTop,w-20*scale,listH)
+    local yy=listTop+5*scale
+    if #monIndex==0 then
+      text("NO WILD POKEMON",body,x+pad,listTop+listH*.42,w-pad*2,"center",c.text)
+    else
+      for raw=first,last do
+        local row=rows[raw]
+        local height=rh(row)
+        if row and row.kind=="header" then
+          text(tostring(row.text or row.label or ""):upper(),small,
+            x+pad,yy+(height-small:getHeight())/2,w-pad*2,"left",c.accent)
+          color(c.divider); G.rectangle("fill",x+pad,yy+height-1,w-pad*2,1)
+        elseif row then
+          local selected=cursorByRaw[raw]==cursor
+          local rx=x+14*scale; local rw=w-28*scale
+          if selected then
+            color(c.selected); G.rectangle("fill",rx,yy+2*scale,rw,height-4*scale,6,6)
+            color(c.accent); G.rectangle("fill",rx,yy+2*scale,4*scale,height-4*scale,2,2)
+          end
+          local iconSize=math.min(48*scale,height-12*scale)
+          local ix=x+pad; local iy=yy+(height-iconSize)/2
+          local img,quad=radarIcon(s.game,row)
+          if img then
+            local iw,ih=img:getDimensions()
+            local qw,qh=iw,ih
+            if quad and quad.getViewport then
+              local _,_,vw,vh=quad:getViewport(); qw,qh=vw,vh
+            end
+            local fit=math.min(iconSize/math.max(1,qw),iconSize/math.max(1,qh))
+            color(row.seen==false and {0,0,0,1} or {1,1,1,1},nil,true)
+            if quad then
+              G.draw(img,quad,ix+(iconSize-qw*fit)/2,iy+(iconSize-qh*fit)/2,0,fit,fit)
+            else
+              G.draw(img,ix+(iconSize-iw*fit)/2,iy+(iconSize-ih*fit)/2,0,fit,fit)
+            end
+          else
+            color(c.divider); G.rectangle("line",ix,iy,iconSize,iconSize,4,4)
+          end
+          local tx=ix+iconSize+16*scale
+          local right=x+w-pad
+          text(tostring(row.name or "?????"),body,tx,yy+8*scale,
+            math.max(20,right-tx-150*scale),"left",selected and c.text or c.muted)
+          local detail={}
+          if s.showLevels~=false and row.seen~=false then
+            local lv=radarLevel(row); if lv~="" then detail[#detail+1]=lv end
+          end
+          if s.showRates~=false and row.seen~=false then
+            local rt=radarRate(row); if rt~="" then detail[#detail+1]=rt end
+          end
+          text(table.concat(detail,"   "),tiny,tx,
+            yy+height-tiny:getHeight()-9*scale,
+            math.max(20,right-tx-120*scale),"left",c.muted)
+          if row.owned and row.seen~=false then
+            text("OWNED",tiny,right-105*scale,
+              yy+(height-tiny:getHeight())/2,100*scale,"right",c.accent)
+          end
+        end
+        yy=yy+height
+      end
+    end
+    G.setScissor()
+
+    color(c.divider); G.rectangle("fill",x+pad,y+h-footerH,w-pad*2,1)
+    text("UP/DOWN/LEFT/RIGHT  MOVE    B  BACK",tiny,x+pad,
+      y+h-footerH+17*scale,w-pad*2,"left",c.accent)
+    if first>1 then text("▲",body,x+w-52*scale,listTop+4*scale,nil,nil,c.accent) end
+    if last<#rows then text("▼",body,x+w-52*scale,listBottom-34*scale,nil,nil,c.accent) end
+  end
+
+  local function syncDexRadarOpacity(game)
+    local states=game and game.stack and game.stack.states
+    if type(states)~="table" then return end
+    local modern=presenterEnabled("menu") and hideOriginal()
+    for _,state in ipairs(states) do
+      if isDexRadarState(state) then
+        if rawget(state,"_kimDexRadarOriginalOpaque")==nil then
+          rawset(state,"_kimDexRadarOriginalOpaque",state.isOpaque~=false)
+        end
+        state.isOpaque=modern and false
+          or (rawget(state,"_kimDexRadarOriginalOpaque")~=false)
+      end
+    end
+  end
+
   local renderers={
-    start=drawStart,pack=drawPack,gear=drawGear,card=drawCard,
+    titlemenu=drawTitleMainMenu,start=drawStart,pack=drawPack,gear=drawGear,card=drawCard,
     save=drawSave,options=drawOptions,modoptions=drawModOptions,
-    kimsettings=drawKimSettings,
+    kimsettings=drawKimSettings,dexradar=drawDexRadar,
   }
 
   -- Gen 1 parity: LEFT/RIGHT can jump five Start Menu rows when enabled.
   if StartMenu and type(StartMenu.update)=="function" and not StartMenu.__kimFastJumpWrapped then
     local oldStartUpdate=StartMenu.update
     StartMenu.update=function(self,dt,...)
+      pruneStartMapRow(self)
       if presenterEnabled("menu") and opt("startMenuFastJump",true)~=false
           and self and self.list and type(self.items)=="table" then
         local input=self.game and self.game.input
@@ -936,6 +1408,19 @@ return function(mod)
   end
 
   if mod.hooks and type(mod.hooks.wrap)=="function" then
+    -- Dex Radar declares itself opaque because its native presentation is a
+    -- full 160x144 white screen.  Flip only that live state to non-opaque while
+    -- KIM owns the Modern presenter, before the render pass selects visible
+    -- stack layers.  Switching Modern UI/MENU UI off restores its source value.
+    mod.hooks:wrap("input.step",function(nextFn,game,dt)
+      syncDexRadarOpacity(game)
+      local result={pcall(nextFn,game,dt)}
+      local ok=table.remove(result,1)
+      syncDexRadarOpacity(game)
+      if not ok then error(result[1],0) end
+      return (table.unpack or unpack)(result)
+    end,100000)
+
     mod.hooks:wrap("ui.start_menu.items",function(nextFn,game,items)
       local rows=nextFn(game,items)
       if not presenterEnabled("menu") then return rows end
@@ -944,7 +1429,7 @@ return function(mod)
       for _,row in ipairs(rows) do
         local id=tostring(row and (row.value or row.id) or ""):lower()
         local label=tostring(row and row.label or ""):upper()
-        if id~="mods" and label~="MODS" and label~="MAPA" then
+        if id~="mods" and label~="MODS" and not startRowIsMap(row) then
           out[#out+1]=row
         end
       end
@@ -957,6 +1442,13 @@ return function(mod)
     end
     mod.hooks:wrap("screen.render_visible",function(nextFn,state)
       local kind=target(state)
+      if kind=="dexradar" and type(state)=="table" then
+        if rawget(state,"_kimDexRadarOriginalOpaque")==nil then
+          rawset(state,"_kimDexRadarOriginalOpaque",state.isOpaque~=false)
+        end
+        state.isOpaque=not (presenterEnabled("menu") and hideOriginal())
+          and (rawget(state,"_kimDexRadarOriginalOpaque")~=false) or false
+      end
       if kind and presenterEnabled(presenterForKind(kind)) and hideOriginal() then return false end
       return nextFn(state)
     end,100000)

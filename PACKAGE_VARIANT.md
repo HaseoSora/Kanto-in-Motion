@@ -1,7 +1,7 @@
-# Kanto in Motion v1.5.3 — Code-only release package
+# Kanto in Motion v1.6.0 release
 
-This package contains the complete v1.5.3 runtime code and public documentation assembled from the confirmed Gen 2 UI-parity baseline.
+This is the slim-core public release of Kanto in Motion v1.6.0.
 
-The large pre-existing Kanto in Motion Pokémon/background artwork was not part of the development upload used to assemble this package, so those large asset folders are intentionally not duplicated here.
+The normal KIM ZIP includes code, UI resources, icons, trainer art, effects, move-animation resources, and other small support assets. The large HD Pokémon battle-sprite and HD battle-background payload is installed separately through KIM's in-game HD Asset Manager and stored in persistent installation cache.
 
-When updating an existing full-assets Kanto in Motion installation, keep the existing asset folders and replace the code/documentation files with this v1.5.3 package.
+Users upgrading from v1.5.x or earlier will download the external HD asset pack once on first launch of v1.6.0. After that, the cached assets persist across future KIM updates.

@@ -212,20 +212,35 @@ return function(mod)
     return rec, dex
   end
 
+  local atlasMissRevision = {}
+  local function assetProviderRevision()
+    if mod._kimAssetProvider and type(mod._kimAssetProvider.revision) == "function" then
+      local ok, value = pcall(mod._kimAssetProvider.revision)
+      if ok then return tonumber(value) or 0 end
+    end
+    return 0
+  end
   local function atlas(path)
-    if atlasCache[path] == false then return nil end
+    local revision = assetProviderRevision()
+    if atlasCache[path] == false then
+      if atlasMissRevision[path] == revision then return nil end
+      atlasCache[path] = nil
+    end
     if atlasCache[path] then return atlasCache[path] end
-    if not (mod.assets and type(mod.assets.image) == "function") then
+    if not (mod._kimAssetProvider and type(mod._kimAssetProvider.image) == "function") then
       atlasCache[path] = false
+      atlasMissRevision[path] = revision
       return nil
     end
-    local ok, image = pcall(function() return mod.assets:image(path) end)
+    local ok, image = pcall(function() return mod._kimAssetProvider.image(path) end)
     if not ok or not image then
       atlasCache[path] = false
+      atlasMissRevision[path] = revision
       return nil
     end
     if image.setFilter then pcall(image.setFilter, image, "nearest", "nearest") end
     atlasCache[path] = image
+    atlasMissRevision[path] = nil
     return image
   end
 
@@ -325,13 +340,17 @@ return function(mod)
       return nil
     end
 
-    -- Battles are redrawn from the original HD frame at final window
-    -- resolution in render.hud.  Give FRLG a transparent 64x64 placeholder
-    -- here so its native low-resolution battler copy does not show underneath.
-    if battleActive() then return battlePlaceholder() end
-
+    -- Verify the authored HD asset before replacing FRLG's native picture.
+    -- v1.5.x ships National-Dex metadata for #152-386 even when an install
+    -- only has the original #001-151 asset pack.  Returning a transparent
+    -- placeholder before this check made Johto/Hoenn Pokemon disappear.
     local source = sourceFor(rec)
     if not source then return nil end
+
+    -- Battles are redrawn from the original HD frame at final window
+    -- resolution in render.hud.  Give FRLG a transparent 64x64 placeholder
+    -- only after the real HD source is known to exist.
+    if battleActive() then return battlePlaceholder() end
     local count = source.count or math.max(1, math.floor(tonumber(rec.frames) or 1))
     local frame = frameFor(rec)
     frame = math.max(1, math.min(count, math.floor(frame)))
@@ -400,6 +419,12 @@ return function(mod)
   end
 
   frontWrapper = function(species, form, shiny, personality)
+    if battleActive() and mod.options:get("battleSprites") == false then
+      if type(upstreamFront) == "function" then
+        return upstreamFront(species, form, shiny, personality)
+      end
+      return nil
+    end
     local rec, dex = recordFor(species, "front", shiny == true, personality, form)
     if rec then
       local entry = renderEntry(rec, dex, "front", shiny == true, species, personality)
@@ -415,6 +440,12 @@ return function(mod)
   end
 
   backWrapper = function(species, form, shiny)
+    if battleActive() and mod.options:get("battleSprites") == false then
+      if type(upstreamBack) == "function" then
+        return upstreamBack(species, form, shiny)
+      end
+      return nil
+    end
     local personality = personalityForBack(species)
     local rec, dex = recordFor(species, "back", shiny == true, personality, form)
     if rec then
@@ -781,16 +812,10 @@ return function(mod)
     local backdrop = frlgBackdrop(game, st)
     if not backdrop then return nil, nil end
     local path = "assets/battle/backgrounds/hd/" .. tostring(backdrop.file) .. ".png"
-    if hdBgImageCache[path] == false then return nil, backdrop end
     local image = hdBgImageCache[path]
     if not image then
-      if not (mod.assets and type(mod.assets.image) == "function") then
-        hdBgImageCache[path] = false
-        return nil, backdrop
-      end
-      local ok, value = pcall(function() return mod.assets:image(path) end)
-      image = ok and value or nil
-      hdBgImageCache[path] = image or false
+      image = atlas(path)
+      if image then hdBgImageCache[path] = image end
     end
     return image or nil, backdrop
   end

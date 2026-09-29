@@ -2548,9 +2548,20 @@ return function(mod)
     { kind = "rby_mmo_rank", match = isRbyMmoRankState },
     { kind = "rby_mmo_char_pick", match = isRbyMmoCharacterPickState },
     { kind = "dex_radar", match = function(state)
-      return type(state) == "table" and state.screenId == "DexRadar"
-        and type(state.rows) == "table" and type(state.monIndex) == "table"
-        and type(state.cursor) == "number" and type(state.mapLabel) == "string"
+      if type(state) ~= "table" then return false end
+      local id = tostring(state.screenId or state.id or "")
+      local shape = type(state.rows) == "table"
+        and type(state.monIndex) == "table"
+        and type(state.cursor) == "number"
+        and type(state.mapLabel) == "string"
+        and type(state.ownedN) == "number"
+        and type(state.totalN) == "number"
+      -- Dex Radar 1.2.0 exposes screenId="DexRadar" through mod.ui.push.
+      -- Keep a shape fallback so KIM still recognizes the public screen model
+      -- if a host build stores the registered screen id elsewhere.
+      return shape and (id == "DexRadar"
+        or (type(state.reloadForTod) == "function"
+          and type(state.moveCursor) == "function"))
     end },
   }
 
@@ -4795,7 +4806,7 @@ return function(mod)
   local OPTION_CATEGORY_BY_KEY = {
     enabled = "kanto", integratedModernUi = "kanto",
     animate = "kanto", titleScreen = "kanto", titleTrainer = "kanto", titleCycleSpeed = "kanto",
-    battleSystem = "kanto", battleSprites = "kanto", battleShadowQuality = "kanto", battleShadowOpacity = "kanto", hdBattleBackgrounds = "kanto",
+    battleSystem = "kanto", battleSprites = "kanto", battleShadowQuality = "kanto", battleShadowOpacity = "kanto", hdBattleBackgrounds = "kanto", battleBgMode = "kanto",
     battleShinyOdds = "kanto", battlePlayerSize = "kanto",
     battleHudScale = "kanto", battleHudSize = "kanto", battleHudOpacity = "kanto", battleTextScale = "kanto",
     battleUiSize = "kanto", battleUiOpacity = "kanto",

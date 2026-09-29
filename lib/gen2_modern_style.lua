@@ -25,7 +25,8 @@ return function(mod)
   local function opt(key, fallback)
     if not (mod.options and type(mod.options.get)=="function") then return fallback end
     local ok,value=pcall(mod.options.get,mod.options,key)
-    return ok and value~=nil and value or fallback
+    if not ok or value == nil then return fallback end
+    return value
   end
 
   local Style={}

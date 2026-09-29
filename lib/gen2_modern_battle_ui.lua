@@ -165,7 +165,8 @@ return function(mod)
   end
 
   local function hideOriginal()
-    return Style and Style.hideOriginal and Style.hideOriginal() or true
+    if Style and Style.hideOriginal then return Style.hideOriginal() end
+    return true
   end
 
   local function color(c, alpha, foreground)

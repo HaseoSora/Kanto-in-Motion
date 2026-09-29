@@ -27,7 +27,8 @@ return function(mod)
   local function opt(key, fallback)
     if not (mod.options and type(mod.options.get) == "function") then return fallback end
     local ok, value = pcall(mod.options.get, mod.options, key)
-    return ok and value ~= nil and value or fallback
+    if not ok or value == nil then return fallback end
+    return value
   end
 
   local function enabled()
@@ -36,7 +37,8 @@ return function(mod)
   end
 
   local function hideOriginal()
-    return Style and Style.hideOriginal and Style.hideOriginal() or true
+    if Style and Style.hideOriginal then return Style.hideOriginal() end
+    return true
   end
 
   local function theme()

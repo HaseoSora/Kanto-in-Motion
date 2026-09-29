@@ -3,6 +3,108 @@
 -- GIF source packs are converted locally into optimized sprite sheets with
 -- tools/import_hd_pokemon.py.
 return function(mod)
+  -- LuaJIT/Lua 5.1 compatibility. Some Gen1Recomp dev builds still expose
+  -- the legacy global unpack() without table.unpack(). KIM uses both engine
+  -- hooks and its own multi-return wrappers, so normalize the standard table
+  -- helper before registering any battle hooks.
+  if type(table) == "table" and type(table.unpack) ~= "function"
+      and type(unpack) == "function" then
+    table.unpack = unpack
+  end
+  local unpackCompat = (type(table) == "table" and table.unpack) or unpack
+
+  -- Downloadable HD asset manager. The large Pokemon battle sprite sheets and
+  -- HD battle backgrounds live in HaseoSora/Kanto-in-Motion-Assets and are
+  -- cached by KIM after a one-time in-game download.
+  local assetManager = nil
+  do
+    local source, err = mod:read("lib/asset_download_manager.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. tostring(mod.path) .. "/lib/asset_download_manager.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, value = pcall(installer, mod)
+          if okInstall then
+            assetManager = value
+          elseif mod.log and mod.log.error then
+            mod.log:error("KIM asset manager failed: %s", tostring(value))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("KIM asset manager could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("KIM asset manager could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("KIM asset manager missing: %s", tostring(err))
+    end
+    mod._kimAssetManager = assetManager
+  end
+
+  -- Central asset resolver used by Gen 1, Gen 2 and FR/LG. Downloaded heavy
+  -- artwork is read from mod.cache; packaged files remain a development and
+  -- migration fallback.
+  do
+    local MANAGED_PREFIXES = {
+      "assets/battle/hd-pokemon/",
+      "assets/battle/backgrounds/hd/",
+    }
+    local function isManaged(relative)
+      if type(relative) ~= "string" then return false end
+      relative = relative:gsub("\\", "/"):gsub("^%./", "")
+      for _, prefix in ipairs(MANAGED_PREFIXES) do
+        if relative:sub(1, #prefix) == prefix then return true end
+      end
+      return false
+    end
+
+    mod._kimAssetProvider = {
+      isManagedAsset = isManaged,
+    }
+
+    function mod._kimAssetProvider.image(relative)
+      if isManaged(relative) and assetManager and type(assetManager.image) == "function" then
+        local ok, image = pcall(assetManager.image, assetManager, relative)
+        if ok and image then return image, "downloaded" end
+      end
+      if mod.assets and type(mod.assets.image) == "function" then
+        local ok, image = pcall(function() return mod.assets:image(relative) end)
+        if ok and image then return image, "local" end
+      end
+      return nil
+    end
+
+    function mod._kimAssetProvider.exists(relative)
+      if isManaged(relative) and assetManager and type(assetManager.exists) == "function" then
+        local ok, exists = pcall(assetManager.exists, assetManager, relative)
+        if ok and exists == true then return true, "downloaded" end
+      end
+      if type(mod.info) == "function" then
+        local ok, info = pcall(function() return mod:info(relative) end)
+        if ok and info ~= nil then return true, "local" end
+      end
+      return false
+    end
+
+    function mod._kimAssetProvider.path(relative)
+      -- mod.cache deliberately has no physical path. Keep this helper for the
+      -- small packaged assets and legacy callers; heavy art uses image().
+      if mod.assets and type(mod.assets.path) == "function" then
+        local ok, path = pcall(function() return mod.assets:path(relative) end)
+        if ok and path then return path, "local" end
+      end
+      return nil
+    end
+
+    function mod._kimAssetProvider.revision()
+      if assetManager and type(assetManager.sourceRevision) == "function" then
+        local ok, rev = pcall(assetManager.sourceRevision, assetManager)
+        if ok then return tonumber(rev) or 0 end
+      end
+      return 0
+    end
+  end
   -- FireRed / LeafGreen run on Gen1Recomp's separate Game3 engine.  Keep the
   -- existing R/B/Y implementation isolated: Gen 3 gets its own provider and
   -- returns before any Gen 1 BattleState / Modern UI code is loaded.
@@ -407,7 +509,7 @@ return function(mod)
       { key = "dialogueUi", label = "DIALOGUE UI", type = "toggle", default = true,
         description = "Use Modern UI for Gen 2 text boxes, choices, quantities and confirmation prompts." },
       { key = "menuUi", label = "MENU UI", type = "toggle", default = true,
-        description = "Use Modern UI for Gen 2 Start, Pack, PokéGear, Save and Options screens." },
+        description = "Use Modern UI for the Gen 2 title/main menu, Start, Pack, PokéGear, Save and Options screens." },
       { key = "pokemonUi", label = "POKEMON SCREENS", type = "toggle", default = true,
         description = "Use Modern UI for Gen 2 Party, Pokédex, Trainer Card and supported Pokémon screens." },
       { key = "managerUi", label = "MOD MANAGER UI", type = "toggle", default = true,
@@ -473,6 +575,10 @@ return function(mod)
     { key = "hdBattleBackgrounds", label = "HD BATTLE BACKGROUNDS", type = "toggle",
       default = true,
       description = "Use the new 1920x950 location-aware HD battle backgrounds. Timed outdoor/selected authored scenes switch between sunrise, day, sunset, and night using Gen1Recomp's live game clock; caves and fixed interiors stay static. OFF keeps KIM's battle sprites/HUD but yields the arena art to the game or another scene owner." },
+    { key = "battleBgMode", label = "BATTLE BG MODE", type = "choice",
+      default = "auto", choices = {
+        { "AUTO", "auto" }, { "FULLSCREEN", "fullscreen" }, { "NATIVE FIT", "native" },
+      }, description = "How KIM fits HD battle backgrounds. AUTO uses FULLSCREEN with KIM battle sprites and NATIVE FIT with vanilla/default battle sprites. FULLSCREEN keeps the current edge-to-edge KIM arena. NATIVE FIT keeps Gen1Recomp's original 160x144 battler positions while showing the arena through a wider FR/LG-style 240x160 viewing window so more of the HD artwork remains visible." },
     { key = "battleTrainerSprite", label = "PLAYER TRAINER", type = "choice",
       default = "red", choices = {
         { "RED", "red" },
@@ -874,20 +980,35 @@ return function(mod)
     return localFrontRecord(species, generation) ~= nil
   end
 
+  local imageMissRevision = {}
+  local function assetProviderRevision()
+    if mod._kimAssetProvider and type(mod._kimAssetProvider.revision) == "function" then
+      local ok, value = pcall(mod._kimAssetProvider.revision)
+      if ok then return tonumber(value) or 0 end
+    end
+    return 0
+  end
   local function atlasImage(path)
-    if imageCache[path] == false then return nil end
+    local revision = assetProviderRevision()
+    if imageCache[path] == false then
+      if imageMissRevision[path] == revision then return nil end
+      imageCache[path] = nil
+    end
     if imageCache[path] then return imageCache[path] end
-    if not (mod.assets and type(mod.assets.image) == "function") then
+    if not (mod._kimAssetProvider and type(mod._kimAssetProvider.image) == "function") then
       imageCache[path] = false
+      imageMissRevision[path] = revision
       return nil
     end
-    local ok, image = pcall(function() return mod.assets:image(path) end)
+    local ok, image = pcall(function() return mod._kimAssetProvider.image(path) end)
     if not ok or not image then
       imageCache[path] = false
+      imageMissRevision[path] = revision
       return nil
     end
     if image.setFilter then pcall(image.setFilter, image, "nearest", "nearest") end
     imageCache[path] = image
+    imageMissRevision[path] = nil
     return image
   end
 
@@ -1257,6 +1378,23 @@ return function(mod)
       and not externalBattleSceneOwnerRegistered()
   end
 
+  -- Background framing is independent from battle-system ownership. AUTO keeps
+  -- KIM's established edge-to-edge stage while HD sprites are enabled, but
+  -- automatically switches the scenery to the native Gen 1 battler geometry
+  -- when BATTLE SPRITES is OFF so vanilla/default sprites still stand on the
+  -- authored ground points.
+  local function battleBackgroundMode()
+    local mode = tostring(mod.options:get("battleBgMode") or "auto"):lower()
+    if mode ~= "fullscreen" and mode ~= "native" then
+      return mod.options:get("battleSprites") == false and "native" or "fullscreen"
+    end
+    return mode
+  end
+
+  local function battleLiteDirectStageActive()
+    return battleLiteFullScreenActive() and battleBackgroundMode() == "fullscreen"
+  end
+
   local function battleLiteHudActive()
     local externalKimHud = type(mod._kantoInMotionExternalStageUsesKimHud) == "function"
       and mod._kantoInMotionExternalStageUsesKimHud() == true
@@ -1487,18 +1625,29 @@ return function(mod)
       gary_front={animated="garyfrontplayer.png"},
     }
 
+    local function packagedTrainerPath(relative)
+      if not (mod.assets and type(mod.assets.path)=="function") then return nil end
+      -- mod.assets:path() can return a syntactically valid path even when the
+      -- package accidentally omitted the file. Verify it first so the engine
+      -- never receives a nonexistent trainer path.
+      if type(mod.info)=="function" then
+        local okInfo, info=pcall(function() return mod:info(relative) end)
+        if not (okInfo and info~=nil) then return nil end
+      end
+      local okPath, path=pcall(function() return mod.assets:path(relative) end)
+      return okPath and path or nil
+    end
+
     local function staticPath(choice)
       local def=BATTLE_TRAINERS[choice]
-      if not (def and def.animated and mod.assets
-          and type(mod.assets.path)=="function") then return nil end
-      return mod.assets:path("assets/battle/player-trainers-frames/"..def.animated)
+      if not (def and def.animated) then return nil end
+      return packagedTrainerPath("assets/battle/player-trainers-frames/"..def.animated)
     end
 
     local function animatedPath(choice)
       local def=BATTLE_TRAINERS[choice]
-      if not (def and def.animated and mod.assets
-          and type(mod.assets.path)=="function") then return nil end
-      return mod.assets:path("assets/battle/player-trainers-animated/"..def.animated)
+      if not (def and def.animated) then return nil end
+      return packagedTrainerPath("assets/battle/player-trainers-animated/"..def.animated)
     end
 
     -- Decode the supplied 5x80x80 horizontal trainer sheets once per choice.
@@ -2013,7 +2162,7 @@ return function(mod)
       end
       local ok = table.remove(result, 1)
       if not ok then error(result[1], 0) end
-      return unpack(result)
+      return unpackCompat(result)
     end
 
     if mod.hooks and type(mod.hooks.wrap) == "function" then
@@ -2294,7 +2443,7 @@ return function(mod)
     g.clear = clear
     local ok = table.remove(result, 1)
     if not ok then error(result[1], 0) end
-    return unpack(result)
+    return unpackCompat(result)
   end
 
   -- Gen1 animated sprites are substituted only during drawPicsLayer so battle
@@ -2381,7 +2530,7 @@ return function(mod)
           local oldPlayer = self.player and self.player.sprite
           local oldPlayerBack = self.playerBackPic
           local changedEnemy, changedPlayer, changedPlayerBack = false, false, false
-          local direct = battleLiteFullScreenActive()
+          local direct = battleLiteDirectStageActive()
 
           -- Potato BACK SPRITES is a completely different player path from
           -- its staged 3D billboard provider: the player's trainer/Pokemon is
@@ -2497,7 +2646,7 @@ return function(mod)
           if changedPlayerBack then self.playerBackPic = oldPlayerBack end
           local ok = table.remove(result, 1)
           if not ok then error(result[1], 0) end
-          return unpack(result)
+          return unpackCompat(result)
         end
       end
 
@@ -2591,7 +2740,7 @@ return function(mod)
             self.__qolDramaticShapeHudSnapped = true
           end
 
-          return unpack(result)
+          return unpackCompat(result)
         end
       end
 
@@ -2652,7 +2801,7 @@ return function(mod)
           -- when that UI reaches the window, which is what made v7.3 look
           -- extremely blocky. This seam remains only for the non-fullscreen
           -- fallback path.
-          if battleLiteFullScreenActive() then return base end
+          if battleLiteDirectStageActive() then return base end
 
           if side == "back" then
             local record = battleLiteOwnsSprites() and battleRecord(species, side, nil) or nil
@@ -2749,7 +2898,7 @@ return function(mod)
         end
         local ok = table.remove(result, 1)
         if not ok then error(result[1], 0) end
-        return unpack(result)
+        return unpackCompat(result)
       end
     end
   end
@@ -2770,10 +2919,9 @@ return function(mod)
     local file=backdrop and backdrop.file
     if not file then return nil,backdrop end
     local path="assets/battle/backgrounds/hd/"..tostring(file)..".png"
-    if hdArenaImageCache[path]==false then return nil,backdrop end
     if not hdArenaImageCache[path] then
       local image=atlasImage(path)
-      hdArenaImageCache[path]=image or false
+      if image then hdArenaImageCache[path]=image end
     end
     return hdArenaImageCache[path] or nil,backdrop
   end
@@ -3083,6 +3231,102 @@ return function(mod)
     }
   end
 
+  -- Recreate the final native 160x144 battle placement in physical pixels.
+  -- drawNativeBattleOverlay uses the same layout in LOVE units; this version
+  -- is used by the worldOverride background compositor so the HD ground
+  -- anchors and native battler feet resolve to the same final coordinates.
+  local function nativeBattlePlacementPx(game, vw, vh)
+    vw, vh = tonumber(vw) or 160, tonumber(vh) or 144
+    local metrics = battleWorldMetrics()
+    local dpiX = metrics and tonumber(metrics.dpiX) or 1
+    local dpiY = metrics and tonumber(metrics.dpiY) or 1
+    if not (dpiX > 1e-6) then dpiX = 1 end
+    if not (dpiY > 1e-6) then dpiY = 1 end
+    local uw, uh = vw / dpiX, vh / dpiY
+    local orient = touchBattleOrientation(game)
+    local x, y, scale
+
+    if orient == "portrait" then
+      local aspect = 1920 / 950
+      local stageW, stageH = uw, uw / aspect
+      if stageH > uh then stageH = uh; stageW = stageH * aspect end
+      local lift = mobileScreenPositionLiftPx(game, vw, vh) / dpiY
+      local stageX = (uw - stageW) * 0.5
+      local stageY = (uh - stageH) * 0.5 - lift
+      scale = math.max(1, math.floor(math.min(stageW / 160, stageH / 144)))
+      x = stageX + (stageW - 160 * scale) * 0.5
+      y = stageY + (stageH - 144 * scale) * 0.5
+    else
+      scale = math.max(1, math.floor(math.min(uw / 160, uh / 144)))
+      local lift = mobileScreenPositionLiftPx(game, vw, vh) / dpiY
+      x = (uw - 160 * scale) * 0.5
+      y = uh * 0.055 - lift
+    end
+
+    return {
+      x = x * dpiX, y = y * dpiY,
+      sx = scale * dpiX, sy = scale * dpiY,
+      width = 160 * scale * dpiX, height = 144 * scale * dpiY,
+    }
+  end
+
+  local function nativeFitHdTransform(game, battle, image, backdrop, vw, vh)
+    if not (image and backdrop and type(hdArenaRouter.groundAnchors) == "function") then
+      return nil
+    end
+    local okAnchors, anchors = pcall(hdArenaRouter.groundAnchors, backdrop)
+    if not okAnchors or type(anchors) ~= "table" then return nil end
+    local okDims, iw, ih = pcall(function() return image:getWidth(), image:getHeight() end)
+    if not okDims or not iw or not ih or iw <= 0 or ih <= 0 then return nil end
+
+    local place = nativeBattlePlacementPx(game, vw, vh)
+    local p = anchors.player or {}
+    local e = anchors.enemy or {}
+    local pSrcX = (tonumber(p.x) or 630) * iw / 1920
+    local pSrcY = (tonumber(p.y) or 704) * ih / 950
+    local eSrcX = (tonumber(e.x) or 1400) * iw / 1920
+    local eSrcY = (tonumber(e.y) or 484) * ih / 950
+    local dx, dy = eSrcX - pSrcX, eSrcY - pSrcY
+    if math.abs(dx) < 1e-6 or math.abs(dy) < 1e-6 then return nil end
+
+    -- Native Gen 1 battler ground-contact points used by BattleState.
+    local pDstX = place.x + 26 * place.sx
+    local pDstY = place.y + 110 * place.sy
+    local eDstX = place.x + 124 * place.sx
+    local eDstY = place.y + 65 * place.sy
+    local sx = (eDstX - pDstX) / dx
+    local sy = (eDstY - pDstY) / dy
+    -- Keep the exact two-anchor platform alignment, but do not crop the HD
+    -- artwork down to the narrow 160x144 Gen 1 battle rectangle.  Vanilla
+    -- battlers still use that centered 160x144 coordinate space; the scenery
+    -- gets an FR/LG-style 240x160 viewing window around it so substantially
+    -- more of the authored field remains visible without moving either pad.
+    local clipX = place.x - 40 * place.sx
+    local clipY = place.y - 8 * place.sy
+    local clipW = place.width + 80 * place.sx
+    local clipH = place.height + 16 * place.sy
+    local clipR = math.min(vw, clipX + clipW)
+    local clipB = math.min(vh, clipY + clipH)
+    clipX = math.max(0, clipX)
+    clipY = math.max(0, clipY)
+    clipW = math.max(1, clipR - clipX)
+    clipH = math.max(1, clipB - clipY)
+
+    -- v33 calibration: v32 was very close but the authored pads still sat a
+    -- little low against the real vanilla battlers. Lift NATIVE FIT by ten
+    -- native battle pixels total (two more than v32). Keep the wider crop,
+    -- scale, and vanilla sprite coordinates unchanged.
+    local nativeBgLift = 10 * place.sy
+
+    return {
+      x = pDstX - pSrcX * sx,
+      y = pDstY - pSrcY * sy - nativeBgLift,
+      sx = sx, sy = sy,
+      clipX = clipX, clipY = clipY,
+      clipW = clipW, clipH = clipH,
+    }
+  end
+
   -- One geometry contract is shared by Kanto in Motion's snapped HP HUD and
   -- third-party battle overlays. Quality of Life already consumes
   -- battle.dramaticShapeShot for its EXP bar and caught/Pokedex indicator, so
@@ -3234,11 +3478,19 @@ return function(mod)
   -- Live integrated KRBA session. The original 1.3.7 full-window battle
   -- compositor used this exact handoff so BG/FG planes, particles and battler
   -- transforms share one timing source.
-  local function activeKrbaSession()
+  local function activeKrbaSession(battle)
     local fn=mod.exports and mod.exports._kantoInMotionKRBAActiveSession
     if type(fn)~="function" then return nil end
     local ok,value=pcall(fn)
-    return ok and value or nil
+    if not ok then return nil end
+
+    -- The KRBA session snapshots the real attacker side at AnimPlayer:start.
+    -- Keep that session-owned value authoritative. BattleState's transient
+    -- animAttackerIsPlayer flag can lag the direct session during final-window
+    -- reconstruction, which can invert enemy USER/TARGET ownership (Growl,
+    -- Quick Attack, Fury Attack, etc.). A completed session is never drawable.
+    if type(value)=="table" and value.done then return nil end
+    return value
   end
 
   local function directSideVisible(battle, side)
@@ -3272,7 +3524,7 @@ return function(mod)
     local y = math.floor(metrics.y + 0.5)
     local transform=nil
     if geo.hd or geo.kimWide or geo.krs then
-      local sess=activeKrbaSession()
+      local sess=activeKrbaSession(battle)
       if sess and type(sess.battlerTransformWide)=="function" then
         local ok,value=pcall(sess.battlerTransformWide,sess,side)
         if ok and type(value)=="table" then transform=value end
@@ -3311,8 +3563,46 @@ return function(mod)
     return true
   end
 
+  local function drawDirectBattleTrainer(battle, geo, game, vw, vh)
+    if not (battle and geo and battleLiteDirectStageActive()
+        and battleLiteOwnsSprites() and battle.showPlayerBack
+        and not battle.safari and not battle.demo) then return false end
+    local getter=mod.exports and mod.exports._kantoInMotionBattleTrainerFrame
+    if type(getter)~="function" then return false end
+    local ok,frame=pcall(getter,battle)
+    if not (ok and frame and type(frame.getDimensions)=="function") then return false end
+
+    -- Only MOVE the trainer onto the authored HD player platform. Preserve the
+    -- exact native battle-pic presentation scale it had before v35 instead of
+    -- reusing the smaller Pokemon pixel rung. This keeps trainer size unchanged
+    -- while still fixing its position on the widened battlefield.
+    local place=nativeBattlePlacementPx(game,vw,vh)
+    local scaleX=place and tonumber(place.sx) or nil
+    local scaleY=place and tonumber(place.sy) or nil
+    if not (scaleX and scaleX>0) then
+      scaleX=math.max(1,math.floor((tonumber(vw) or 160)/160))
+    end
+    if not (scaleY and scaleY>0) then scaleY=scaleX end
+    local offset=0
+    if type(battle.picOffset)=="function" then
+      local okOffset,value=pcall(battle.picOffset,battle,"back")
+      if okOffset then offset=tonumber(value) or 0 end
+    end
+    local w,h=frame:getDimensions()
+    local ax=tonumber(geo.playerX) or 0
+    local ay=tonumber(geo.playerY) or 0
+    love.graphics.push("all")
+    love.graphics.setShader()
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(frame,
+      ax-w*scaleX*0.5+offset*scaleX,
+      ay-h*scaleY,0,scaleX,scaleY)
+    love.graphics.pop()
+    return true
+  end
+
   drawDirectBattleSprites = function(battle, vw, vh)
-    if not (battle and battleLiteOwnsSprites() and battleLiteFullScreenActive()) then
+    if not (battle and battleLiteOwnsSprites() and battleLiteDirectStageActive()) then
       return false
     end
     local geo = directStageGeometry(vw, vh, battle.game, battle)
@@ -3368,17 +3658,33 @@ return function(mod)
     g.setShader()
     g.setColor(1, 1, 1, 1)
     local portraitTouch=touchBattleOrientation(game)=="portrait"
-    local wideTransform=hdArenaTransform(vw,vh,portraitTouch)
-    if portraitTouch then
-      wideTransform.y=wideTransform.y-mobileScreenPositionLiftPx(game,vw,vh)
+    local wideTransform
+    if battleBackgroundMode() == "native" then
+      local nativeTransform = nativeFitHdTransform(game,battle,image,backdrop,vw,vh)
+      if nativeTransform then
+        g.setScissor(nativeTransform.clipX,nativeTransform.clipY,
+          nativeTransform.clipW,nativeTransform.clipH)
+        g.draw(image,nativeTransform.x,nativeTransform.y,0,
+          nativeTransform.sx,nativeTransform.sy)
+        g.setScissor()
+      else
+        wideTransform=hdArenaTransform(vw,vh,portraitTouch)
+      end
+    else
+      wideTransform=hdArenaTransform(vw,vh,portraitTouch)
     end
-    g.draw(image,wideTransform.x,wideTransform.y,0,
-      wideTransform.scale,wideTransform.scale)
+    if wideTransform then
+      if portraitTouch then
+        wideTransform.y=wideTransform.y-mobileScreenPositionLiftPx(game,vw,vh)
+      end
+      g.draw(image,wideTransform.x,wideTransform.y,0,
+        wideTransform.scale,wideTransform.scale)
+    end
 
     -- Original KIM 1.3.7 KRBA wide compositor, adapted to the current
     -- 1920x950 HD-background router. BG/FG image/color planes now use the
     -- complete final battle canvas instead of the native 160x144 surface.
-    local krba=activeKrbaSession()
+    local krba=activeKrbaSession(battle)
     local krbaWideAnchors=nil
     if krba and wideTransform then
       local stageScale=tonumber(wideTransform.scale) or 1
@@ -3401,12 +3707,18 @@ return function(mod)
       pcall(krba.drawWideBack,krba,wideTransform,krbaWideAnchors)
     end
 
-    -- Paint the imported HD animated Pokemon directly at final-window
-    -- resolution using each background's authored ground-contact anchors.
-    if type(drawDirectBattleSprites) == "function" then
-      pcall(drawDirectBattleSprites, battle, vw, vh)
+    -- Paint the intro trainer and imported HD animated Pokemon directly at
+    -- final-window resolution using the same authored ground-contact anchors.
+    -- The native 160x144 overlay is intentionally not responsible for trainer
+    -- placement on the widened HD field.
+    if battleLiteDirectStageActive() then
+      local geo=directStageGeometry(vw,vh,game,battle)
+      pcall(drawDirectBattleTrainer,battle,geo,game,vw,vh)
+      if type(drawDirectBattleSprites) == "function" then
+        pcall(drawDirectBattleSprites, battle, vw, vh)
+      end
     end
-    if battle and mod._kantoInMotionShinyEncounterFx
+    if battleLiteDirectStageActive() and battle and mod._kantoInMotionShinyEncounterFx
         and type(mod._kantoInMotionShinyEncounterFx.draw) == "function" then
       pcall(mod._kantoInMotionShinyEncounterFx.draw,
         mod._kantoInMotionShinyEncounterFx, battle, game, vw, vh)
@@ -3499,7 +3811,7 @@ return function(mod)
   -- duplicate native 160x96 layer because setFlatBattleWorld has already
   -- rendered the same session at final-window resolution.
   mod.exports._kantoInMotionKrsWideActive=function(battle)
-    return not IS_GEN2 and battle~=nil and battleLiteFullScreenActive()
+    return not IS_GEN2 and battle~=nil and battleLiteDirectStageActive()
       and activeKrbaSession()~=nil
   end
 
@@ -3651,7 +3963,7 @@ return function(mod)
     battle.phase = oldPhase
     local ok = table.remove(result, 1)
     if not ok then error(result[1], 0) end
-    return unpack(result)
+    return unpackCompat(result)
   end
 
   -- Typed's in-canvas move cards are drawn from its -100 battle.overlay link.
@@ -3720,7 +4032,7 @@ return function(mod)
     game._kantoInMotionTypedMoveEffectIndicator = nil
     local ok = table.remove(result, 1)
     if not ok then error(result[1], 0) end
-    return unpack(result)
+    return unpackCompat(result)
   end
 
   -- -----------------------------------------------------------------------
@@ -3895,8 +4207,24 @@ return function(mod)
       -- external animation provider) remains the animation authority.
       local okLayers, layerErr = pcall(function()
         if type(battle.drawPicsLayer) == "function" then
-          battle:drawPicsLayer(slide, sx, sy, nil, true)
+          local oldBack=nil
+          local hideNativeTrainer=battleLiteDirectStageActive()
+            and battleLiteOwnsSprites() and battle.showPlayerBack
+            and not battle.safari and not battle.demo
+          if hideNativeTrainer then
+            oldBack=battle.playerBackPic
+            local blank=transparentPic()
+            if blank then battle.playerBackPic=blank end
+          end
+          local okPics,picsErr=pcall(battle.drawPicsLayer,battle,slide,sx,sy,nil,true)
+          if hideNativeTrainer then battle.playerBackPic=oldBack end
+          if not okPics then error(picsErr,0) end
         end
+
+        -- The fullscreen trainer is now drawn directly into the HD world at
+        -- the authored player platform. Keep the native 160x144 trainer out of
+        -- this centred overlay so it cannot reappear in the middle of the
+        -- widened battlefield.
       end)
       if okLayers then
         okLayers,layerErr=pcall(function()
@@ -4493,15 +4821,35 @@ return function(mod)
         love.graphics.setCanvas(ctx.uiCanvas)
         local touchOrient=touchBattleOrientation(battle.game)
         local modernLower=battleModernUiActive(battle.game,battle)
-        if touchOrient~="portrait" and not modernLower then
+        local nativeVanilla = battleLiteFullScreenActive()
+          and battleBackgroundMode() == "native"
+          and mod.options:get("battleSprites") == false
+        local cw,ch=ctx.uiCanvas:getDimensions()
+        love.graphics.setBlendMode("replace","premultiplied")
+        love.graphics.setColor(0,0,0,0)
+        if nativeVanilla then
+          -- NATIVE FIT + vanilla sprites is intentionally different from the
+          -- fullscreen KIM-sprite path. withoutBattleBackgroundFill() has
+          -- already made the stock battle paper transparent, so the finished
+          -- upper 96 rows now contain exactly what we want: Gen1Recomp's real
+          -- vanilla battlers and native attack/effect layer at their original
+          -- 160x144 coordinates. Preserve those pixels instead of scrubbing
+          -- them and trying to reconstruct settled Pokemon later.
+          --
+          -- Modern UI owns the lower 48 rows. Portrait also redraws its native
+          -- lower strip at a safe final-window Y, so clear only that lower
+          -- source region in those two cases. Desktop/landscape with Modern UI
+          -- OFF keeps the native bottom strip as well.
+          if modernLower or touchOrient == "portrait" then
+            local split = ch * (96 / 144)
+            love.graphics.rectangle("fill",0,split,cw,ch-split)
+          end
+        elseif touchOrient~="portrait" and not modernLower then
           -- Native ownership fallback. When integrated Modern UI is OFF, keep
           -- Gen1Recomp's real bottom 48-row command/move/message strip alive on
           -- desktop and mobile landscape. KIM still removes the upper 96 rows
           -- because its fullscreen arena + KIM HP/status HUD own
           -- those surfaces. Portrait is redrawn separately at its safe Y.
-          local cw,ch=ctx.uiCanvas:getDimensions()
-          love.graphics.setBlendMode("replace","premultiplied")
-          love.graphics.setColor(0,0,0,0)
           love.graphics.rectangle("fill",0,0,cw,ch*(96/144))
         else
           -- Modern UI owns the lower surface, or portrait needs its custom
@@ -4511,7 +4859,7 @@ return function(mod)
         end
         love.graphics.pop()
       end
-      return unpack(result)
+      return unpackCompat(result)
     end, 50)
 
     -- Modern UI owns the lower command/message layer when selected.  The
@@ -4609,7 +4957,16 @@ return function(mod)
       end
 
       if (active or mobileExternalKimHudStage) and not childMenuOpen then
-        pcall(drawNativeBattleOverlay,battle,viewport)
+        local nativeVanilla = active
+          and battleBackgroundMode() == "native"
+          and mod.options:get("battleSprites") == false
+        -- In NATIVE FIT the real vanilla battlers/effects are retained in the
+        -- transparent source battle canvas during render.compose. Do not draw
+        -- captureBattleScene a second time here; doing so is unnecessary and
+        -- was the path that left settled vanilla Pokemon invisible in v29.
+        if not nativeVanilla then
+          pcall(drawNativeBattleOverlay,battle,viewport)
+        end
         if touchBattleOrientation(battle and battle.game)=="portrait"
             and not battleModernUiActive(game,battle) then
           pcall(drawNativeBattleText,battle,viewport)
@@ -4689,7 +5046,7 @@ return function(mod)
       end
       local ok = table.remove(result, 1)
       if not ok then error(result[1], 0) end
-      return unpack(result)
+      return unpackCompat(result)
     end, 20000)
   end
 
@@ -5159,7 +5516,7 @@ return function(mod)
           local result = { pcall(nativeDrawSceneBody, self, ...) }
           gen2CurrentBattleState = previous
           if not result[1] then error(result[2], 0) end
-          return unpack(result, 2)
+          return unpackCompat(result, 2)
         end
       end
 
@@ -5203,7 +5560,7 @@ return function(mod)
             state._kantoInMotionSkipLowResLiftedRows = true
           end
 
-          return unpack(result, 2)
+          return unpackCompat(result, 2)
         end
       end
 
@@ -6053,6 +6410,15 @@ return function(mod)
         }
       end
     end
+    if assetManager and assetManager.screenId then
+      items[#items + 1] = {
+        id = MOD_ID .. ":asset_manager",
+        label = "ASSET MANAGER",
+        right = type(assetManager.statusLabel) == "function"
+          and assetManager:statusLabel() or "OPEN",
+        assetManager = true,
+      }
+    end
     items[#items + 1] = { id = "cancel", label = "CANCEL", cancel = true }
     return items
   end
@@ -6111,6 +6477,10 @@ return function(mod)
       wrap = true, keyRepeat = true,
       onChoose = function(item, m)
         if item and item.cancel then if m and m.close then m:close() end return end
+        if item and item.assetManager and assetManager and type(assetManager.open) == "function" then
+          assetManager.open(game)
+          return
+        end
         if item and item.submenu then mod.ui.push(game, item.submenu); return end
         step(item, 1)
       end,
@@ -6412,7 +6782,7 @@ return function(mod)
             local okCoreInstall, coreInstallErr = pcall(coreSetup, mod)
             if okCoreInstall then
               mod._kantoInMotionGen2ModernCoreMenusInstalled = true
-              mod.log:info("Gen2 Modern Start/Pack/Pokegear/Trainer Card overlays v3 installed")
+              mod.log:info("Gen2 Modern Title/Start/Pack/Pokegear/Trainer Card overlays v4 installed")
             else
               mod.log:error("Gen2 Modern core menus failed to install: %s",
                 tostring(coreInstallErr))

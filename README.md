@@ -1,4 +1,4 @@
-# Kanto in Motion v1.5.3
+# Kanto in Motion v1.6.0
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -10,19 +10,19 @@ It supports:
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
 
-## What’s new in v1.5.3
+## What’s new in v1.6.0
 
-v1.5.3 expands the Gen 2 Modern UI introduced in v1.5.2 with a dedicated **UI SETTINGS** submenu and brings over the applicable Gen 1 UI customization controls.
+v1.6.0 is a major presentation, compatibility, and distribution update across all supported game families.
 
-- Added a dedicated **UI SETTINGS → OPEN** submenu inside **KANTO IN MOTION** for Gold / Silver / Crystal.
-- Added Gen 2 **UI SCALE** with a 100% neutral default calibrated for a cleaner Gen 1-like footprint.
-- Added **FONT SCALE**, **PIXEL ART FONT**, and **DIALOGUE TEXT SCALE** controls. The normal scalable font is now the default; the pixel font is optional.
-- Added Gen 1-style frame, density, layout, opacity, Start Menu, minimal-UI, and per-surface Modern UI controls to Gen 2.
-- Moved the Gen 2 Modern Battle UI presentation controls into the new UI Settings submenu so UI customization is kept together.
-- Replaced Gen 2's old MENU SPRITES ON/OFF behavior with **MENU SPRITES: KIM HD / VANILLA**.
-- Added native G/S/C sprite fallback when **VANILLA** is selected or KIM menu artwork is unavailable, preventing blank Pokémon preview areas.
-- Kept menu sprite source, menu sprite animation, HD icons, and battle sprites independently configurable.
-- Preserves native Gen 2 gameplay state, HP/status HUD, trainers, battle timing, backgrounds, move animations, scripts, shops, save logic, and option logic underneath KIM's presentation layer.
+- **Slim core + one-time HD Asset Manager:** the large HD battle Pokémon and HD battle-background pack is now downloaded separately from the official `HaseoSora/Kanto-in-Motion-Assets` release, cached outside the mod folder, and reused by future KIM updates.
+- **Expanded Gen 2 Modern UI:** the title/main menu, complete NEW GAME setup flow, dialogue/choices, naming screens, Start Menu and supported menus now use KIM Modern UI when **MODERN UI** is enabled.
+- **Gen 2 UI gating fixed:** **MODERN UI** is the master presentation switch, while **MENU UI**, **DIALOGUE UI**, **POKEMON SCREENS**, and battle UI controls remain per-surface opt-outs. Turning Modern UI off restores native G/S/C presentation.
+- **Gen 2 Start Menu cleanup:** removes the stray `MAPA` row without leaving a hidden selectable entry.
+- **Dex Radar 1.2.0 compatibility:** KIM can present the unmodified Dex Radar mod through Modern UI on both Gen 1 and Gen 2 while leaving all Dex Radar logic untouched.
+- **Gen 1 native-fit HD backgrounds:** new **BATTLE BG MODE** options let vanilla/default battlers use KIM HD backgrounds with stock battle coordinates while preserving the full-screen KIM arena for HD battle sprites.
+- **Gen 1 battle fixes:** corrected trainer placement/size on the widened field, enemy attack-side ownership for moves such as Growl / Quick Attack / Fury Attack, and cleanup of lingering KRBA BG/FG timing planes.
+- **FR/LG fallback and stability:** missing Johto/Hoenn HD battle art now falls back to native FR/LG sprites instead of disappearing, and the `BATTLE SPRITES = OFF` path yields cleanly back to the native provider.
+- Preserves native gameplay/state ownership underneath KIM presentation layers in Gen 2 and FR/LG.
 
 ## Main features
 
@@ -39,6 +39,7 @@ v1.5.3 expands the Gen 2 Modern UI introduced in v1.5.2 with a dedicated **UI SE
 - Player trainer selection
 - Animated title-screen Pokémon
 - HD Pokémon icons
+- Native-fit HD background mode for vanilla/default battlers
 - Battle Art and PotatoVoxel compatibility
 
 ### Gold / Silver / Crystal
@@ -52,6 +53,8 @@ v1.5.3 expands the Gen 2 Modern UI introduced in v1.5.2 with a dedicated **UI SE
 - HD Pokédex Pokémon
 - HD Pokémon icons
 - Pokémon shadows
+- Full Modern UI title/main menu and NEW GAME setup flow
+- Dex Radar 1.2.0 Modern UI compatibility
 - Final-window rendering for crisp HD menus and Pokémon art
 
 ### FireRed / LeafGreen
@@ -66,6 +69,7 @@ v1.5.3 expands the Gen 2 Modern UI introduced in v1.5.2 with a dedicated **UI SE
 - Final-resolution HD rendering for cleaner menu and battle presentation
 - Desktop and mobile portrait/landscape support
 - Mobile **SCREEN POS** support
+- Native sprite fallback when KIM HD battle artwork is unavailable
 
 ## HD Pokémon icons
 
@@ -94,6 +98,7 @@ Open **KANTO IN MOTION** from the mod settings screen. On **Red / Blue / Yellow*
 | **TITLE TRAINER** | ANIMATED / ORIGINAL GEN 1 | ANIMATED | Chooses KIM's animated Red title trainer or Gen1Recomp's original title trainer. |
 | **TITLE CYCLE SPEED** | NORMAL / SLOW / SLOWER | SLOW | Controls how quickly the title-screen Pokémon changes. |
 | **TITLE PKMN SIZE** | 50%–125% in 5% steps | 75% | Scales only the cycling title-screen Pokémon. Red and the custom logo are unchanged. |
+| **ASSET MANAGER** | OPEN | — | Opens the HD Asset Manager for downloading, checking, or reusing the external HD battle asset pack. |
 
 ### Red / Blue / Yellow — BATTLE settings
 
@@ -107,6 +112,7 @@ Open **KANTO IN MOTION** from the mod settings screen. On **Red / Blue / Yellow*
 | **SHADOW OPACITY** | 50%–150% in 10% steps | 100% | Adjusts shadow darkness without changing Pokémon size or position. |
 | **SHINY ODDS** | NATIVE 1/8192; 1/4096; 1/2048; 1/1024; 1/512; 1/256; 1/128; 1/64; 1/32; 1/16; 1/8; 1/4; 1/2; ALWAYS | NATIVE 1/8192 | Controls wild shiny generation. NATIVE leaves the normal DV behavior intact. |
 | **HD BATTLE BACKGROUNDS** | ON / OFF | ON | Uses KIM's location-aware HD battle backgrounds. |
+| **BATTLE BG MODE** | AUTO / FULLSCREEN / NATIVE FIT | AUTO | Controls how Gen 1 HD battle backgrounds are framed. AUTO keeps the full-screen KIM arena with KIM battle sprites, but switches to native-fit framing when BATTLE SPRITES is OFF. NATIVE FIT keeps vanilla/default battlers and native attack effects at their original 160×144 positions while showing the arena through a wider FR/LG-style 240×160 viewing window, with a calibrated vertical offset to align the HD pads to stock battlers. |
 | **PLAYER TRAINER** | RED / DEFAULT-ROM / GEN 1 / GEN 2 / GEN 3 / GEN 4 / GEN 5 / ASH / GARY / front-sprite choices | RED | Chooses the player trainer shown during battle intro/send-out. |
 | **PLAYER PKMN SIZE** | 50%–200% in 5% steps | 100% | Scales only the player-side Pokémon. |
 | **3D PKMN SIZE** | 50%–125% in 5% steps | 100% | Scales Pokémon in compatible staged 3D battles. 100% is KIM's neutral reference. |
@@ -133,8 +139,9 @@ Gold / Silver / Crystal retain their native gameplay and battle logic. KIM's Mod
 | **MENU SPRITES** | KIM HD / VANILLA | KIM HD | Chooses KIM's HD animated menu Pokémon or the native Gold/Silver/Crystal Pokémon artwork. This is independent from POKEMON ICONS and BATTLE SPRITES. |
 | **POKEMON ICONS** | ON / OFF | ON | Uses KIM's HD Pokémon icons in native G/S/C icon slots. OFF restores the game or another compatible icon provider. |
 | **ANIMATION** | ON / OFF | ON | Master animation control for supported KIM Pokémon/trainer presentation. OFF holds supported animated KIM artwork on its first frame. |
-| **MODERN UI** | ON / OFF | ON | Master switch for KIM's Gen 2 Modern UI across menus, Party, Pokédex, Pack, PokéGear, Trainer Card, Save, Options/KIM settings, dialogue, shops, choices, level-up messages, and supported battle UI surfaces. OFF yields those presentation surfaces to the native game. |
+| **MODERN UI** | ON / OFF | ON | Master switch for KIM's Gen 2 Modern UI across the title/main menu, Start/menu screens, Party, Pokédex, Pack, PokéGear, Trainer Card, Save, Options/KIM settings, dialogue, shops, choices, level-up messages, and supported battle UI surfaces. OFF yields those presentation surfaces to the native game. |
 | **UI SETTINGS** | OPEN | — | Opens the dedicated Gen 2 UI customization submenu described below. |
+| **ASSET MANAGER** | OPEN | — | Opens the HD Asset Manager for downloading, checking, or reusing the external HD battle asset pack. |
 | **BATTLE SPRITES** | ON / OFF | ON | Uses KIM HD animated Pokémon in native G/S/C battles while retaining native Gen 2 battle logic and move animations. |
 | **PKMN SHADOWS** | OFF / LOW / MEDIUM / HIGH / ULTRA | MEDIUM | Controls ground-contact shadow quality for KIM HD battle Pokémon. |
 | **SHADOW OPACITY** | 50%–150% in 10% steps | 100% | Adjusts Gen 2 battle shadow darkness without changing Pokémon size or position. |
@@ -163,7 +170,7 @@ These controls are grouped under **KANTO IN MOTION → UI SETTINGS**. They mirro
 | **SIDE MENU INSET** | 0 / 10 / 20 / 30 / 40 / 50 | 0 | Moves the floating Start Menu inward on wide displays. |
 | **MINIMAL UI** | ON / OFF | OFF | Uses tighter spacing and less secondary detail. |
 | **DIALOGUE UI** | ON / OFF | ON | Enables Modern UI for Gen 2 text boxes, choices, quantities, and confirmation prompts. |
-| **MENU UI** | ON / OFF | ON | Enables Modern UI for Gen 2 Start, Pack, PokéGear, Save, and Options screens. |
+| **MENU UI** | ON / OFF | ON | Enables Modern UI for the Gen 2 title/main menu, Start Menu, Pack, PokéGear, Save, and Options screens. |
 | **POKEMON SCREENS** | ON / OFF | ON | Enables Modern UI for Party, Pokédex, Trainer Card, and supported Pokémon screens. |
 | **MOD MANAGER UI** | ON / OFF | ON | Enables Modern UI presentation for Kanto in Motion's own settings screens. |
 | **SPRITE ANIMATION** | ON / OFF | ON | Animates supported KIM menu/Party/Pokédex artwork without changing the selected MENU SPRITES source. |
@@ -174,12 +181,14 @@ These controls are grouped under **KANTO IN MOTION → UI SETTINGS**. They mirro
 | **MOVE LAYOUT** | GRID / VERTICAL | GRID | GRID uses a 2×2 move selector. VERTICAL lists the four moves top-to-bottom. |
 | **MOVE INFO** | ON / OFF | OFF | Shows the selected Gen 2 move's type, PP, power, and accuracy beside the move list. |
 
-The UI Settings submenu also includes **RESET TO DEFAULT** for restoring the Gen 2 Modern UI controls to their v1.5.3 defaults.
+The UI Settings submenu also includes **RESET TO DEFAULT** for restoring the Gen 2 Modern UI controls to their current defaults.
 
 #### Gen 2 Modern UI coverage
 
 With **MODERN UI = ON**, KIM currently presents:
 
+- title/main menu (`CONTINUE`, `NEW GAME`, `OPTION`, `EXIT GAME`) over the animated Gen 2 title artwork
+- complete NEW GAME setup presentation: Crystal gender selection, clock setup/confirmation, Oak/Elm speech dialogue, player-name preset selection, the Gen 2 naming keyboard, and the final shrink/intro dialogue
 - Start Menu
 - Party and Pokémon status/details
 - Gen2 Clean UI-based Pokédex list and entry presentation
@@ -208,6 +217,7 @@ FireRed / LeafGreen keep Gen1Recomp's native Game3 UI, HUD, commands, dialogs, a
 | **PKMN SHADOWS** | OFF / LOW / MEDIUM / HIGH / ULTRA | MEDIUM | Controls ground-contact shadow quality for KIM HD battle Pokémon. Shadows follow battlers during send-out/slide movement. |
 | **SHADOW OPACITY** | 50%–150% in 10% steps | 100% | Adjusts FR/LG battle shadow darkness without changing Pokémon size or position. |
 | **HD BATTLE BACKGROUNDS** | ON / OFF | ON | Uses KIM's location-aware HD Kanto battle backgrounds while preserving FR/LG's native battler/HUD geometry. OFF restores the native FR/LG battle background. |
+| **ASSET MANAGER** | OPEN | — | Opens the HD Asset Manager for downloading, checking, or reusing the external HD battle asset pack. |
 
 ## Mobile support
 
@@ -226,6 +236,17 @@ When Kanto in Motion is used with **HGSS_SPRITES**:
 - `POKEMON ICONS = ON` keeps KIM in control of Pokémon icons.
 - `POKEMON ICONS = OFF` yields icon presentation back to HGSS or the native game.
 
+## Dex Radar compatibility
+
+Kanto in Motion includes presentation-only compatibility for **Dex Radar 1.2.0** on both Gen 1 and Gen 2. Dex Radar remains completely unmodified and continues to own encounter collection, rates, levels, cursor/input, hotkeys, and closing behavior.
+
+- **MODERN UI ON + MENU UI ON:** KIM presents the Dex Radar screen with the active Modern UI theme, font, frame, opacity, scale, density, and layout settings.
+- **MODERN UI OFF** (or **MENU UI OFF**): Dex Radar keeps its original native presentation.
+- The `D.RADAR` row injected by Dex Radar is retained in KIM's Modern Start Menu on both generations.
+- KIM uses its HD menu icons when `POKEMON ICONS` is enabled and falls back to Dex Radar/native icon art when it is disabled or unavailable.
+
+No files in the Dex Radar mod are patched or replaced.
+
 ## Optional compatibility
 
 Kanto in Motion includes compatibility paths for optional external mods such as:
@@ -238,15 +259,39 @@ Kanto in Motion includes compatibility paths for optional external mods such as:
 - HGSS_SPRITES
 - supported translation/UI mods
 
-External compatibility mod packages are not bundled. v1.5.3 directly vendors only the Gen2 Clean UI 0.4.1 Pokédex adapter/presenter pieces used by KIM's Gen 2 Pokédex presentation; the separate Gen2 Clean UI mod is not required for that Pokédex presentation.
+External compatibility mod packages are not bundled. v1.6.0 directly vendors only the Gen2 Clean UI 0.4.1 Pokédex adapter/presenter pieces used by KIM's Gen 2 Pokédex presentation; the separate Gen2 Clean UI mod is not required for that Pokédex presentation.
 
 ## Installation
 
-Replace the previous Kanto in Motion package with **v1.5.3** and enable it from Gen1Recomp's mod menu.
+### Installation / first launch
 
-Existing KIM settings can carry forward because the internal mod ID is unchanged.
+1. Install **Kanto in Motion v1.6.0** and enable it in Gen1Recomp.
+2. On first launch, KIM opens the **HD ASSET MANAGER** if the external HD battle pack is not already cached.
+3. Choose **A — DOWNLOAD** to download the official asset ZIP once, or **B — USE VANILLA / LATER** to continue without it.
+4. After a successful install, the HD assets remain in Gen1Recomp's installation-scoped KIM cache and are reused by later KIM code updates.
 
-If you are updating a full-assets installation with the **CODE-ONLY** package, keep your existing KIM asset folders and replace the code/documentation files with the v1.5.3 package contents.
+The internal mod ID remains `animated_menu_pokemon`, so compatible KIM settings continue to carry forward.
+
+### Updating from v1.5.x or earlier
+
+The v1.6.0 release moves the large HD battle asset pack out of the KIM mod folder and into Gen1Recomp's persistent KIM cache. Because Gen1Recomp replaces the old mod directory during a normal update, the old embedded HD battle assets are not carried forward automatically.
+
+After updating to v1.6.0, KIM will offer the **one-time HD asset download** on first launch. Once that download finishes, the asset pack lives outside the KIM mod folder and is reused by future KIM updates, so normal updates after v1.6.0 no longer require downloading the large asset pack again.
+
+### Downloadable HD battle assets
+
+The large HD Pokémon battle sprite sheets and HD battle backgrounds are no longer stored inside the normal KIM release ZIP. KIM's small battle-support assets, trainer art, UI art, effects, move-animation resources, icons, and code remain packaged with the core mod.
+
+The **HD ASSET MANAGER** downloads the official `HaseoSora/Kanto-in-Motion-Assets` release as one temporary ZIP, verifies `asset-pack.json`, extracts only its `assets/` payload into KIM's installation-scoped cache, and deletes the temporary ZIP after a successful install.
+
+- **A — DOWNLOAD:** checks the official tagged asset release and starts the one-time ZIP download.
+- **B — USE VANILLA / LATER:** continues without downloading; missing HD battle artwork falls back safely where supported.
+- **B while downloading:** cancels the temporary ZIP download and continues without the HD pack.
+- Extraction runs incrementally after the ZIP download completes.
+- **KANTO IN MOTION → ASSET MANAGER:** reopens the installer at any time.
+- Existing cached assets are reused automatically; ordinary KIM code updates do not redownload the pack.
+
+KIM requires the **NETWORK** permission only for the optional HD asset download path.
 
 ## Credits
 
@@ -268,7 +313,7 @@ If you are updating a full-assets installation with the **CODE-ONLY** package, k
 
 - **Gen2 Clean UI — ArmstrongThomas**
   - https://github.com/ArmstrongThomas/gen2-clean-ui
-  - v1.5.3 vendors the Gen2 Clean UI 0.4.1 Pokédex adapter/presenter used by KIM's Gen 2 Pokédex presentation.
+  - v1.6.0 vendors the Gen2 Clean UI 0.4.1 Pokédex adapter/presenter used by KIM's Gen 2 Pokédex presentation.
 
 - **Kanto Rework Suite — Faendra**
   - https://github.com/Faendra/kanto-rework-suite
@@ -276,6 +321,13 @@ If you are updating a full-assets installation with the **CODE-ONLY** package, k
 - **Poké Ball Colorfix — keberos**
   - https://github.com/keberos/pokeball-colorfix
 
+- **Dex Radar — Zetto22**
+  - https://github.com/Zetto22/dex_radar
+  - Optional external mod; KIM provides presentation-only compatibility and does not modify Dex Radar.
+
 ## Disclaimer
 
 Kanto in Motion is an unofficial fan-made mod and is not affiliated with or endorsed by Nintendo, Game Freak, Creatures Inc., or The Pokémon Company.
+
+### Slim-core asset split note
+The downloadable HD pack contains only the large HD Pokémon battle sprite sheets and HD battle backgrounds. KIM's small battle-support assets (including selectable player trainer frames/animations) remain packaged with the core mod so battles can initialize safely before/without the HD pack.

@@ -4777,7 +4777,7 @@ return function(mod)
   local OPTION_CATEGORY_BY_KEY = {
     enabled = "kanto", integratedModernUi = "kanto",
     animate = "kanto", titleScreen = "kanto", titleTrainer = "kanto", titleCycleSpeed = "kanto",
-    battleSystem = "kanto", battleSprites = "kanto", battleShadowQuality = "kanto", battleShadowOpacity = "kanto", hdBattleBackgrounds = "kanto",
+    battleSystem = "kanto", battleSprites = "kanto", battleShadowQuality = "kanto", battleShadowOpacity = "kanto", hdBattleBackgrounds = "kanto", battleBgMode = "kanto",
     battleShinyOdds = "kanto", battlePlayerSize = "kanto",
     battleHudScale = "kanto", battleHudSize = "kanto", battleHudOpacity = "kanto", battleTextScale = "kanto",
     battleUiSize = "kanto", battleUiOpacity = "kanto",
