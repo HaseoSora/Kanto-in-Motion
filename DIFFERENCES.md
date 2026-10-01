@@ -1,8 +1,11 @@
-# Kanto in Motion v1.6.0 scope
+# Kanto in Motion v1.6.1 scope
 
-Compared with v1.5.x, v1.6.0 adds a slim-core asset distribution model, broader Gen 2 Modern UI coverage, Dex Radar compatibility, Gen 1 native-fit HD background support, additional battle-animation/trainer corrections, and FR/LG fallback/stability improvements.
+Compared with v1.6.0, v1.6.1 focuses on Gen 1 mobile battle stability, controller-friendly Modern UI behavior, and targeted compatibility fixes.
 
-- Red / Blue / Yellow retain the complete KIM battle/UI stack and gain AUTO / FULLSCREEN / NATIVE FIT background framing.
-- Gold / Silver / Crystal retain native game/battle state ownership while KIM Modern UI now covers the title/main menu and complete NEW GAME setup flow when enabled.
-- FireRed / LeafGreen retain native Game3 UI/battle logic with safer native fallback when HD artwork is unavailable.
-- Large HD battle assets are downloaded or migrated once into persistent cache instead of being bundled in every KIM update.
+- Red / Blue / Yellow gain stronger Android/iOS graphics-state protection during battle presentation.
+- Controller-equipped Android devices keep KIM's Modern battle lower UI even when virtual TouchControls are hidden.
+- The first Oak's Lab rival battle uses the corrected KIM Gary presentation without a duplicate native rival at the outro.
+- Gen 1 NEW GAME and initial PC-menu Modern UI coverage is expanded while native game state/callback ownership is retained.
+- A narrowly scoped iOS Battle Art world-orientation bridge corrects only the affected Battle Art world canvas on Apple/Metal renderers.
+- Gold / Silver / Crystal and FireRed / LeafGreen retain their existing v1.6.0 gameplay/presentation ownership models.
+- The v1.6.0 persistent external HD asset-cache system is unchanged.

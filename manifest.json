@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -39,6 +39,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen; v1.6.0 adds a slim-core HD asset manager, expanded Gen 2 Modern UI/new-game presentation, Dex Radar compatibility, Gen 1 native-fit battle backgrounds, and FR/LG fallback/stability improvements.",
+  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen; v1.6.1 improves Gen 1 Android/mobile battle stability and controller UI behavior, restores Oak's Lab rival presentation, expands Gen 1 Modern UI coverage, and adds a scoped iOS Battle Art world-orientation compatibility bridge.",
   "github": "HaseoSora/Kanto-in-Motion"
 }

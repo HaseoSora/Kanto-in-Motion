@@ -1,4 +1,4 @@
-# Kanto in Motion v1.6.0
+# Kanto in Motion v1.6.1
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -9,6 +9,18 @@ It supports:
 - **Pokémon FireRed / LeafGreen** — National Dex #001–386
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
+
+## What’s new in v1.6.1
+
+v1.6.1 is a focused post-v1.6.0 compatibility and stability update, with most changes centered on Gen 1 mobile battles.
+
+- **Android / mobile Gen 1 battle stability:** hardened KIM's battle rendering boundaries so failed presentation draws cannot leave unmatched LÖVE graphics-state pushes and later trigger `Maximum stack depth reached`.
+- **Controller-equipped Android handhelds:** Modern battle dialogue, commands, move selection, and battle messages no longer depend on virtual TouchControls being visible. Devices such as the Retroid Pocket 6 can keep touch controls hidden while using the built-in controller without losing the lower battle UI.
+- **Oak's Lab first rival battle:** restores KIM's packaged `garyfrontplayer` presentation at the corrected mobile scale and suppresses the duplicate native rival image during the battle outro.
+- **Gen 1 NEW GAME Modern UI:** Oak's native intro artwork and timing remain source-owned, while the dialogue, choices, and naming child screens can use KIM Modern UI when **INTEGRATED MODERN UI** and the matching UI surface are enabled.
+- **Gen 1 PC Modern UI:** the initial `WHICH PC?` menu can now use KIM Modern UI while retaining the native PC item list, callbacks, and Player PC / Bill's PC behavior.
+- **iOS + Battle Art compatibility:** adds a narrowly scoped world-canvas orientation correction for the affected Apple/Metal renderer used by current Battle Art builds. Only Battle Art's 3D world is corrected; KIM's HUD, Modern battle UI, and touch controls remain upright. This path is included for community validation because the maintainer does not have iOS hardware for local testing.
+- Turning Modern UI off continues to return supported surfaces to their native Gen 1 presentation.
 
 ## What’s new in v1.6.0
 
@@ -30,7 +42,7 @@ v1.6.0 is a major presentation, compatibility, and distribution update across al
 
 - HD animated front/back Pokémon
 - Normal and shiny battle presentation
-- Integrated Modern UI
+- Integrated Modern UI, including supported NEW GAME dialogue/choices/naming and PC menus
 - KIM HP/status HUD
 - Integrated move animations
 - HD location/time-aware battle backgrounds
@@ -221,7 +233,10 @@ FireRed / LeafGreen keep Gen1Recomp's native Game3 UI, HUD, commands, dialogs, a
 
 ## Mobile support
 
-- R/B/Y keeps its established desktop/mobile KIM battle paths.
+- R/B/Y keeps separate desktop/mobile KIM battle presentation paths with additional v1.6.1 graphics-state protection on Android/iOS.
+- On controller-equipped Android handhelds, the Gen 1 Modern battle lower UI remains available even when Gen1Recomp's virtual TouchControls are hidden.
+- The first Oak's Lab rival battle uses KIM's corrected Gary front presentation without duplicating the native rival at the outro.
+- Battle Art on the affected iOS Apple/Metal renderer receives a world-only orientation correction; KIM HUD/UI layers are intentionally left unflipped. This iOS compatibility path is awaiting broader community hardware validation.
 - G/S/C keeps KIM's final-resolution HD Pokémon/menu rendering architecture and native Gen 2 gameplay state beneath the Modern UI presentation.
 - FR/LG uses the native Game3 geometry with KIM HD art rendered at final resolution.
 - FR/LG portrait and landscape honor Gen1Recomp's **SCREEN POS** setting.
@@ -265,7 +280,7 @@ External compatibility mod packages are not bundled. v1.6.0 directly vendors onl
 
 ### Installation / first launch
 
-1. Install **Kanto in Motion v1.6.0** and enable it in Gen1Recomp.
+1. Install **Kanto in Motion v1.6.1** and enable it in Gen1Recomp.
 2. On first launch, KIM opens the **HD ASSET MANAGER** if the external HD battle pack is not already cached.
 3. Choose **A — DOWNLOAD** to download the official asset ZIP once, or **B — USE VANILLA / LATER** to continue without it.
 4. After a successful install, the HD assets remain in Gen1Recomp's installation-scoped KIM cache and are reused by later KIM code updates.

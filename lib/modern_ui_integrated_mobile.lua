@@ -3601,6 +3601,42 @@ return function(mod)
   local quantityClass = mod.ui and mod.ui.QuantityBox
   local textBoxClass = mod.ui and mod.ui.TextBox
 
+  -- Gen 1's WHICH PC? root menu is built by OverworldController rather than a
+  -- named Screens entry. Track the exact row objects published through the
+  -- engine's ui.pc.items seam so KIM can recognize that source-owned Menu
+  -- without matching translated labels or changing the PC mod itself.
+  runtime.pcRootItemTables = setmetatable({}, { __mode = "k" })
+  runtime.pcRootRows = setmetatable({}, { __mode = "k" })
+  runtime.markPcRootItems = function(items)
+    if type(items) ~= "table" then return end
+    runtime.pcRootItemTables[items] = true
+    for _, row in ipairs(items) do
+      if type(row) == "table" then runtime.pcRootRows[row] = true end
+    end
+  end
+  runtime.isPcRootMenu = function(state)
+    if not (state and menuClass and inherits(classOf(state), menuClass)) then
+      return false
+    end
+    local items = state.items
+    if type(items) ~= "table" then return false end
+    if runtime.pcRootItemTables[items] then return true end
+    local seen = 0
+    for _, row in ipairs(items) do
+      if type(row) == "table" and runtime.pcRootRows[row] then
+        seen = seen + 1
+      end
+    end
+    return seen > 0 and seen == #items
+  end
+  if mod.hooks and type(mod.hooks.wrap) == "function" then
+    mod.hooks:wrap("ui.pc.items", function(next, game, items)
+      local out = next(game, items)
+      runtime.markPcRootItems(out)
+      return out
+    end, 95)
+  end
+
   -- The native TextBox intentionally keeps the previous row in `shown` while
   -- a CONT/manual scroll advances the incoming line. A large modern dialogue
   -- card does not perform that Game Boy row-scroll animation, so remembering
@@ -6340,6 +6376,7 @@ return function(mod)
     -- Treat the audited ShopMenu override as modeled so the stack proof does
     -- not fall back to the classic UI when a mart list is opened.
     if kind == "menu" and runtime.isGen1MartMenu(state) then return true end
+    if kind == "menu" and runtime.isPcRootMenu(state) then return true end
     if kind == "menu" and runtime.isPokedexSideMenu(state) then return true end
     if kind == "menu" and state._gen1ModernTitleMenu == true
         and rawget(state, "draw") == state._gen1ModernTitleDraw then return true end
@@ -6757,7 +6794,7 @@ return function(mod)
     if not (game and state and state ~= game.overworld)
         or not runtime.stateBelongsToGame(game, state)
         or runtime.isTitleState(state)
-        or runtime.hasNativeNewGameFlow(game) or state.capture
+        or runtime.isOakSpeechState(state) or state.capture
         or runtime.option("hideOriginalUi", true) == false then
       return false
     end
@@ -6853,10 +6890,11 @@ return function(mod)
     local disabledBattleChild = battleBelow ~= nil
       and not runtime.battlePresenterActive(game, battleBelow)
       and not battleChildActive
-    local nativeNewGame = runtime.hasNativeNewGameFlow(game)
+    local nativeNewGameBase = runtime.hasNativeNewGameFlow(game)
+      and runtime.isOakSpeechState(state)
     local eligible = revealWorld and kind and runtime.presenterEnabled(kind, state)
       and kind ~= "battle" and kind ~= "ui_gallery" and not state.capture
-      and not disabledBattleChild and not nativeNewGame
+      and not disabledBattleChild and not nativeNewGameBase
       and not runtime.hasUnknownDrawOverride(state, kind)
       and runtime.presenterReady(game, state, kind)
     if eligible then
@@ -7032,9 +7070,7 @@ return function(mod)
     local layers = {}
     local preserveUiCanvas = false
     local topState = states[#states]
-    if runtime.hasNativeNewGameFlow(game) then
-      return {}, false
-    end
+    local nativeNewGame = runtime.hasNativeNewGameFlow(game)
     local battleBelowTop = runtime.battleStateBelow(game, topState)
     local topKind = topState and runtime.kindFor(topState, game) or nil
     local childOnlyBattle = battleBelowTop ~= nil
@@ -7067,6 +7103,10 @@ return function(mod)
         elseif type(rawget(visible, "drawUI")) == "function" then
           return {}, false
         end
+      elseif nativeNewGame and runtime.isOakSpeechState(visible) then
+        -- OakSpeech owns the intro artwork/timing. Keep that cinematic canvas
+        -- intact while child TextBox/Menu/Naming states are presented by KIM.
+        preserveUiCanvas = true
       elseif runtime.isTitleState(visible) then
         -- The title art and its Menu share uiCanvas. The title-menu draw is
         -- suppressed independently by ui.state.decorate below, so preserve
@@ -7280,6 +7320,11 @@ return function(mod)
         }
         title = labels[group] or group:upper():gsub("_", " ")
       end
+    end
+
+    if kind == "menu" and runtime.isPcRootMenu(state) then
+      title = Strings("PC")
+      footer = Strings("A  select    B  back")
     end
 
     if kind == "menu" and runtime.isPokedexSideMenu
@@ -15860,8 +15905,9 @@ return function(mod)
     local compactLandscape = orientation == "landscape" and h < 480
     local isMove = phase == "moveSelect" or phase == "mimicSelect"
     local topState = game.stack and game.stack.top and game.stack:top()
-    local isTop = (topState == state or topState == native
-      or source._gen1UiGalleryPreview == true)
+    local isTop = options.forceTop == true
+      or (topState == state or topState == native
+        or source._gen1UiGalleryPreview == true)
     local furnitureGap = math.max(spacing.md, frameOutsetY + 1)
     local cardW = orientation == "portrait" and innerW
       or math.min(innerW - spacing.md * 2,
@@ -16016,8 +16062,13 @@ return function(mod)
       -- Match the accepted v7.8/v7.9 full-bottom footprint against the real
       -- window: ~11% side margins, ~22% window height, and a small bottom gap.
       -- This is intentionally independent from BATTLE TEXT SIZE.
+      -- The mobile dialog rectangle belongs to the Android/iOS battle layout,
+      -- not to the virtual buttons.  RP6 and other controller-equipped Android
+      -- handhelds normally hide TouchControls, but they must retain the exact
+      -- same lower battle panel.  main.lua publishes this marker only for the
+      -- native-mobile KIM battle path, so consume it whenever it exists.
       local mobileRect = nil
-      if kimFullscreen and touchBattleControlsVisible(game) then
+      if kimFullscreen then
         mobileRect = (source and source._kantoInMotionMobileDialogRect)
           or (native and native._kantoInMotionMobileDialogRect)
           or (state and state._kantoInMotionMobileDialogRect)
@@ -16102,14 +16153,17 @@ return function(mod)
       end
       local lowerPanelVisualTheme = battleRuntime.lowerPanelVisualTheme(theme)
 
+      local lowerDrawn=false
       if isMove then
         -- MOVE LAYOUT selects between the 2x2 GRID and classic four-row
         -- VERTICAL list. Both use exactly the same full-width bottom panel.
         runtime.drawBattleKimMoves(game, source, theme, textTheme,
           panelX, panelY, panelW, panelH, lowerPanelVisualTheme)
+        lowerDrawn=true
       elseif phase == "menu" then
         runtime.drawBattleActionPanel(game, source, textTheme,
           panelX, panelY, panelW, panelH, lowerPanelVisualTheme)
+        lowerDrawn=true
       else
         local message = runtime.battleMessage(source)
         if source and type(source) == "table"
@@ -16123,7 +16177,13 @@ return function(mod)
           -- creates the small centered bubble seen in the v8.0 screenshots.
           runtime.drawBattleActionPanel(game, source, textTheme,
             panelX, panelY, panelW, panelH, lowerPanelVisualTheme)
+          lowerDrawn=true
         end
+      end
+      if lowerDrawn then
+        if type(state)=="table" then state._kantoInMotionModernLowerDrawn=true end
+        if type(native)=="table" then native._kantoInMotionModernLowerDrawn=true end
+        if type(source)=="table" then source._kantoInMotionModernLowerDrawn=true end
       end
     elseif isTop then
         if isMove then
@@ -16175,6 +16235,25 @@ return function(mod)
         end
     end
     love.graphics.pop()
+  end
+
+  -- KIM's Android Gen 1 render.hud owner uses this only as a fail-safe when
+  -- the normal Modern presentation stack did not draw the battle lower panel.
+  -- forceTop bypasses presentation-stack discovery while preserving the same
+  -- BattleState, input ownership, theme, authored mobile rectangle and renderer.
+  mod.exports._kantoInMotionDrawModernBattleLower=function(game,state,viewport)
+    if not (love and love.graphics and type(state)=="table") then return false end
+    if runtime.option("integratedModernUi",true)==false
+        or runtime.option("battleUiWip",true)==false then return false end
+    local activeViewport=viewportForTouchControls(game,viewport) or viewport
+    local theme=responsiveTheme(runtime.currentTheme(activeViewport,state),
+      activeViewport,responsiveThemeCache)
+    runtime.drawBattle2dHud(game,state,activeViewport,theme,nil,{
+      preserveStatusHud=true,
+      fullscreenLowerPanel=true,
+      forceTop=true,
+    })
+    return state._kantoInMotionModernLowerDrawn==true
   end
 
   runtime.drawBattleHud = function(game, state, viewport, theme, model, mode)
@@ -19574,7 +19653,8 @@ return function(mod)
     -- Always trust the screen's own owner first so an Oak child is never
     -- suppressed using stale overworld evidence.
     local game = runtime.ownerGame(state, currentGame)
-    if game and runtime.hasNativeNewGameFlow(game) then
+    if game and runtime.hasNativeNewGameFlow(game)
+        and runtime.isOakSpeechState(state) then
       if oneArgument then return next(state) end
       return next(visible, state)
     end

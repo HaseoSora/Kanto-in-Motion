@@ -3626,6 +3626,42 @@ return function(mod)
   local quantityClass = mod.ui and mod.ui.QuantityBox
   local textBoxClass = mod.ui and mod.ui.TextBox
 
+  -- Gen 1's WHICH PC? root menu is built by OverworldController rather than a
+  -- named Screens entry. Track the exact row objects published through the
+  -- engine's ui.pc.items seam so KIM can recognize that source-owned Menu
+  -- without matching translated labels or changing the PC mod itself.
+  runtime.pcRootItemTables = setmetatable({}, { __mode = "k" })
+  runtime.pcRootRows = setmetatable({}, { __mode = "k" })
+  runtime.markPcRootItems = function(items)
+    if type(items) ~= "table" then return end
+    runtime.pcRootItemTables[items] = true
+    for _, row in ipairs(items) do
+      if type(row) == "table" then runtime.pcRootRows[row] = true end
+    end
+  end
+  runtime.isPcRootMenu = function(state)
+    if not (state and menuClass and inherits(classOf(state), menuClass)) then
+      return false
+    end
+    local items = state.items
+    if type(items) ~= "table" then return false end
+    if runtime.pcRootItemTables[items] then return true end
+    local seen = 0
+    for _, row in ipairs(items) do
+      if type(row) == "table" and runtime.pcRootRows[row] then
+        seen = seen + 1
+      end
+    end
+    return seen > 0 and seen == #items
+  end
+  if mod.hooks and type(mod.hooks.wrap) == "function" then
+    mod.hooks:wrap("ui.pc.items", function(next, game, items)
+      local out = next(game, items)
+      runtime.markPcRootItems(out)
+      return out
+    end, 95)
+  end
+
   -- The native TextBox intentionally keeps the previous row in `shown` while
   -- a CONT/manual scroll advances the incoming line. A large modern dialogue
   -- card does not perform that Game Boy row-scroll animation, so remembering
@@ -6370,6 +6406,7 @@ return function(mod)
     -- Treat the audited ShopMenu override as modeled so the stack proof does
     -- not fall back to the classic UI when a mart list is opened.
     if kind == "menu" and runtime.isGen1MartMenu(state) then return true end
+    if kind == "menu" and runtime.isPcRootMenu(state) then return true end
     if kind == "menu" and runtime.isPokedexSideMenu(state) then return true end
     if kind == "menu" and state._gen1ModernTitleMenu == true
         and rawget(state, "draw") == state._gen1ModernTitleDraw then return true end
@@ -6807,7 +6844,7 @@ return function(mod)
     if not (game and state and state ~= game.overworld)
         or not runtime.stateBelongsToGame(game, state)
         or runtime.isTitleState(state)
-        or runtime.hasNativeNewGameFlow(game) or state.capture
+        or runtime.isOakSpeechState(state) or state.capture
         or runtime.option("hideOriginalUi", true) == false then
       return false
     end
@@ -6903,10 +6940,11 @@ return function(mod)
     local disabledBattleChild = battleBelow ~= nil
       and not runtime.battlePresenterActive(game, battleBelow)
       and not battleChildActive
-    local nativeNewGame = runtime.hasNativeNewGameFlow(game)
+    local nativeNewGameBase = runtime.hasNativeNewGameFlow(game)
+      and runtime.isOakSpeechState(state)
     local eligible = revealWorld and kind and runtime.presenterEnabled(kind, state)
       and kind ~= "battle" and kind ~= "ui_gallery" and not state.capture
-      and not disabledBattleChild and not nativeNewGame
+      and not disabledBattleChild and not nativeNewGameBase
       and not runtime.hasUnknownDrawOverride(state, kind)
       and runtime.presenterReady(game, state, kind)
     if eligible then
@@ -7082,9 +7120,7 @@ return function(mod)
     local layers = {}
     local preserveUiCanvas = false
     local topState = states[#states]
-    if runtime.hasNativeNewGameFlow(game) then
-      return {}, false
-    end
+    local nativeNewGame = runtime.hasNativeNewGameFlow(game)
     local battleBelowTop = runtime.battleStateBelow(game, topState)
     local topKind = topState and runtime.kindFor(topState, game) or nil
     local childOnlyBattle = battleBelowTop ~= nil
@@ -7117,6 +7153,10 @@ return function(mod)
         elseif type(rawget(visible, "drawUI")) == "function" then
           return {}, false
         end
+      elseif nativeNewGame and runtime.isOakSpeechState(visible) then
+        -- OakSpeech owns the intro artwork/timing. Keep that cinematic canvas
+        -- intact while child TextBox/Menu/Naming states are presented by KIM.
+        preserveUiCanvas = true
       elseif runtime.isTitleState(visible) then
         -- The title art and its Menu share uiCanvas. The title-menu draw is
         -- suppressed independently by ui.state.decorate below, so preserve
@@ -7330,6 +7370,11 @@ return function(mod)
         }
         title = labels[group] or group:upper():gsub("_", " ")
       end
+    end
+
+    if kind == "menu" and runtime.isPcRootMenu(state) then
+      title = Strings("PC")
+      footer = Strings("A  select    B  back")
     end
 
     if kind == "menu" and runtime.isPokedexSideMenu
@@ -19629,7 +19674,8 @@ return function(mod)
     -- Always trust the screen's own owner first so an Oak child is never
     -- suppressed using stale overworld evidence.
     local game = runtime.ownerGame(state, currentGame)
-    if game and runtime.hasNativeNewGameFlow(game) then
+    if game and runtime.hasNativeNewGameFlow(game)
+        and runtime.isOakSpeechState(state) then
       if oneArgument then return next(state) end
       return next(visible, state)
     end

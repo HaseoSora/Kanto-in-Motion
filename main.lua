@@ -146,6 +146,70 @@ return function(mod)
   local IS_GEN2 = tonumber(mod.generation) == 2
   local MOD_ID = "animated_menu_pokemon"
 
+  -- Gen 1 mobile graphics-transaction guard. It never adds its own graphics
+  -- state: it only remembers the caller's depth/canvas, runs the same function
+  -- through pcall(), and removes states that the callee leaked before returning
+  -- or throwing. Store helpers on mod instead of consuming outer locals because
+  -- this long installer is already close to Lua's 200-local function limit.
+  function mod._kantoInMotionNativeMobileGen1()
+    if IS_GEN2 then return false end
+    local system = love and love.system
+    if not (system and type(system.getOS) == "function") then return false end
+    local ok, host = pcall(system.getOS)
+    return ok and (host == "Android" or host == "iOS")
+  end
+
+  function mod._kantoInMotionGraphicsDepth()
+    local g = love and love.graphics
+    if not (g and type(g.getStackDepth) == "function") then return nil end
+    local ok, depth = pcall(g.getStackDepth)
+    return ok and tonumber(depth) or nil
+  end
+
+  function mod._kantoInMotionRestoreGraphicsDepth(baseDepth)
+    local g = love and love.graphics
+    baseDepth = tonumber(baseDepth)
+    if baseDepth == nil or not (g and type(g.getStackDepth) == "function"
+        and type(g.pop) == "function") then return 0 end
+    local repaired = 0
+    for _ = 1, 256 do
+      local ok, depth = pcall(g.getStackDepth)
+      depth = ok and tonumber(depth) or nil
+      if not depth or depth <= baseDepth then break end
+      if not pcall(g.pop) then break end
+      repaired = repaired + 1
+    end
+    return repaired
+  end
+
+  mod._kantoInMotionGen1GuardWarnings =
+    mod._kantoInMotionGen1GuardWarnings or {}
+  function mod._kantoInMotionGuardedMobileCall(label, fn, ...)
+    if type(fn) ~= "function" then return false, "missing function" end
+    if not mod._kantoInMotionNativeMobileGen1() then return pcall(fn, ...) end
+    local g = love and love.graphics
+    local baseDepth = mod._kantoInMotionGraphicsDepth()
+    local entryCanvas = nil
+    if g and type(g.getCanvas) == "function" then
+      local okCanvas, canvas = pcall(g.getCanvas)
+      if okCanvas then entryCanvas = canvas end
+    end
+    local result = { pcall(fn, ...) }
+    if baseDepth ~= nil then mod._kantoInMotionRestoreGraphicsDepth(baseDepth) end
+    if g and type(g.setCanvas) == "function" then
+      if entryCanvas then pcall(g.setCanvas, entryCanvas) else pcall(g.setCanvas) end
+    end
+    local ok = table.remove(result, 1)
+    if not ok and not mod._kantoInMotionGen1GuardWarnings[label] then
+      mod._kantoInMotionGen1GuardWarnings[label] = true
+      if mod.log and type(mod.log.warn) == "function" then
+        mod.log:warn("Gen1 mobile %s failed safely: %s",
+          tostring(label), tostring(result[1]))
+      end
+    end
+    return ok, unpackCompat(result)
+  end
+
   -- Open compatibility registry. Third-party UI and battle mods can register
   -- ownership without Kanto in Motion knowing their mod ID ahead of time.
   -- Registrations are advisory and fail-open: a missing/errored callback never
@@ -1776,6 +1840,31 @@ return function(mod)
       return currentTrainerFrame(battle,choice) or staticImage(choice)
     end
 
+    -- Gen 1's first Oak's Lab rival battle is a special case: KIM's HD stage
+    -- draws the player trainer directly, while the source enemy-trainer picture
+    -- can be lost when the native 160x144 layer is reconstructed on Android.
+    -- Resolve only that exact encounter to the packaged Gary front frame. Keep
+    -- every later trainer battle on the engine/native trainer pipeline.
+    mod.exports._kantoInMotionEnemyTrainerFrame=function(battle)
+      if type(battle)~="table" or battle.showEnemyTrainer~=true then return nil end
+      local isLabRival=false
+      if type(battle.isOaksLabStarterRival)=="function" then
+        local ok,value=pcall(battle.isOaksLabStarterRival,battle)
+        if ok and value==true then isLabRival=true end
+      end
+      if not isLabRival and battle.oppClass=="OPP_RIVAL1" then
+        local game=battle.game
+        local map=game and game.overworld and game.overworld.map or nil
+        local mapId=type(map)=="table" and (map.id or map.mapId or map.key) or map
+        if mapId==nil and game and game.save and game.save.player then
+          mapId=game.save.player.map or game.save.player.mapId
+        end
+        isLabRival=tostring(mapId or "")=="OAKS_LAB"
+      end
+      if not isLabRival then return nil end
+      return staticImage("gary_front")
+    end
+
     -- Register the generated first-frame files at native 1x battle-pic scale.
     -- Without this seam Gen1Recomp treats custom trainer art like the tiny ROM
     -- back picture and blows it up/crops it.
@@ -2713,7 +2802,8 @@ return function(mod)
           -- effects and the lower battle UI normally into this transparent
           -- overlay.
           if type(setFlatBattleWorld) == "function" then
-            pcall(setFlatBattleWorld, self.game, self)
+            mod._kantoInMotionGuardedMobileCall("flat battle world",
+              setFlatBattleWorld, self.game, self)
           end
           self.letterboxWhite = false
           self._kantoInMotionOwnsBattlePaper = true
@@ -2722,8 +2812,8 @@ return function(mod)
           -- KIM no longer ships a replacement move-animation system. Native
           -- Gen1Recomp flashes/effects remain authoritative; only the opaque
           -- source battle paper is suppressed over the HD scene.
-          local result = { pcall(withoutBattleBackgroundFill,
-            self, nativeBattleDraw, ...) }
+          local result = { mod._kantoInMotionGuardedMobileCall("native battle source draw",
+            withoutBattleBackgroundFill, self, nativeBattleDraw, ...) }
 
           local ok = table.remove(result, 1)
           if not ok then error(result[1], 0) end
@@ -2823,6 +2913,58 @@ return function(mod)
     if not system or type(system.getOS) ~= "function" then return false end
     local ok, host = pcall(system.getOS)
     return ok and (host == "Android" or host == "iOS")
+  end
+
+  -- Gen 1 mobile HUD boundary: preserve the exact engine-owned entry state and
+  -- remove only pushes leaked during render.hud. This mirrors the proven
+  -- PotatoVoxel mobile strategy without resetting or rebinding the viewport.
+  do
+    if not IS_GEN2 and mod._kantoInMotionNativeMobileGen1() and mod.hooks
+        and type(mod.hooks.wrap) == "function" then
+      local warnedHud = false
+      mod.hooks:wrap("render.hud", function(nextFn, game, viewport)
+        if not battleSystemEnabled() then return nextFn(game, viewport) end
+        local baseDepth = mod._kantoInMotionGraphicsDepth()
+        local result = { pcall(nextFn, game, viewport) }
+        local repaired = baseDepth ~= nil and mod._kantoInMotionRestoreGraphicsDepth(baseDepth) or 0
+        if repaired > 0 and not warnedHud and mod.log
+            and type(mod.log.warn) == "function" then
+          warnedHud = true
+          mod.log:warn(
+            "Gen1 mobile render.hud leaked %d graphics state(s); repaired", repaired)
+        end
+        local ok = table.remove(result, 1)
+        if not ok then error(result[1], 0) end
+        return unpackCompat(result)
+      end, 115000)
+    end
+  end
+
+  -- Final boundary. GameViewport.finish() has completed before TouchControls,
+  -- so LOVE's graphics stack is expected to be depth zero. This is only a
+  -- fail-safe for a presentation leak missed above; it never lays out a scene.
+  do
+    if not IS_GEN2 and mod._kantoInMotionNativeMobileGen1() then
+      local okTouch, TouchControls = pcall(require, "src.core.TouchControls")
+      if okTouch and type(TouchControls) == "table"
+          and type(TouchControls.draw) == "function"
+          and not TouchControls._kantoInMotionGen1BoundaryV6 then
+        local originalTouchDraw = TouchControls.draw
+        TouchControls._kantoInMotionGen1BoundaryV6 = originalTouchDraw
+        local warnedTouch = false
+        TouchControls.draw = function(self, ...)
+          local repaired = battleSystemEnabled() and mod._kantoInMotionRestoreGraphicsDepth(0) or 0
+          if repaired > 0 and not warnedTouch and mod.log
+              and type(mod.log.warn) == "function" then
+            warnedTouch = true
+            mod.log:warn(
+              "Gen1 mobile repaired %d leaked graphics state(s) before TouchControls",
+              repaired)
+          end
+          return originalTouchDraw(self, ...)
+        end
+      end
+    end
   end
 
 
@@ -3704,7 +3846,8 @@ return function(mod)
       }
     end
     if krba and wideTransform and type(krba.drawWideBack)=="function" then
-      pcall(krba.drawWideBack,krba,wideTransform,krbaWideAnchors)
+      mod._kantoInMotionGuardedMobileCall("KRBA wide back draw",
+        krba.drawWideBack,krba,wideTransform,krbaWideAnchors)
     end
 
     -- Paint the intro trainer and imported HD animated Pokemon directly at
@@ -3713,18 +3856,71 @@ return function(mod)
     -- placement on the widened HD field.
     if battleLiteDirectStageActive() then
       local geo=directStageGeometry(vw,vh,game,battle)
-      pcall(drawDirectBattleTrainer,battle,geo,game,vw,vh)
+
+      -- The Oak's Lab starter fight is the one Gen 1 trainer intro that can
+      -- disappear completely on the Android fullscreen reconstruction. Draw
+      -- KIM's packaged Gary front frame at the same authored enemy platform
+      -- anchor used by the HD battler. The engine's live foe picOffset keeps
+      -- the normal slide-off timing; this branch is inactive for every other
+      -- trainer battle.
+      local enemyTrainerGetter=mod.exports
+        and mod.exports._kantoInMotionEnemyTrainerFrame or nil
+      if type(enemyTrainerGetter)=="function" then
+        local okEnemy,enemyTrainer=pcall(enemyTrainerGetter,battle)
+        if okEnemy and enemyTrainer and type(enemyTrainer.getDimensions)=="function" then
+          local place=nativeBattlePlacementPx(game,vw,vh)
+          local enemyScaleX=place and tonumber(place.sx) or nil
+          local enemyScaleY=place and tonumber(place.sy) or nil
+          if not (enemyScaleX and enemyScaleX>0) then
+            enemyScaleX=math.max(1,math.floor((tonumber(vw) or 160)/160))
+          end
+          if not (enemyScaleY and enemyScaleY>0) then enemyScaleY=enemyScaleX end
+          local enemyOffset=0
+          if type(battle.picOffset)=="function" then
+            local okOffset,value=pcall(battle.picOffset,battle,"foe")
+            if okOffset then enemyOffset=tonumber(value) or 0 end
+          end
+          local ew,eh=enemyTrainer:getDimensions()
+          local eax=tonumber(geo.enemyX) or 0
+          local eay=tonumber(geo.enemyY) or 0
+          -- garyfrontplayer fills essentially the entire 80px authored frame,
+          -- while Red's back-trainer art occupies about 48px of its 80px frame.
+          -- The old 1.00x frame scale therefore made Gary ~67% taller than Red.
+          -- A 0.60 presentation factor gives both trainers the same visible
+          -- height without resampling the source asset or moving his feet off
+          -- the authored enemy platform.  Foe picOffset remains in stage units
+          -- so the native intro slide timing/distance is preserved.
+          local garyScale=0.60
+          local drawScaleX=enemyScaleX*garyScale
+          local drawScaleY=enemyScaleY*garyScale
+          mod._kantoInMotionGuardedMobileCall("Oak Lab Gary trainer draw",function()
+            love.graphics.push("all")
+            love.graphics.setShader()
+            love.graphics.setColor(1,1,1,1)
+            love.graphics.draw(enemyTrainer,
+              eax-ew*drawScaleX*0.5+enemyOffset*enemyScaleX,
+              eay-eh*drawScaleY,0,drawScaleX,drawScaleY)
+            love.graphics.pop()
+          end)
+        end
+      end
+
+      mod._kantoInMotionGuardedMobileCall("direct trainer draw",
+        drawDirectBattleTrainer,battle,geo,game,vw,vh)
       if type(drawDirectBattleSprites) == "function" then
-        pcall(drawDirectBattleSprites, battle, vw, vh)
+        mod._kantoInMotionGuardedMobileCall("direct battler draw",
+          drawDirectBattleSprites, battle, vw, vh)
       end
     end
     if battleLiteDirectStageActive() and battle and mod._kantoInMotionShinyEncounterFx
         and type(mod._kantoInMotionShinyEncounterFx.draw) == "function" then
-      pcall(mod._kantoInMotionShinyEncounterFx.draw,
+      mod._kantoInMotionGuardedMobileCall("shiny encounter draw",
+        mod._kantoInMotionShinyEncounterFx.draw,
         mod._kantoInMotionShinyEncounterFx, battle, game, vw, vh)
     end
     if krba and wideTransform and type(krba.drawWideFront)=="function" then
-      pcall(krba.drawWideFront,krba,wideTransform,krbaWideAnchors)
+      mod._kantoInMotionGuardedMobileCall("KRBA wide front draw",
+        krba.drawWideFront,krba,wideTransform,krbaWideAnchors)
     end
     g.pop()
     if prev then g.setCanvas(prev) else g.setCanvas() end
@@ -4194,6 +4390,7 @@ return function(mod)
     local g = love.graphics
     local previousCanvas = g.getCanvas and g.getCanvas() or nil
     local slide, sx, sy = battleOffsets(battle)
+    local mobileCaptureBase = mod._kantoInMotionNativeMobileGen1() and mod._kantoInMotionGraphicsDepth() or nil
     g.push("all")
     local ok, err = pcall(function()
       g.setCanvas(sceneCanvas)
@@ -4216,8 +4413,34 @@ return function(mod)
             local blank=transparentPic()
             if blank then battle.playerBackPic=blank end
           end
+
+          -- KIM directly owns Gary's presentation in the first Oak's Lab rival
+          -- battle.  Gen1Recomp can restore its native rival trainer again in
+          -- the victory/outro phase, which produced two rivals on the RP6.
+          -- Blank only that native trainer pic while rebuilding the transparent
+          -- source layer; the packaged Gary frame below remains the sole visible
+          -- trainer at both the intro and the outro.
+          local oldEnemyTrainer=nil
+          local hideNativeEnemyTrainer=false
+          local enemyTrainerGetter=mod.exports
+            and mod.exports._kantoInMotionEnemyTrainerFrame or nil
+          if battle.showEnemyTrainer and type(enemyTrainerGetter)=="function" then
+            local okEnemy,enemyTrainer=pcall(enemyTrainerGetter,battle)
+            hideNativeEnemyTrainer=okEnemy and enemyTrainer~=nil
+          end
+          if hideNativeEnemyTrainer then
+            oldEnemyTrainer=battle.trainerPic
+            local blank=transparentPic()
+            if blank then
+              battle.trainerPic=blank
+            else
+              hideNativeEnemyTrainer=false
+            end
+          end
+
           local okPics,picsErr=pcall(battle.drawPicsLayer,battle,slide,sx,sy,nil,true)
           if hideNativeTrainer then battle.playerBackPic=oldBack end
+          if hideNativeEnemyTrainer then battle.trainerPic=oldEnemyTrainer end
           if not okPics then error(picsErr,0) end
         end
 
@@ -4244,7 +4467,11 @@ return function(mod)
         Runtime.call("battle.overlay", function() end, battle)
       end
     end)
-    g.pop()
+    if mobileCaptureBase ~= nil then
+      mod._kantoInMotionRestoreGraphicsDepth(mobileCaptureBase)
+    else
+      g.pop()
+    end
     if previousCanvas then g.setCanvas(previousCanvas) else g.setCanvas() end
     if not ok then
       if mod.log and type(mod.log.warn) == "function" then
@@ -4375,15 +4602,16 @@ return function(mod)
       mobileExternalStageHud = okExternal and value == true
     end
     local mobileSafeCapture = mobileStageOnly or mobileExternalStageHud
+    local stackGuardCapture = mobileSafeCapture or mod._kantoInMotionNativeMobileGen1()
     local ownDramaticShapeShot = mobileSafeCapture and rawget(battle, "dramaticShapeShot") or nil
     local stackBase = nil
 
-    if mobileSafeCapture and type(g.getStackDepth) == "function" then
+    if stackGuardCapture and type(g.getStackDepth) == "function" then
       local okDepth, depth = pcall(g.getStackDepth)
       if okDepth then stackBase = tonumber(depth) end
     end
 
-    if mobileSafeCapture then
+    if stackGuardCapture then
       local okPush, pushErr = pcall(g.push, "all")
       if not okPush then
         if mod.log and type(mod.log.warn) == "function" then
@@ -4452,20 +4680,18 @@ return function(mod)
       end
     end)
 
-    if mobileSafeCapture then
-      -- A swallowed nested draw error must not strand graphics pushes before
-      -- Gen1Recomp reaches GameViewport.finish -> TouchControls.
-      if stackBase ~= nil and type(g.getStackDepth) == "function" then
-        for _ = 1, 128 do
-          local okDepth, depth = pcall(g.getStackDepth)
-          depth = okDepth and tonumber(depth) or nil
-          if not depth or depth <= stackBase then break end
-          if not pcall(g.pop) then break end
-        end
+    if stackGuardCapture then
+      -- Plain KIM mobile now gets the same local depth repair as external
+      -- staged renderers. Only the external paths temporarily suppress the
+      -- dramaticShapeShot marker; ordinary KIM keeps that state untouched.
+      if stackBase ~= nil then
+        mod._kantoInMotionRestoreGraphicsDepth(stackBase)
       else
         pcall(g.pop)
       end
-      battle.dramaticShapeShot = ownDramaticShapeShot
+      if mobileSafeCapture then
+        battle.dramaticShapeShot = ownDramaticShapeShot
+      end
     else
       g.pop()
     end
@@ -4666,6 +4892,23 @@ return function(mod)
   -- native strip to Modern UI does not disturb the accepted mobile layout.
   local function mobileBattleDialogRect(battle, viewport)
     local orient=touchBattleOrientation(battle and battle.game)
+    -- Android handhelds such as the RP6 often hide virtual TouchControls while
+    -- their built-in controller is active.  That must not make KIM stop being
+    -- a mobile battle presenter: the dialog/command surface still needs the
+    -- same authored mobile rectangle even when no on-screen buttons are drawn.
+    if not orient and mod._kantoInMotionNativeMobileGen1() then
+      local g=love and love.graphics
+      local w,h=0,0
+      if g and type(g.getPixelDimensions)=="function" then
+        local ok,pw,ph=pcall(g.getPixelDimensions)
+        if ok then w,h=tonumber(pw) or 0,tonumber(ph) or 0 end
+      end
+      if not (w>0 and h>0) and g and type(g.getDimensions)=="function" then
+        local ok,uw,uh=pcall(g.getDimensions)
+        if ok then w,h=tonumber(uw) or 0,tonumber(uh) or 0 end
+      end
+      orient=(h>w and h>0) and "portrait" or "landscape"
+    end
     if not orient then return nil end
     local ox,oy,vw,vh=battleUiViewportRect(battle and battle.game,viewport)
     if orient=="portrait" then
@@ -5021,10 +5264,38 @@ return function(mod)
         end
       end
 
+      if battle then battle._kantoInMotionModernLowerDrawn = nil end
       local result = { pcall(function()
         return withTypedBattlePresentationSuppressed(game,
           function() return nextFn(game, viewport) end)
       end) }
+
+      -- RP6/Android Gen 1 can keep the BattleState alive while the integrated
+      -- Modern presentation stack fails to publish its battle layer. Native
+      -- lower UI is already suppressed in that ownership mode, so that leaves
+      -- an otherwise fully playable battle with no dialog/command surface.
+      -- Give the integrated module one final-window chance to draw ONLY its
+      -- lower panel. A proof flag prevents duplicates when the normal presenter
+      -- already succeeded. Crystal/Gen 2 and FR/LG never enter this branch.
+      if battle and mod._kantoInMotionNativeMobileGen1()
+          and (active or mobileExternalKimHudStage) and not childMenuOpen
+          and battleModernUiActive(game,battle)
+          and battle._kantoInMotionModernLowerDrawn~=true then
+        local fallback=mod.exports
+          and mod.exports._kantoInMotionDrawModernBattleLower or nil
+        if type(fallback)=="function" then
+          local okFallback,drew=mod._kantoInMotionGuardedMobileCall(
+            "Modern battle lower fallback",fallback,game,battle,viewport)
+          if okFallback and drew==true
+              and not mod._kantoInMotionModernLowerFallbackLogged then
+            mod._kantoInMotionModernLowerFallbackLogged=true
+            if mod.log and type(mod.log.info)=="function" then
+              pcall(mod.log.info,mod.log,
+                "Android Gen1 Modern battle lower-panel fallback engaged")
+            end
+          end
+        end
+      end
 
       -- Same ownership as the user's original KIM 1.3.7:
       -- Battle Art supplies the 3D stage; KIM captures/draws the HP/status HUD.
@@ -7092,6 +7363,33 @@ return function(mod)
         elseif not okStageOnly then
           mod.log:error("Battle Art 1.11 mobile stage-only bridge failed: %s",
             tostring(stageOnly))
+        end
+      end
+
+      -- iOS/LÖVE 12 Metal: Battle Art's own current code documents that a
+      -- Canvas sampled into another Canvas can arrive vertically inverted.
+      -- Its Gen 2 branch fixes the final WORLD image only, before UI/touch
+      -- composition. KIM's mobile stage-only path needs the same narrow
+      -- correction for Battle Art's Gen 1 worldOverride; Android/desktop and
+      -- all non-Battle-Art scenes are untouched.
+      do
+        local okOrientation,orientationInstaller=pcall(function()
+          local src=assert(mod:read(
+            "lib/battle_art_111_ios_world_orientation.lua"))
+          local loader=loadstring or load
+          return assert(loader(src,
+            "@"..mod.path..
+            "/lib/battle_art_111_ios_world_orientation.lua"))()
+        end)
+        if okOrientation and type(orientationInstaller)=="function" then
+          okOrientation,orientationInstaller=pcall(orientationInstaller,mod,
+            battleSystemEnabled,mod._kantoInMotionBattleArtCompat)
+        end
+        if okOrientation and orientationInstaller then
+          mod._kantoInMotionBattleArtIosWorldOrientation=orientationInstaller
+        elseif not okOrientation then
+          mod.log:error("Battle Art iOS world-orientation bridge failed: %s",
+            tostring(orientationInstaller))
         end
       end
     elseif not okHelper then

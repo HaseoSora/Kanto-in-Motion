@@ -1,29 +1,19 @@
-# Kanto in Motion v1.6.0
+# Kanto in Motion v1.6.1
 
-v1.6.0 is a major presentation, compatibility, and distribution update.
+v1.6.1 is a focused compatibility and stability update following v1.6.0.
 
 ## Highlights
 
-- **Slim KIM core + one-time HD Asset Manager** — large HD Pokémon battle sprites and HD battle backgrounds now live in the separate Kanto-in-Motion-Assets release and are cached persistently after install.
-- **Expanded Gen 2 Modern UI** — Modern UI now covers the title/main menu and the complete NEW GAME setup flow, including Crystal gender choice, clock setup, Oak/Elm dialogue, player-name selection, naming keyboard, and final intro text.
-- **Modern UI master gating** — turning MODERN UI off restores native G/S/C presentation; MENU UI, DIALOGUE UI, POKEMON SCREENS, and battle presentation remain per-surface controls while Modern UI is on.
-- **Gen 2 Start Menu cleanup** — removes the stray MAPA row without leaving a hidden cursor target.
-- **Dex Radar 1.2.0 compatibility** — KIM can present the unmodified Dex Radar mod through Modern UI on both Gen 1 and Gen 2 while Dex Radar retains all encounter/input/state logic.
-- **Gen 1 BATTLE BG MODE** — AUTO / FULLSCREEN / NATIVE FIT supports KIM HD arenas with either HD battlers or stock/native battler coordinates.
-- **Gen 1 battle corrections** — improved widened-field trainer placement, restored native trainer size, corrected enemy move-side animation ownership, and fixed lingering animation BG/FG planes.
-- **FR/LG fallback/stability** — missing HD battle art now falls back to native sprites; BATTLE SPRITES OFF yields directly to the native FR/LG provider.
-- Keeps Battle Art, PotatoVoxel, HGSS_SPRITES, Typed Move Colors, Useful Bag, Advanced Box System, translations, and other existing compatibility paths.
+- **Gen 1 Android/mobile battle stability** — protects KIM's battle draw boundaries from graphics-state leaks that could eventually trigger `Maximum stack depth reached`.
+- **Built-in controller support on Android handhelds** — the Modern battle dialogue/command panel no longer disappears just because virtual TouchControls are hidden. This was validated on the Retroid Pocket 6.
+- **Oak's Lab rival presentation** — restores KIM's Gary front trainer artwork at the corrected scale and prevents the native rival from appearing a second time at the battle outro.
+- **Expanded Gen 1 Modern UI** — adds supported NEW GAME dialogue/choice/naming presentation and the initial `WHICH PC?` menu while preserving native game state and callbacks.
+- **iOS Battle Art orientation compatibility** — adds a world-only correction for the affected Apple/Metal renderer so Battle Art's 3D battlefield can be corrected without flipping KIM's HUD, Modern UI, or touch controls.
 
-## Updating
+## iOS testing note
 
-Install **Kanto-in-Motion-v1.6.0.zip** normally. If the HD battle pack is not already cached, KIM's Asset Manager will offer the one-time download on first launch.
+The iOS Battle Art compatibility path is included based on the current Battle Art implementation and its Apple/Metal renderer handling. It has not been locally hardware-tested by the Kanto in Motion maintainer, so iPhone/iPad users are encouraged to report results, especially when using Battle Art.
 
-Users upgrading from v1.5.x or earlier will need to download the external HD asset pack once as part of the transition to the new slim architecture. After that first v1.6.0 asset install, the pack remains in persistent cache and normal KIM updates no longer redownload it.
+## v1.6.0 asset system
 
-## Asset pack
-
-The external HD pack is hosted at **HaseoSora/Kanto-in-Motion-Assets**. The normal KIM package still includes all small battle-support assets, trainer art, UI assets, icons, move-animation resources, and code required to start safely with or without the optional HD pack.
-
-## Notes
-
-The internal mod ID remains `animated_menu_pokemon`, so compatible settings continue to carry forward.
+The slim-core asset system introduced in v1.6.0 is unchanged. Large HD battle sprites/backgrounds remain in the persistent KIM cache after their one-time Asset Manager download and do not need to be downloaded again for normal KIM code updates.

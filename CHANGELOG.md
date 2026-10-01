@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.6.1
+
+- Hardened Gen 1 Android/mobile battle rendering against graphics-state leaks that could accumulate into `Maximum stack depth reached`.
+- Decoupled the Gen 1 Modern battle dialog/command layout from virtual TouchControls visibility so controller-equipped Android devices keep the lower battle UI with touch controls hidden.
+- Restored the first Oak's Lab rival intro using KIM's packaged `garyfrontplayer` art at the corrected mobile scale and suppressed the duplicate native rival image during the outro.
+- Expanded Gen 1 NEW GAME Modern UI coverage while keeping Oak's native intro artwork/timing and source game state ownership intact.
+- Added KIM Modern UI presentation for the initial Gen 1 `WHICH PC?` menu while preserving native PC rows, callbacks, Player PC, and Bill's PC behavior.
+- Added a narrowly scoped iOS Battle Art world-orientation compatibility bridge for the affected Apple/Metal renderer, based on Battle Art's current world-canvas correction strategy. KIM HUD/UI layers remain unflipped.
+- Preserved native presentation when Modern UI or the applicable per-surface setting is disabled.
+- Gen 2/Crystal and Gen 3/FireRed-LeafGreen battle paths remain unchanged by the Gen 1 mobile fixes.
+
 ## v1.6.0
 
 - Split large HD battle artwork from the normal KIM ZIP and added the in-game HD Asset Manager with persistent caching.
