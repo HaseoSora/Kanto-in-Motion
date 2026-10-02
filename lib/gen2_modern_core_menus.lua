@@ -277,16 +277,39 @@ return function(mod)
     local c=theme(); local sx,sy,sw,sh=playfield()
     local scale=uiScale(sw,sh); local den=density()
     local rows=s.items or {}; local count=#rows
-    local w=math.min(520*scale,sw*.44); local rh=60*scale*den
-    local h=math.min(sh*.88,94*scale+math.min(count,9)*rh+76*scale)
+    local w=math.min(520*scale,sw*.44)
+    local naturalRh=60*scale*den
+    local h=math.min(sh*.88,94*scale+math.min(count,9)*naturalRh+76*scale)
     local inset=(tonumber(opt("startMenuInset","0")) or 0)/100
     local x=sx+sw-w-28*scale-(sw-w)*inset; local y=sy+(sh-h)/2
     panel(x,y,w,h,c,.95)
     local big, body, small = font(40*scale), font(31*scale), font(23*scale)
     text("START",big,x+18*scale,y+15*scale,w-36*scale,"left",c.text)
     local index=(s.list and tonumber(s.list.index)) or 1
+
+    -- Chrome.List is authoritative for input and can expose up to eight rows.
+    -- KIM used to calculate a smaller visual row count when UI SCALE or
+    -- COMFORTABLE density made each Modern row taller.  The native list then
+    -- believed QUIT/MODS was already visible and did not advance its scroll,
+    -- leaving a selectable row below KIM's card (the description changed, but
+    -- the highlighted row itself was invisible).  First compress only the row
+    -- spacing enough to match the native viewport when that remains readable;
+    -- if a very large UI/font scale still cannot fit, maintain a presentation-
+    -- only scroll that always keeps the native selected index on screen.
+    local listRows=tonumber(s.list and s.list.rows) or math.min(count,8)
+    listRows=math.max(1,math.min(count>0 and count or 1,listRows))
+    local rowAreaH=math.max(1,h-165*scale)
+    local minRh=math.max(body:getHeight()+8*scale,42*scale)
+    local fitRh=rowAreaH/listRows
+    local rh=math.max(minRh,math.min(naturalRh,fitRh))
+    local maxRows=math.max(1,math.min(count>0 and count or 1,math.floor(rowAreaH/rh)))
+
     local scroll=(s.list and tonumber(s.list.scroll)) or 0
-    local maxRows=math.max(1,math.floor((h-165*scale)/rh))
+    local maxScroll=math.max(0,count-maxRows)
+    scroll=math.max(0,math.min(scroll,maxScroll))
+    if index<=scroll then scroll=math.max(0,index-1) end
+    if index>scroll+maxRows then scroll=math.min(maxScroll,index-maxRows) end
+
     for slot=1,maxRows do
       local i=scroll+slot; local row=rows[i]; if not row then break end
       local yy=y+70*scale+(slot-1)*rh

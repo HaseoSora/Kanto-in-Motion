@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.6.2
+
+- Added HD Asset Manager removal/re-download support for the persistent external HD Pokémon/background cache. Removed assets can be downloaded again immediately or later; KIM does not force a new download after removal.
+- Added Gen1Recomp portable-mode Asset Manager support using the engine's binary-safe downloader and native temporary-file handoff while keeping final assets in portable-aware `mod.cache`.
+- Added a native FireRed/LeafGreen **KIM ASSETS** Start Menu entry for downloading, removing, and re-downloading the shared HD pack.
+- Fixed Android/iOS FR/LG asset downloads by reopening the engine-owned temporary ZIP through Gen1Recomp's native save-directory helper before extraction.
+- Corrected FR/LG installed-pack controls to **A = REMOVE / B = CLOSE**, with a second **A** confirmation before deletion.
+- Fixed Gold/Silver/Crystal mobile lookup of downloaded National Dex #152–251 HD assets so the external pack is actually used after a successful download.
+- Fixed FR/LG in-battle Party/Summary presentation so KIM's battle compositor no longer overwrites final-resolution HD menu Pokémon/icons while a full-screen Game3 menu owns the frame.
+- Added a KIM-side FR/LG provider-cycle guard for GameShark when **BATTLE SPRITES = OFF**, preventing recursive native-sprite delegation without changing GameShark.
+- Fixed the Gen 2 Modern Start Menu at larger UI scales/densities so the selected native row always remains visible, including **MODS** and **QUIT**.
+- Reworked the iOS/LÖVE 12 Battle Art orientation bridge at the final world handoff. The correction follows Battle Art's live 3D world directly, uses Battle Art-compatible canvas handling, and leaves KIM HUD/UI/touch layers unflipped.
+
 ## v1.6.1
 
 - Hardened Gen 1 Android/mobile battle rendering against graphics-state leaks that could accumulate into `Maximum stack depth reached`.
@@ -46,4 +59,3 @@
 
 - Public Gen 1 HD battle release.
 - Added the Gen 1 HD animated Pokémon battle pipeline and HD battle backgrounds.
-

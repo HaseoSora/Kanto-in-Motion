@@ -86,20 +86,42 @@ return function(mod)
   local sourceCache = {}
   local timingCache = setmetatable({}, { __mode = "k" })
 
-  local function atlas(path)
-    if atlasCache[path] == false then return nil end
-    if atlasCache[path] then return atlasCache[path] end
-    if not (mod.assets and type(mod.assets.image) == "function") then
-      atlasCache[path] = false
-      return nil
+  local atlasMissRevision = {}
+  local function providerRevision()
+    local provider = mod._kimAssetProvider
+    if provider and type(provider.revision) == "function" then
+      local ok, value = pcall(provider.revision)
+      if ok then return tonumber(value) or 0 end
     end
-    local ok, image = pcall(function() return mod.assets:image(path) end)
-    if not ok or not image then
+    return 0
+  end
+
+  local function atlas(path)
+    local revision = providerRevision()
+    if atlasCache[path] == false then
+      if atlasMissRevision[path] == revision then return nil end
+      atlasCache[path] = nil
+    end
+    if atlasCache[path] then return atlasCache[path] end
+
+    local image
+    local provider = mod._kimAssetProvider
+    if provider and type(provider.image) == "function" then
+      local ok, value = pcall(provider.image, path)
+      if ok then image = value end
+    elseif mod.assets and type(mod.assets.image) == "function" then
+      local ok, value = pcall(function() return mod.assets:image(path) end)
+      if ok then image = value end
+    end
+
+    if not image then
       atlasCache[path] = false
+      atlasMissRevision[path] = revision
       return nil
     end
     if image.setFilter then pcall(image.setFilter, image, "linear", "linear") end
     atlasCache[path] = image
+    atlasMissRevision[path] = nil
     return image
   end
 

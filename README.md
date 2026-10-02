@@ -1,4 +1,4 @@
-# Kanto in Motion v1.6.1
+# Kanto in Motion v1.6.2
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -9,6 +9,20 @@ It supports:
 - **Pokémon FireRed / LeafGreen** — National Dex #001–386
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
+
+## What’s new in v1.6.2
+
+v1.6.2 is a multi-generation compatibility and asset-management update focused on the shared HD cache, FR/LG/Game3 presentation, Gen 2 menu behavior, and iOS Battle Art compatibility.
+
+- **Remove and re-download HD assets:** the HD Asset Manager can now delete KIM's cached HD Pokémon/background pack, either to reclaim storage or recover from corrupted assets. After removal, users can download the pack again immediately or reopen the manager later.
+- **Portable-mode Asset Manager:** Gen1Recomp portable mode is now supported. KIM uses Gen1Recomp's binary-safe download path and native temporary-file handoff, while final assets continue to live in portable-aware `mod.cache`.
+- **FireRed/LeafGreen Asset Manager:** FR/LG now has a native **KIM ASSETS** Start Menu entry on desktop and mobile. FR/LG can download the shared pack itself; it no longer needs another supported game to populate the cache first.
+- **FR/LG mobile downloads:** Android/iOS FireRed/LeafGreen now reopens the completed ZIP through Gen1Recomp's engine-owned save-directory helper before extraction, fixing the Game3 mobile filesystem mismatch.
+- **Gold/Silver/Crystal mobile HD assets:** downloaded Johto HD Pokémon assets, including National Dex #152–251, now resolve correctly from the shared cache on mobile.
+- **FR/LG in-battle Party/Summary:** full-screen Party/Summary menus opened during battle keep KIM's final-resolution HD menu Pokémon/icons instead of being overwritten by the underlying battle compositor.
+- **FR/LG + GameShark:** KIM prevents a native-sprite provider recursion when **BATTLE SPRITES = OFF**. This compatibility fix is entirely on the KIM side; GameShark is not modified.
+- **Gen 2 Start Menu visibility:** larger UI scales/densities now keep the selected native row visible, including the bottom **MODS** and **QUIT** entries.
+- **iOS + Battle Art:** the world-only orientation bridge now follows Battle Art's live 3D battlefield at the final world handoff and includes an iOS/LÖVE 12 fallback. KIM's HUD, Modern UI, and touch controls stay outside the flip. Community iPhone/iPad validation is still requested.
 
 ## What’s new in v1.6.1
 
@@ -68,6 +82,7 @@ v1.6.0 is a major presentation, compatibility, and distribution update across al
 - Full Modern UI title/main menu and NEW GAME setup flow
 - Dex Radar 1.2.0 Modern UI compatibility
 - Final-window rendering for crisp HD menus and Pokémon art
+- Shared external HD cache use on desktop and mobile, including Johto #152–251
 
 ### FireRed / LeafGreen
 
@@ -82,6 +97,8 @@ v1.6.0 is a major presentation, compatibility, and distribution update across al
 - Desktop and mobile portrait/landscape support
 - Mobile **SCREEN POS** support
 - Native sprite fallback when KIM HD battle artwork is unavailable
+- Native **KIM ASSETS** Start Menu access for download/remove/re-download
+- In-battle Party/Summary compatibility for final-resolution HD menu Pokémon/icons
 
 ## HD Pokémon icons
 
@@ -96,7 +113,7 @@ Kanto in Motion includes HD Rescaled Pokémon icons for **National Dex #001–38
 
 ## Kanto in Motion settings
 
-Open **KANTO IN MOTION** from the mod settings screen. On **Red / Blue / Yellow**, the Gen 1 battle-specific controls are grouped under **BATTLE → OPEN**.
+Open **KANTO IN MOTION** from the mod settings screen. On **Red / Blue / Yellow**, the Gen 1 battle-specific controls are grouped under **BATTLE → OPEN**. The HD Asset Manager can also remove an installed external pack and make it available for a later re-download.
 
 ### Red / Blue / Yellow — main settings
 
@@ -110,7 +127,7 @@ Open **KANTO IN MOTION** from the mod settings screen. On **Red / Blue / Yellow*
 | **TITLE TRAINER** | ANIMATED / ORIGINAL GEN 1 | ANIMATED | Chooses KIM's animated Red title trainer or Gen1Recomp's original title trainer. |
 | **TITLE CYCLE SPEED** | NORMAL / SLOW / SLOWER | SLOW | Controls how quickly the title-screen Pokémon changes. |
 | **TITLE PKMN SIZE** | 50%–125% in 5% steps | 75% | Scales only the cycling title-screen Pokémon. Red and the custom logo are unchanged. |
-| **ASSET MANAGER** | OPEN | — | Opens the HD Asset Manager for downloading, checking, or reusing the external HD battle asset pack. |
+| **ASSET MANAGER** | OPEN | — | Opens the HD Asset Manager for downloading, removing, re-downloading, checking, or reusing the external HD battle asset pack. |
 
 ### Red / Blue / Yellow — BATTLE settings
 
@@ -153,7 +170,7 @@ Gold / Silver / Crystal retain their native gameplay and battle logic. KIM's Mod
 | **ANIMATION** | ON / OFF | ON | Master animation control for supported KIM Pokémon/trainer presentation. OFF holds supported animated KIM artwork on its first frame. |
 | **MODERN UI** | ON / OFF | ON | Master switch for KIM's Gen 2 Modern UI across the title/main menu, Start/menu screens, Party, Pokédex, Pack, PokéGear, Trainer Card, Save, Options/KIM settings, dialogue, shops, choices, level-up messages, and supported battle UI surfaces. OFF yields those presentation surfaces to the native game. |
 | **UI SETTINGS** | OPEN | — | Opens the dedicated Gen 2 UI customization submenu described below. |
-| **ASSET MANAGER** | OPEN | — | Opens the HD Asset Manager for downloading, checking, or reusing the external HD battle asset pack. |
+| **ASSET MANAGER** | OPEN | — | Opens the HD Asset Manager for downloading, removing, re-downloading, checking, or reusing the external HD battle asset pack. |
 | **BATTLE SPRITES** | ON / OFF | ON | Uses KIM HD animated Pokémon in native G/S/C battles while retaining native Gen 2 battle logic and move animations. |
 | **PKMN SHADOWS** | OFF / LOW / MEDIUM / HIGH / ULTRA | MEDIUM | Controls ground-contact shadow quality for KIM HD battle Pokémon. |
 | **SHADOW OPACITY** | 50%–150% in 10% steps | 100% | Adjusts Gen 2 battle shadow darkness without changing Pokémon size or position. |
@@ -200,6 +217,7 @@ The UI Settings submenu also includes **RESET TO DEFAULT** for restoring the Gen
 With **MODERN UI = ON**, KIM currently presents:
 
 - title/main menu (`CONTINUE`, `NEW GAME`, `OPTION`, `EXIT GAME`) over the animated Gen 2 title artwork
+- Start Menu rows remain visible/scroll correctly at enlarged UI scales, including the bottom `MODS` / `QUIT` (return-to-title) entries
 - complete NEW GAME setup presentation: Crystal gender selection, clock setup/confirmation, Oak/Elm speech dialogue, player-name preset selection, the Gen 2 naming keyboard, and the final shrink/intro dialogue
 - Start Menu
 - Party and Pokémon status/details
@@ -229,16 +247,16 @@ FireRed / LeafGreen keep Gen1Recomp's native Game3 UI, HUD, commands, dialogs, a
 | **PKMN SHADOWS** | OFF / LOW / MEDIUM / HIGH / ULTRA | MEDIUM | Controls ground-contact shadow quality for KIM HD battle Pokémon. Shadows follow battlers during send-out/slide movement. |
 | **SHADOW OPACITY** | 50%–150% in 10% steps | 100% | Adjusts FR/LG battle shadow darkness without changing Pokémon size or position. |
 | **HD BATTLE BACKGROUNDS** | ON / OFF | ON | Uses KIM's location-aware HD Kanto battle backgrounds while preserving FR/LG's native battler/HUD geometry. OFF restores the native FR/LG battle background. |
-| **ASSET MANAGER** | OPEN | — | Opens the HD Asset Manager for downloading, checking, or reusing the external HD battle asset pack. |
+| **ASSET MANAGER** | START MENU → KIM ASSETS | — | FR/LG uses the native Game3 Start Menu entry **KIM ASSETS** to download, remove, or re-download the shared external HD battle asset pack. On the installed-pack screen, **A = REMOVE** and **B = CLOSE**; removal asks for a second **A** confirmation. |
 
 ## Mobile support
 
-- R/B/Y keeps separate desktop/mobile KIM battle presentation paths with additional v1.6.1 graphics-state protection on Android/iOS.
+- R/B/Y keeps separate desktop/mobile KIM battle presentation paths with graphics-state protection on Android/iOS.
 - On controller-equipped Android handhelds, the Gen 1 Modern battle lower UI remains available even when Gen1Recomp's virtual TouchControls are hidden.
 - The first Oak's Lab rival battle uses KIM's corrected Gary front presentation without duplicating the native rival at the outro.
-- Battle Art on the affected iOS Apple/Metal renderer receives a world-only orientation correction; KIM HUD/UI layers are intentionally left unflipped. This iOS compatibility path is awaiting broader community hardware validation.
-- G/S/C keeps KIM's final-resolution HD Pokémon/menu rendering architecture and native Gen 2 gameplay state beneath the Modern UI presentation.
-- FR/LG uses the native Game3 geometry with KIM HD art rendered at final resolution.
+- Battle Art on the affected iOS Apple/Metal/LÖVE 12 path receives a world-only orientation correction at the final Battle Art world handoff; KIM HUD/UI/touch layers are intentionally left unflipped. This compatibility path is awaiting broader community hardware validation.
+- G/S/C keeps KIM's final-resolution HD Pokémon/menu rendering architecture and native Gen 2 gameplay state beneath the Modern UI presentation. v1.6.2 also fixes mobile lookup of downloaded Johto (#152–251) HD assets from the shared cache.
+- FR/LG uses the native Game3 geometry with KIM HD art rendered at final resolution. Full-screen Party/Summary menus opened during battle temporarily own the frame so their HD menu Pokémon/icons are not overwritten by the battle compositor.
 - FR/LG portrait and landscape honor Gen1Recomp's **SCREEN POS** setting.
 - FR/LG uses a single mobile battle presentation path to avoid duplicate HUD/menu rendering.
 
@@ -280,8 +298,8 @@ External compatibility mod packages are not bundled. v1.6.0 directly vendors onl
 
 ### Installation / first launch
 
-1. Install **Kanto in Motion v1.6.1** and enable it in Gen1Recomp.
-2. On first launch, KIM opens the **HD ASSET MANAGER** if the external HD battle pack is not already cached.
+1. Install **Kanto in Motion v1.6.2** and enable it in Gen1Recomp.
+2. On Red/Blue/Yellow and Gold/Silver/Crystal, KIM opens the **HD ASSET MANAGER** when the external HD battle pack is not already cached. On FireRed/LeafGreen, open the native Start Menu and choose **KIM ASSETS**.
 3. Choose **A — DOWNLOAD** to download the official asset ZIP once, or **B — USE VANILLA / LATER** to continue without it.
 4. After a successful install, the HD assets remain in Gen1Recomp's installation-scoped KIM cache and are reused by later KIM code updates.
 
@@ -303,8 +321,15 @@ The **HD ASSET MANAGER** downloads the official `HaseoSora/Kanto-in-Motion-Asset
 - **B — USE VANILLA / LATER:** continues without downloading; missing HD battle artwork falls back safely where supported.
 - **B while downloading:** cancels the temporary ZIP download and continues without the HD pack.
 - Extraction runs incrementally after the ZIP download completes.
-- **KANTO IN MOTION → ASSET MANAGER:** reopens the installer at any time.
+- **R/B/Y + G/S/C:** **KANTO IN MOTION → ASSET MANAGER** reopens the installer at any time.
+- **FR/LG:** use **Start Menu → KIM ASSETS** to open the same manager.
+- **R/B/Y + G/S/C installed pack:** press **B — REMOVE**, then confirm with **A — REMOVE** to delete KIM's cached HD Pokémon/background pack.
+- **FR/LG installed pack:** press **A — REMOVE** from **KIM ASSETS**, then confirm with **A — REMOVE**. **B — CLOSE** returns to the Start Menu.
+- Removing the pack is useful for reclaiming storage or repairing a corrupted cache.
+- After removal, KIM does not force another download. Choose **A — DOWNLOAD AGAIN** immediately or reopen **ASSET MANAGER** later to reinstall the pack. Restarting Gen1Recomp after removing/reinstalling assets is recommended so any already-loaded artwork is refreshed.
 - Existing cached assets are reused automatically; ordinary KIM code updates do not redownload the pack.
+- **Portable mode is supported:** when `portable.txt` is active, KIM keeps Gen1Recomp's normal asynchronous ZIP downloader, then reopens the completed temporary ZIP through Gen1Recomp's native file helper for extraction. Final HD assets still live in portable-aware `mod.cache`, and the temporary ZIP is deleted after install/cancel/error. Normal installs keep the standard streamed temporary-ZIP path.
+- **FR/LG mobile download handoff:** Android/iOS FireRed/LeafGreen uses the same engine-owned native temporary-ZIP handoff after Gen1Recomp's binary-safe downloader finishes, avoiding a Game3 mobile sandbox mismatch between the worker-owned save directory and the mod-visible filesystem. Desktop FR/LG keeps the normal raw filesystem path.
 
 KIM requires the **NETWORK** permission only for the optional HD asset download path.
 

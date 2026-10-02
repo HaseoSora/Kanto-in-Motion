@@ -1,7 +1,5 @@
 # Package variant
 
-**Kanto in Motion v1.6.1 — Public Release**
+Public **Kanto in Motion v1.6.2** release package.
 
-This package uses the confirmed-good Android/RP6 Gen 1 battle baseline and includes the scoped iOS Battle Art world-orientation compatibility bridge.
-
-The iOS Battle Art path is included for community validation because the maintainer does not have iOS hardware for local testing. No Battle Art files are bundled or modified.
+The large HD Pokémon battle sprite sheets and HD battle backgrounds remain in the separate persistent asset pack introduced in v1.6.0. This ZIP contains the KIM core mod, UI/battle support assets, icons, trainer art, move-animation resources, compatibility code, and documentation.

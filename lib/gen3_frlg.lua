@@ -404,10 +404,53 @@ return function(mod)
   -- than wrapping Pokemon.frontPic/backPic here during the entry chunk.
   local upstreamFront
   local upstreamBack
+  -- Keep the first non-KIM providers as a cycle-break fallback.  Compatibility
+  -- mods such as GameShark may legitimately wrap KIM after game.ready, then a
+  -- later Pokemon reload can make KIM capture that wrapper as its new upstream.
+  -- In that layout GameShark's saved originalFront/originalBack still points
+  -- back at KIM, so a plain OFF-path delegate would recurse forever.  The
+  -- stable providers remain the engine/Gen3Compat seam captured before that
+  -- outer wrapper existed and are used only on recursive re-entry.
+  local stableFront
+  local stableBack
+  local frontDelegateActive = false
+  local backDelegateActive = false
   local frontWrapper
   local backWrapper
   local providerInstalled = false
   local routeLogged = { front = false, back = false }
+
+  local function callFrontProvider(fn, species, form, shiny, personality)
+    if frontDelegateActive then
+      local base = stableFront
+      if type(base) == "function" and base ~= frontWrapper then
+        return base(species, form, shiny, personality)
+      end
+      return nil
+    end
+    if type(fn) ~= "function" or fn == frontWrapper then return nil end
+    frontDelegateActive = true
+    local ok, a, b, c = pcall(fn, species, form, shiny, personality)
+    frontDelegateActive = false
+    if not ok then error(a, 0) end
+    return a, b, c
+  end
+
+  local function callBackProvider(fn, species, form, shiny)
+    if backDelegateActive then
+      local base = stableBack
+      if type(base) == "function" and base ~= backWrapper then
+        return base(species, form, shiny)
+      end
+      return nil
+    end
+    if type(fn) ~= "function" or fn == backWrapper then return nil end
+    backDelegateActive = true
+    local ok, a, b, c = pcall(fn, species, form, shiny)
+    backDelegateActive = false
+    if not ok then error(a, 0) end
+    return a, b, c
+  end
 
   local function logFirstRoute(side, dex)
     if routeLogged[side] then return end
@@ -420,10 +463,7 @@ return function(mod)
 
   frontWrapper = function(species, form, shiny, personality)
     if battleActive() and mod.options:get("battleSprites") == false then
-      if type(upstreamFront) == "function" then
-        return upstreamFront(species, form, shiny, personality)
-      end
-      return nil
+      return callFrontProvider(upstreamFront, species, form, shiny, personality)
     end
     local rec, dex = recordFor(species, "front", shiny == true, personality, form)
     if rec then
@@ -433,18 +473,12 @@ return function(mod)
         return entry
       end
     end
-    if type(upstreamFront) == "function" then
-      return upstreamFront(species, form, shiny, personality)
-    end
-    return nil
+    return callFrontProvider(upstreamFront, species, form, shiny, personality)
   end
 
   backWrapper = function(species, form, shiny)
     if battleActive() and mod.options:get("battleSprites") == false then
-      if type(upstreamBack) == "function" then
-        return upstreamBack(species, form, shiny)
-      end
-      return nil
+      return callBackProvider(upstreamBack, species, form, shiny)
     end
     local personality = personalityForBack(species)
     local rec, dex = recordFor(species, "back", shiny == true, personality, form)
@@ -455,10 +489,7 @@ return function(mod)
         return entry
       end
     end
-    if type(upstreamBack) == "function" then
-      return upstreamBack(species, form, shiny)
-    end
-    return nil
+    return callBackProvider(upstreamBack, species, form, shiny)
   end
 
   local function installProvider(reason)
@@ -466,9 +497,11 @@ return function(mod)
     -- Never capture our own wrapper, which would recurse.
     if type(Pokemon.frontPic) == "function" and Pokemon.frontPic ~= frontWrapper then
       upstreamFront = Pokemon.frontPic
+      if type(stableFront) ~= "function" then stableFront = Pokemon.frontPic end
     end
     if type(Pokemon.backPic) == "function" and Pokemon.backPic ~= backWrapper then
       upstreamBack = Pokemon.backPic
+      if type(stableBack) ~= "function" then stableBack = Pokemon.backPic end
     end
 
     if type(upstreamFront) == "function" then
@@ -1626,6 +1659,25 @@ return function(mod)
       nextFn(game, viewport)
       if pendingHdPreview then return end
       if type(Battle.isActive) ~= "function" or not Battle.isActive() then return end
+
+      -- Game3 keeps the battle active while full-screen modal menus such as
+      -- the battle POKEMON/Party screen sit on top of it.  The native menu was
+      -- already presented by the lower render.hud chain.  Re-compositing the
+      -- battle foreground after that point paints the native 240x160 menu
+      -- surface over KIM's final-resolution HD menu-icon replay, which makes
+      -- every Pokemon icon disappear only when Party is opened from battle.
+      -- A full-screen Game3 layer owns the frame completely, so leave KIM's
+      -- battle world/background pass dormant until that layer closes.
+      local game3Stack = package.loaded["src.ui.game3.stack"]
+      if not game3Stack then
+        local okStack, value = pcall(require, "src.ui.game3.stack")
+        if okStack then game3Stack = value end
+      end
+      if game3Stack and type(game3Stack.fullscreen) == "function" then
+        local okFull, full = pcall(game3Stack.fullscreen)
+        if okFull and full == true then return end
+      end
+
       local st = type(Battle.getState) == "function" and Battle.getState() or Battle._st
       if type(st) ~= "table" then return end
 

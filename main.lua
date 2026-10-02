@@ -146,6 +146,16 @@ return function(mod)
   local IS_GEN2 = tonumber(mod.generation) == 2
   local MOD_ID = "animated_menu_pokemon"
 
+  -- Keep the live game handle explicitly. Some mobile Gen 2 builds do not
+  -- expose it as mod.game, which previously made National-Dex lookup for
+  -- #152-251 fail even though the downloaded atlas was present in mod.cache.
+  mod._kantoInMotionActiveGame = mod._kantoInMotionActiveGame or nil
+  if mod.events and type(mod.events.on) == "function" then
+    mod.events:on("game.ready", function(ev)
+      if ev and ev.game then mod._kantoInMotionActiveGame = ev.game end
+    end)
+  end
+
   -- Gen 1 mobile graphics-transaction guard. It never adds its own graphics
   -- state: it only remembers the caller's depth/canvas, runs the same function
   -- through pcall(), and removes states that the callee leaked before returning
@@ -872,7 +882,17 @@ return function(mod)
 
   local function gen2NationalDex(species, normalized)
     if not IS_GEN2 then return nil end
-    local game = mod.game
+
+    -- Gen 2's numeric species ids already follow the National-Dex range.
+    -- Take that fast path first so battle/menu objects do not depend on a
+    -- game handle merely to resolve #152-251.
+    local numeric = tonumber(species)
+    if numeric and numeric >= 1 and numeric <= 251 then
+      return math.floor(numeric)
+    end
+
+    local game = mod._kantoInMotionActiveGame or mod.game
+    if not game and mod._kimAssetManager then game = mod._kimAssetManager.game end
     local pokemon = game and game.data and game.data.pokemon
     if type(pokemon) ~= "table" then return nil end
 
@@ -880,7 +900,8 @@ return function(mod)
     if type(def) ~= "table" and normalized then
       def = pokemon[normalized]
     end
-    local dex = type(def) == "table" and tonumber(def.index) or nil
+    local dex = type(def) == "table"
+      and tonumber(def.dex or def.index or def.nationalDex) or nil
     if dex and dex >= 1 and dex <= 251 then return math.floor(dex) end
     return nil
   end

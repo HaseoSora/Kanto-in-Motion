@@ -588,7 +588,24 @@ return function(mod)
             battleActive = okActive and active == true
           end
 
-          if not battleActive then
+          -- A battle can remain active underneath Game3's full-screen Party
+          -- and Summary layers.  Those layers are still presented through the
+          -- normal Renderer-owned 240x160 menu rectangle, not the flattened
+          -- battle rectangle.  Treat a full-screen stack owner as a menu even
+          -- when Battle.isActive() remains true so Android/iOS replay lands on
+          -- the exact native slot positions.
+          local fullscreenMenu = false
+          local game3Stack = package.loaded["src.ui.game3.stack"]
+          if not game3Stack then
+            local okStack, value = pcall(require, "src.ui.game3.stack")
+            if okStack then game3Stack = value end
+          end
+          if game3Stack and type(game3Stack.fullscreen) == "function" then
+            local okFull, full = pcall(game3Stack.fullscreen)
+            fullscreenMenu = okFull and full == true
+          end
+
+          if not battleActive or fullscreenMenu then
             local renderer = game and game.renderer
             if not renderer then
               local okRenderer, Renderer = pcall(require, "src.render.Renderer")
