@@ -90,12 +90,12 @@ return function(mod)
     if tostring(value):lower()=="auto" then
       local ui,pct=Style.uiScale(w,h)
       if pixel then
-        return clamp(math.floor((pct/100)+.5),1,4),pct
+        return clamp(math.floor((pct/100)+.5),1,2),pct
       end
-      return autoScalePercent(w,h,80,500,200,2/3)/100,pct
+      return autoScalePercent(w,h,80,200,200,2/3)/100,pct
     end
-    local pct=clamp(value,80,400)
-    if pixel then return clamp(math.floor(pct/100+.5),1,4),pct end
+    local pct=clamp(value,80,200)
+    if pixel then return clamp(math.floor(pct/100+.5),1,2),pct end
     return pct/100,pct
   end
 

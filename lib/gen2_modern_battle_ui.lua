@@ -587,8 +587,10 @@ return function(mod)
 
     local gx, gy, gw, gh, fit = battleRect(state, viewport)
     fit = tonumber(fit) or math.max(0.5, math.min(gw / 160, gh / 144))
+    -- Keep BATTLE UI SIZE at a user-facing/default 100%, but calibrate the
+    -- authored Gen 2 lower panel so new 100% matches the former 95% footprint.
     local uiScale = math.max(0.60, math.min(1.00,
-      (tonumber(opt("battleUiSize", "100")) or 100) / 100))
+      (tonumber(opt("battleUiSize", "100")) or 100) / 100)) * 0.95
     local opacity = math.max(0.25, math.min(1.00,
       (tonumber(opt("battleUiOpacity", "100")) or 100) / 100))
     local textPercent = math.max(100, math.min(400,

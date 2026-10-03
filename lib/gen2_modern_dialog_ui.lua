@@ -1,4 +1,4 @@
--- Kanto in Motion v1.6.3 - Gen 2 Modern Dialog UI v31 -- responsive control hints
+-- Kanto in Motion v1.6.4 - Gen 2 Modern Dialog UI v31 -- responsive control hints
 --
 -- Shared Modern UI presentation for Gen 2 dialogue/choice surfaces.
 --

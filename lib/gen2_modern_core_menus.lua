@@ -1,4 +1,4 @@
--- Kanto in Motion v1.6.3 - Gen 2 Modern Core Menus v34 -- responsive text/footer layout
+-- Kanto in Motion v1.6.4 - Gen 2 Modern Core Menus v34 -- responsive text/footer layout
 --
 -- Modern overlay presentation for the native Gen 2 Start Menu, Pack,
 -- Pokegear, Trainer Card, Save Menu, Options Menu and KIM Mod Settings. Their original objects remain authoritative for
@@ -526,16 +526,29 @@ return function(mod)
     local rows=s and s.list and s.list.items or {}
     local index=s and s.list and (tonumber(s.list.index) or 1) or 1
     local full=layoutStyle()=="full"
-    local rh=64*scale*den
-    local footerH=s and s.hasSave and 78*scale or 58*scale
+    local body,small=font(31*scale),font(21*scale)
+    -- UI DENSITY may make the nominal row shorter, but FONT SCALE must never
+    -- be allowed to make the text taller than the selectable row.  This is the
+    -- combination that used to break at COMPACT + 75% UI + 200% font.
+    local rh=math.max(64*scale*den,body:getHeight()+math.max(8,10*scale))
+    local footerLines=(s and s.hasSave) and 2 or 1
+    local footerH=math.max((s and s.hasSave) and 78*scale or 58*scale,
+      footerLines*small:getHeight()+math.max(16,22*scale))
     local w=full and sw*.70 or math.min(540*scale,sw*.44)
     local h=math.min(sh*.84,28*scale+math.max(1,#rows)*rh+footerH)
+    -- The CONTINUE/save-summary phase is taller than the ordinary title menu:
+    -- it always shows four information rows plus its own footer.  Basing this
+    -- card on the title-menu row count pulls the footer divider into TIME on
+    -- small windows.  Give confirm mode its own height budget, then compress
+    -- only the summary rows if the playfield itself is too short.
+    if s and s.phase=="confirm" then
+      h=math.min(sh*.92,math.max(h,364*scale))
+    end
     -- Title/main-menu parity with Gen 1: this is a modal navigation card over
     -- the title artwork, not the in-game side Start Menu, so always center it.
     local x=sx+(sw-w)/2
     local y=sy+(sh-h)/2
     panel(x,y,w,h,c,.95)
-    local body,small=font(31*scale),font(21*scale)
     local top=y+18*scale
 
     if s and s.phase=="confirm" then
@@ -549,36 +562,54 @@ return function(mod)
         {"POKéDEX",summary and tostring(summary.caught or 0) or "0"},
         {"TIME",summary and ("%d:%02d"):format(summary.hours or 0,summary.minutes or 0) or "0:00"},
       }
-      local rowH=54*scale
+      local dividerY=y+h-58*scale
+      local infoBottom=dividerY-8*scale
+      local rowH=math.min(54*scale,math.max(1,(infoBottom-yy)/#info))
+      local rowInset=math.min(5*scale,math.max(2,rowH*.10))
       for i,r in ipairs(info) do
         local ry=yy+(i-1)*rowH
-        color(c.raised,.78); G.rectangle("fill",x+20*scale,ry,w-40*scale,rowH-5*scale,5,5)
-        text(r[1],labelFont,x+34*scale,ry+11*scale,w*.42,"left",c.muted)
-        text(r[2],labelFont,x+w*.50,ry+11*scale,w*.40,"right",c.text)
+        local barY,barH=centeredRowRect(ry,rowH,rowInset)
+        color(c.raised,.78); G.rectangle("fill",x+20*scale,barY,w-40*scale,barH,5,5)
+        text(r[1],labelFont,x+34*scale,centeredTextY(barY,barH,labelFont),w*.42,"left",c.muted)
+        text(r[2],labelFont,x+w*.50,centeredTextY(barY,barH,labelFont),w*.40,"right",c.text)
       end
-      color(c.divider); G.rectangle("fill",x+20*scale,y+h-58*scale,w-40*scale,1)
+      color(c.divider); G.rectangle("fill",x+20*scale,dividerY,w-40*scale,1)
       fittedText("A  CONTINUE    B  BACK",21*scale,x+24*scale,y+h-42*scale,w-48*scale,"left",c.accent)
       return
     end
 
-    for i,row in ipairs(rows) do
-      local yy=top+(i-1)*rh
+    local footerY=y+h-footerH
+    local rowAreaH=math.max(1,footerY-top)
+    local maxRows=math.max(1,math.min(#rows>0 and #rows or 1,math.floor(rowAreaH/rh)))
+    local scroll=math.max(0,math.min((s and s.list and tonumber(s.list.scroll)) or 0,
+      math.max(0,#rows-maxRows)))
+    if index<=scroll then scroll=math.max(0,index-1) end
+    if index>scroll+maxRows then scroll=math.min(math.max(0,#rows-maxRows),index-maxRows) end
+    for slot=1,maxRows do
+      local i=scroll+slot
+      local row=rows[i]
+      if not row then break end
+      local yy=top+(slot-1)*rh
       local barY,barH=centeredRowRect(yy,rh,2*scale)
       if i==index then
         color(c.selected); G.rectangle("fill",x+12*scale,barY,w-24*scale,barH,6,6)
       end
       local label=type(row)=="table" and (row.label or row.name or row.value) or row
-      text(label or "OPTION",body,x+28*scale,centeredTextY(barY,barH,body),w-56*scale,"left",
+      local labelText=tostring(label or "OPTION")
+      local rowFont=fittedFont(31*scale,labelText,w-56*scale)
+      text(labelText,rowFont,x+28*scale,centeredTextY(barY,barH,rowFont),w-56*scale,"left",
         i==index and c.text or c.muted)
     end
-    local footerY=y+h-footerH
     color(c.divider); G.rectangle("fill",x+18*scale,footerY,w-36*scale,1)
     local clock=titleTimeText(s)
     if clock~="" then
-      text(clock,small,x+22*scale,footerY+12*scale,w-44*scale,"left",c.muted)
-      text("A  SELECT",small,x+22*scale,footerY+38*scale,w-44*scale,"left",c.accent)
+      local lineGap=math.max(4,5*scale)
+      local firstY=footerY+math.max(6,8*scale)
+      text(clock,small,x+22*scale,firstY,w-44*scale,"left",c.muted)
+      text("A  SELECT",small,x+22*scale,firstY+small:getHeight()+lineGap,w-44*scale,"left",c.accent)
     else
-      text("A  SELECT",small,x+22*scale,footerY+17*scale,w-44*scale,"left",c.accent)
+      text("A  SELECT",small,x+22*scale,
+        footerY+math.max(6,(footerH-small:getHeight())*.5),w-44*scale,"left",c.accent)
     end
   end
 
@@ -695,7 +726,15 @@ return function(mod)
     local contentH=math.max(140*scale,h-112*scale-footerH)
     color(c.divider,nil,true); G.rectangle("fill",x+listW+8*scale,contentY,1,contentH)
     local rows=s.rows or {}; local idx=tonumber(s.index) or 1; local scroll=tonumber(s.scroll) or 0
-    local visible=math.max(5,math.min(10,math.floor(8/den+.5))); local rh=contentH/visible
+    local desiredVisible=math.max(5,math.min(10,math.floor(8/den+.5)))
+    local minRowH=math.max(body:getHeight(),countFont:getHeight())+math.max(6,8*scale)
+    local fitVisible=math.max(1,math.floor(contentH/math.max(1,minRowH)))
+    local visible=math.max(1,math.min(desiredVisible,fitVisible))
+    local maxScroll=math.max(0,(#rows+1)-visible)
+    scroll=math.max(0,math.min(scroll,maxScroll))
+    if idx<=scroll then scroll=math.max(0,idx-1) end
+    if idx>scroll+visible then scroll=math.min(maxScroll,idx-visible) end
+    local rh=contentH/visible
     for slot=1,visible do
       local i=scroll+slot; local row=rows[i]
       if i==#rows+1 then row={name="CANCEL"} end
@@ -1100,16 +1139,34 @@ return function(mod)
     local valueFont=font(23*scale)
     local small=font(19*scale)
 
-    text(s.sub and "OPTIONS" or "OPTIONS",big,x+28*scale,y+18*scale,w*.55,"left",c.text)
-    text(s.sub and "CATEGORY" or "SETTINGS",small,x+w*.62,y+30*scale,w*.30,"right",c.accent)
+    fittedText("OPTIONS",38*scale,x+28*scale,y+18*scale,w*.55,"left",c.text)
+    fittedText(s.sub and "CATEGORY" or "SETTINGS",19*scale,x+w*.62,y+30*scale,w*.30,"right",c.accent)
 
     local rows=type(s.visible)=="function" and s:visible() or (s.view or s.rows or {})
     local idx=tonumber(s.index) or 1
     local scroll=tonumber(s.scroll) or 0
-    local visible=math.max(5,math.min(9,math.floor(7/den+.5)))
-    local top=y+86*scale
-    local footerH=62*scale
-    local listH=h-(top-y)-footerH
+    local selected=rows[idx]
+    local hint="UP/DOWN SELECT   LEFT/RIGHT CHANGE   A OPEN/CHANGE   B BACK"
+    if selected and selected.group then
+      hint="A OPEN CATEGORY   B BACK"
+    elseif selected and selected.cancel then
+      hint="A/B BACK"
+    elseif selected and selected.activate then
+      hint="A OPEN   B BACK"
+    end
+    local titleBlockH=math.max(big:getHeight(),small:getHeight())
+    local top=y+math.max(86*scale,18*scale+titleBlockH+14*scale)
+    local hintFont=fittedFont(19*scale,hint,w-56*scale)
+    local footerH=math.max(62*scale,hintFont:getHeight()+30*scale)
+    local listH=math.max(1,h-(top-y)-footerH)
+    local desiredVisible=math.max(5,math.min(9,math.floor(7/den+.5)))
+    local minRowH=math.max(body:getHeight(),valueFont:getHeight())+math.max(6,9*scale)
+    local fitVisible=math.max(1,math.floor(listH/math.max(1,minRowH)))
+    local visible=math.max(1,math.min(desiredVisible,fitVisible))
+    local maxScroll=math.max(0,#rows-visible)
+    scroll=math.max(0,math.min(scroll,maxScroll))
+    if idx<=scroll then scroll=math.max(0,idx-1) end
+    if idx>scroll+visible then scroll=math.min(maxScroll,idx-visible) end
     local rh=listH/visible
 
     for slot=1,visible do
@@ -1126,32 +1183,29 @@ return function(mod)
         G.rectangle("fill",x+22*scale,barY,5*scale,barH,2,2)
       end
 
-      local label=optionLabel(row)
-      local value=optionValue(s,row)
-      text(label,body,x+48*scale,
-        centeredTextY(barY,barH,body),
-        w*.57,"left",selected and c.text or c.muted)
+      local label=tostring(optionLabel(row) or "")
+      local value=tostring(optionValue(s,row) or "")
+      local labelW=w*.53
+      local valueX=x+w*.63
+      local valueW=w*.29
+      local rowLabelFont=fittedFont(26*scale,label,labelW)
+      text(label,rowLabelFont,x+48*scale,
+        centeredTextY(barY,barH,rowLabelFont),
+        labelW,"left",selected and c.text or c.muted)
 
       if value~="" then
-        text(value,valueFont,x+w*.63,
-          centeredTextY(barY,barH,valueFont),
-          w*.29,"right",selected and c.text or c.accent)
+        local rowValueFont=fittedFont(23*scale,value,valueW)
+        text(value,rowValueFont,valueX,
+          centeredTextY(barY,barH,rowValueFont),
+          valueW,"right",selected and c.text or c.accent)
       end
     end
 
     color(c.divider)
     G.rectangle("fill",x+24*scale,y+h-footerH,w-48*scale,1)
 
-    local selected=rows[idx]
-    local hint="UP/DOWN SELECT   LEFT/RIGHT CHANGE   A OPEN/CHANGE   B BACK"
-    if selected and selected.group then
-      hint="A OPEN CATEGORY   B BACK"
-    elseif selected and selected.cancel then
-      hint="A/B BACK"
-    elseif selected and selected.activate then
-      hint="A OPEN   B BACK"
-    end
-    fittedText(hint,19*scale,x+28*scale,y+h-footerH+18*scale,w-56*scale,"left",c.muted)
+    text(hint,hintFont,x+28*scale,
+      y+h-hintFont:getHeight()-14*scale,w-56*scale,"left",c.muted)
 
     if scroll>0 then
       drawVerticalArrow(x+w-58*scale,y+22*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent)
@@ -1206,18 +1260,37 @@ return function(mod)
 
     local title=(s.currentMod and (s.currentMod.name or s.currentMod.id))
       or "KANTO IN MOTION"
-    text(string.upper(tostring(title)),titleFont,
-      x+28*scale,y+18*scale,w*.62,"left",c.text)
-    text("MOD SETTINGS",small,x+w*.63,y+30*scale,w*.30,"right",c.accent)
+    fittedText(string.upper(tostring(title)),38*scale,
+      x+28*scale,y+18*scale,w*.58,"left",c.text)
+    fittedText("MOD SETTINGS",19*scale,x+w*.63,y+30*scale,w*.30,"right",c.accent)
 
     local rows=s.optionRows or {}
     local idx=tonumber(s.cursor) or 1
     local scroll=tonumber(s.scroll) or 0
-    local visible=math.max(5,math.min(9,math.floor(7/den+.5)))
-
-    local listTop=y+86*scale
-    local footerH=128*scale
-    local listH=h-(listTop-y)-footerH
+    local selectedRow=rows[idx]
+    local desc=managerOptionDescription(s,selectedRow)
+    local hint="UP/DOWN  SELECT   LEFT/RIGHT  CHANGE   A  CHANGE   B  DONE"
+    local titleBlockH=math.max(titleFont:getHeight(),small:getHeight())
+    local listTop=y+math.max(86*scale,18*scale+titleBlockH+14*scale)
+    local descLines=0
+    if desc~="" then
+      local _,wrapped=descFont:getWrap(desc,w-64*scale)
+      descLines=type(wrapped)=="table" and math.max(1,#wrapped) or 1
+    end
+    local descH=descLines*descFont:getHeight()
+    local hintFont=fittedFont(19*scale,hint,w-64*scale)
+    local footerNeeded=14*scale+descH+(descH>0 and 10*scale or 0)
+      +hintFont:getHeight()+16*scale
+    local footerH=math.max(128*scale,footerNeeded)
+    local listH=math.max(1,h-(listTop-y)-footerH)
+    local desiredVisible=math.max(5,math.min(9,math.floor(7/den+.5)))
+    local minRowH=math.max(body:getHeight(),valueFont:getHeight())+math.max(6,9*scale)
+    local fitVisible=math.max(1,math.floor(listH/math.max(1,minRowH)))
+    local visible=math.max(1,math.min(desiredVisible,fitVisible))
+    local maxScroll=math.max(0,#rows-visible)
+    scroll=math.max(0,math.min(scroll,maxScroll))
+    if idx<=scroll then scroll=math.max(0,idx-1) end
+    if idx>scroll+visible then scroll=math.min(maxScroll,idx-visible) end
     local rh=listH/visible
 
     for slot=1,visible do
@@ -1236,16 +1309,21 @@ return function(mod)
       end
 
       local label=tostring(row.label or row.id or "OPTION")
-      local value=managerOptionValue(row)
+      local value=tostring(managerOptionValue(row) or "")
+      local labelW=w*.54
+      local valueX=x+w*.64
+      local valueW=w*.27
+      local rowLabelFont=fittedFont(27*scale,label,labelW)
 
-      text(label,body,x+50*scale,
-        centeredTextY(barY,barH,body),
-        w*.60,"left",selected and c.text or c.muted)
+      text(label,rowLabelFont,x+50*scale,
+        centeredTextY(barY,barH,rowLabelFont),
+        labelW,"left",selected and c.text or c.muted)
 
       if value~="" then
-        text(value,valueFont,x+w*.64,
-          centeredTextY(barY,barH,valueFont),
-          w*.27,"right",selected and c.text or c.accent)
+        local rowValueFont=fittedFont(25*scale,value,valueW)
+        text(value,rowValueFont,valueX,
+          centeredTextY(barY,barH,rowValueFont),
+          valueW,"right",selected and c.text or c.accent)
       end
     end
 
@@ -1253,16 +1331,13 @@ return function(mod)
     color(c.divider)
     G.rectangle("fill",x+26*scale,footerY,w-52*scale,1)
 
-    local selectedRow=rows[idx]
-    local desc=managerOptionDescription(s,selectedRow)
     if desc~="" then
       text(desc,descFont,x+32*scale,footerY+14*scale,
         w-64*scale,"left",c.muted)
     end
 
-    fittedText("UP/DOWN  SELECT   LEFT/RIGHT  CHANGE   A  CHANGE   B  DONE",
-      19*scale,x+32*scale,y+h-small:getHeight()-16*scale,
-      w-64*scale,"left",c.accent)
+    text(hint,hintFont,x+32*scale,
+      y+h-hintFont:getHeight()-14*scale,w-64*scale,"left",c.accent)
 
     if scroll>0 then
       drawVerticalArrow(x+w-58*scale,y+24*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent)
@@ -1288,19 +1363,53 @@ return function(mod)
     local descFont=font(20*scale)
 
     local title=tostring(s.title or "KANTO IN MOTION")
-    text(title,titleFont,x+28*scale,y+18*scale,w*.62,"left",c.text)
+    fittedText(title,38*scale,x+28*scale,y+18*scale,w*.56,"left",c.text)
     local section=rawget(s,"_kimModernSettings")
     local sectionLabel=section=="battle" and "BATTLE SETTINGS"
       or section=="ui" and "UI SETTINGS" or "MOD SETTINGS"
-    text(sectionLabel,small,x+w*.60,y+30*scale,w*.33,"right",c.accent)
+    fittedText(sectionLabel,19*scale,x+w*.60,y+30*scale,w*.33,"right",c.accent)
 
     local rows=s.items or {}
     local idx=tonumber(s.index) or 1
     local scroll=tonumber(s.scroll) or 0
-    local visible=math.max(5,math.min(9,math.floor(7/den+.5)))
-    local listTop=y+86*scale
-    local footerH=132*scale
-    local listH=h-(listTop-y)-footerH
+    local selected=rows[idx]
+    local desc=selected and selected.option and selected.option.description or ""
+    if selected and selected.resetBattleDefaults then
+      desc="Restore all battle settings to their defaults."
+    elseif selected and selected.resetUiDefaults then
+      desc="Restore all Modern UI settings to their defaults."
+    elseif selected and selected.submenu then
+      desc=selected.submenu and tostring(selected.submenu):find("ui_settings",1,true)
+        and "Open the Kanto in Motion Modern UI settings."
+        or "Open the Kanto in Motion battle settings."
+    elseif selected and selected.cancel then
+      local currentSection=rawget(s,"_kimModernSettings")
+      desc=(currentSection=="battle" or currentSection=="ui")
+        and "Return to Kanto in Motion settings."
+        or "Close Kanto in Motion settings."
+    end
+    local hint="UP/DOWN  SELECT   LEFT/RIGHT  CHANGE   A  CHANGE/OPEN   B  BACK"
+    local titleBlockH=math.max(titleFont:getHeight(),small:getHeight())
+    local listTop=y+math.max(86*scale,18*scale+titleBlockH+14*scale)
+    local descLines=0
+    if desc and tostring(desc)~="" then
+      local _,wrapped=descFont:getWrap(tostring(desc),w-64*scale)
+      descLines=type(wrapped)=="table" and math.max(1,#wrapped) or 1
+    end
+    local descH=descLines*descFont:getHeight()
+    local hintFont=fittedFont(19*scale,hint,w-64*scale)
+    local footerNeeded=14*scale+descH+(descH>0 and 10*scale or 0)
+      +hintFont:getHeight()+16*scale
+    local footerH=math.max(132*scale,footerNeeded)
+    local listH=math.max(1,h-(listTop-y)-footerH)
+    local desiredVisible=math.max(5,math.min(9,math.floor(7/den+.5)))
+    local minRowH=math.max(body:getHeight(),valueFont:getHeight())+math.max(6,9*scale)
+    local fitVisible=math.max(1,math.floor(listH/math.max(1,minRowH)))
+    local visible=math.max(1,math.min(desiredVisible,fitVisible))
+    local maxScroll=math.max(0,#rows-visible)
+    scroll=math.max(0,math.min(scroll,maxScroll))
+    if idx<=scroll then scroll=math.max(0,idx-1) end
+    if idx>scroll+visible then scroll=math.min(maxScroll,idx-visible) end
     local rh=listH/visible
 
     for slot=1,visible do
@@ -1320,15 +1429,20 @@ return function(mod)
 
       local label=tostring(row.label or row.id or "OPTION")
       local value=tostring(row.right or "")
+      local labelW=w*.54
+      local valueX=x+w*.64
+      local valueW=w*.27
+      local rowLabelFont=fittedFont(27*scale,label,labelW)
 
-      text(label,body,x+50*scale,
-        centeredTextY(barY,barH,body),
-        w*.60,"left",selected and c.text or c.muted)
+      text(label,rowLabelFont,x+50*scale,
+        centeredTextY(barY,barH,rowLabelFont),
+        labelW,"left",selected and c.text or c.muted)
 
       if value~="" then
-        text(value,valueFont,x+w*.64,
-          centeredTextY(barY,barH,valueFont),
-          w*.27,"right",selected and c.text or c.accent)
+        local rowValueFont=fittedFont(25*scale,value,valueW)
+        text(value,rowValueFont,valueX,
+          centeredTextY(barY,barH,rowValueFont),
+          valueW,"right",selected and c.text or c.accent)
       end
     end
 
@@ -1336,31 +1450,13 @@ return function(mod)
     color(c.divider)
     G.rectangle("fill",x+26*scale,footerY,w-52*scale,1)
 
-    local selected=rows[idx]
-    local desc=selected and selected.option and selected.option.description or ""
-    if selected and selected.resetBattleDefaults then
-      desc="Restore all battle settings to their defaults."
-    elseif selected and selected.resetUiDefaults then
-      desc="Restore all Modern UI settings to their defaults."
-    elseif selected and selected.submenu then
-      desc=selected.submenu and tostring(selected.submenu):find("ui_settings",1,true)
-        and "Open the Kanto in Motion Modern UI settings."
-        or "Open the Kanto in Motion battle settings."
-    elseif selected and selected.cancel then
-      local section=rawget(s,"_kimModernSettings")
-      desc=(section=="battle" or section=="ui")
-        and "Return to Kanto in Motion settings."
-        or "Close Kanto in Motion settings."
-    end
-
     if desc and tostring(desc)~="" then
       text(tostring(desc),descFont,x+32*scale,footerY+14*scale,
         w-64*scale,"left",c.muted)
     end
 
-    fittedText("UP/DOWN  SELECT   LEFT/RIGHT  CHANGE   A  CHANGE/OPEN   B  BACK",
-      19*scale,x+32*scale,y+h-small:getHeight()-16*scale,
-      w-64*scale,"left",c.accent)
+    text(hint,hintFont,x+32*scale,
+      y+h-hintFont:getHeight()-14*scale,w-64*scale,"left",c.accent)
 
     if scroll>0 then
       drawVerticalArrow(x+w-58*scale,y+24*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent)

@@ -1,4 +1,4 @@
-# Kanto in Motion v1.6.3
+# Kanto in Motion v1.6.4
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -6,9 +6,21 @@ It supports:
 
 - **Pokémon Red / Blue / Yellow** — National Dex #001–151
 - **Pokémon Gold / Silver / Crystal** — National Dex #001–251
-- **Pokémon FireRed / LeafGreen** — National Dex #001–386
+- **Pokémon FireRed / LeafGreen / Emerald** — National Dex #001–386
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
+
+## What’s new in v1.6.4
+
+v1.6.4 is a focused **Emerald compatibility and responsive-UI polish** update. It also includes a small Gen 2 title/CONTINUE layout repair and a neutral-size recalibration for KIM's Modern Battle UI.
+
+- **Emerald battle presentation compatibility:** when KIM owns the HD/3D battler presentation, Emerald's native alternate 2D front-sprite frames no longer appear over the KIM Pokémon during the entrance/cry sequence. The original cry/timing is preserved and the visual entrance beat is replaced with a small KIM-friendly hop.
+- **Emerald HD starter preview:** the opening starter confirmation screen now presents KIM's animated HD Pokémon at final window resolution instead of enlarging a low-resolution Game3 copy. The authored Emerald bag/circle/Poké Ball scene, cursor, text box, Yes/No prompt, and selection logic remain native.
+- **Gen 2 CONTINUE card:** the opening save-summary card now reserves enough room for `PLAYER / BADGES / POKéDEX / TIME`, keeping the TIME row above the divider and the `A CONTINUE / B BACK` footer inside the card on smaller windows.
+- **Responsive large-font menus:** general Modern UI **FONT SCALE** now tops out at **200%**. Settings, Options, KIM menus, title/main-menu rows, Pack/list rows, descriptions, values, and footer hints use font-aware row/column sizing and scrolling so combinations such as **COMPACT + 75% UI + 200% font** remain readable instead of stacking text into adjacent rows.
+- **Large-font selection alignment:** title/main-menu and affected settings/list selection bars use the rendered font height for vertical centering, keeping highlighted text centered as font size increases.
+- **Battle UI neutral calibration:** **BATTLE UI SIZE = 100%** remains the displayed/default value, but its physical footprint now matches the former **95%** size. Saved settings do not need to change; 100% is simply the new neutral reference.
+- **No HD asset re-download required:** the persistent external HD asset-cache format is unchanged. Existing healthy asset installs are reused normally.
 
 ## What’s new in v1.6.3
 
@@ -114,6 +126,13 @@ v1.6.0 is a major presentation, compatibility, and distribution update across al
 - Native **KIM ASSETS** Start Menu access for download/remove/re-download
 - In-battle Party/Summary compatibility for final-resolution HD menu Pokémon/icons
 
+### Emerald
+
+- HD/3D KIM battle Pokémon presentation with Emerald-specific native-frame suppression during the entrance/cry sequence
+- Small KIM-owned hop replaces the native alternate 2D cry animation while preserving Emerald's cry audio and timing
+- Final-resolution animated HD starter confirmation preview for Treecko, Torchic, and Mudkip
+- Native Emerald starter scene, cursor, text, Yes/No prompt, and Game3 state/logic remain source-owned
+
 ## HD Pokémon icons
 
 Kanto in Motion includes HD Rescaled Pokémon icons for **National Dex #001–386**.
@@ -128,6 +147,7 @@ Kanto in Motion includes HD Rescaled Pokémon icons for **National Dex #001–38
 ## Kanto in Motion settings
 
 Open **KANTO IN MOTION** from the mod settings screen. On **Red / Blue / Yellow**, the Gen 1 battle-specific controls are grouped under **BATTLE → OPEN**. The HD Asset Manager can also remove an installed external pack and make it available for a later re-download.
+
 
 ### Red / Blue / Yellow — main settings
 
@@ -164,7 +184,7 @@ Open **KANTO IN MOTION** from the mod settings screen. On **Red / Blue / Yellow*
 | **HUD SCALE** | OG / SCALED | OG | Chooses the HP/status HUD scale preset. |
 | **HUD SIZE** | 60%–100% in 5% steps | 100% | Fine-tunes the enemy/player HP/status HUD size. |
 | **HUD OPACITY** | 25%–100% in 5% steps | 100% | Adjusts HP/status HUD opacity. |
-| **BATTLE UI SIZE** | 60%–100% in 5% steps | 100% | Changes the footprint of the lower command/move/message panel. |
+| **BATTLE UI SIZE** | 60%–100% in 5% steps | 100% | Changes the footprint of the lower command/move/message panel. 100% is the calibrated neutral size and matches the physical footprint that 95% used in earlier releases. |
 | **BATTLE UI OPACITY** | 25%–100% in 5% steps | 100% | Adjusts the lower panel background opacity. |
 | **BATTLE TEXT SIZE** | 100%–400% in 25% steps | 150% | Scales Modern UI battle command, move, and message text. |
 | **MOVE LAYOUT** | GRID / VERTICAL | GRID | GRID uses a 2×2 move layout. VERTICAL lists moves top-to-bottom. |
@@ -201,7 +221,7 @@ These controls are grouped under **KANTO IN MOTION → UI SETTINGS**. They mirro
 | **PIXEL FRAME SCALE** | 1X / 2X / 3X / 4X | 2X | Scales the pixel-frame artwork by a whole-number multiplier. |
 | **UI DENSITY** | AUTO / COMPACT / COMFORTABLE | AUTO | Adjusts panel spacing and row height. |
 | **UI SCALE** | AUTO; 75%–150% in 5% steps; 175%–400% in 25% steps | 100% | Scales Gen 2 Modern UI panels and control spacing. 100% is calibrated to the cleaner Gen 1-like footprint. |
-| **FONT SCALE** | AUTO; 80%–200% in 5% steps; 225%–400% in 25% steps | 100% | Scales Modern UI title, body, caption, value, and hint text independently of panel size. |
+| **FONT SCALE** | AUTO; 80%–200% in 5% steps | 100% | Scales Modern UI title, body, caption, value, and hint text independently of panel size. Settings/list layouts adapt their row and footer spacing to larger fonts. |
 | **PIXEL ART FONT** | ON / OFF | OFF | ON uses the Plain Pixel font. OFF uses the normal scalable system font, matching the cleaner Gen 1-style presentation. |
 | **DIALOGUE TEXT SCALE** | INHERIT / 110% / 125% / 150% / 175% / 200% | INHERIT | Boosts dialogue, choices, quantities, and confirmation text separately from general font scale. |
 | **LAYOUT STYLE** | ADAPTIVE / FLOATING / FULL SCREEN | ADAPTIVE | Chooses responsive/floating cards or a larger full-screen presentation. |
@@ -218,7 +238,7 @@ These controls are grouped under **KANTO IN MOTION → UI SETTINGS**. They mirro
 | **MOD MANAGER UI** | ON / OFF | ON | Enables Modern UI presentation for Kanto in Motion's own settings screens. |
 | **SPRITE ANIMATION** | ON / OFF | ON | Animates supported KIM menu/Party/Pokédex artwork without changing the selected MENU SPRITES source. |
 | **MODERN BATTLE UI** | ON / OFF | ON | Replaces only the native lower battle dialogue/command/move surface; the native Gen 2 HP/status HUD and battle logic remain unchanged. |
-| **BATTLE UI SIZE** | 60%–100% in 5% steps | 100% | Adjusts the Gen 2 Modern lower battle-panel footprint while keeping it bottom-anchored. |
+| **BATTLE UI SIZE** | 60%–100% in 5% steps | 100% | Adjusts the Gen 2 Modern lower battle-panel footprint while keeping it bottom-anchored. 100% is the calibrated neutral size and matches the physical footprint that 95% used in earlier releases. |
 | **BATTLE UI OPACITY** | 25%–100% in 5% steps | 100% | Adjusts only the Gen 2 Modern lower battle-panel background opacity. |
 | **BATTLE TEXT SIZE** | 100%–400% in 25% steps | 150% | Scales Gen 2 Modern battle command, move, and message text independently of the native HP/status HUD. |
 | **MOVE LAYOUT** | GRID / VERTICAL | GRID | GRID uses a 2×2 move selector. VERTICAL lists the four moves top-to-bottom. |
@@ -312,7 +332,7 @@ External compatibility mod packages are not bundled. v1.6.0 directly vendors onl
 
 ### Installation / first launch
 
-1. Install **Kanto in Motion v1.6.3** and enable it in Gen1Recomp.
+1. Install **Kanto in Motion v1.6.4** and enable it in Gen1Recomp.
 2. On Red/Blue/Yellow and Gold/Silver/Crystal, KIM opens the **HD ASSET MANAGER** when the external HD battle pack is not already cached. On FireRed/LeafGreen, open the native Start Menu and choose **KIM ASSETS**.
 3. Choose **A — DOWNLOAD** to download the official asset ZIP once, or **B — USE VANILLA / LATER** to continue without it.
 4. After a successful install, the HD assets remain in Gen1Recomp's installation-scoped KIM cache and are reused by later KIM code updates.

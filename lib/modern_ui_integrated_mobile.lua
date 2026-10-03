@@ -486,15 +486,14 @@ local PLAIN_PIXEL_RASTER_STEP = 15
 local UI_SCALE_MIN_PERCENT = 75
 local UI_SCALE_MAX_PERCENT = 400
 local FONT_SCALE_MIN_PERCENT = 80
-local FONT_SCALE_MAX_PERCENT = 400
-local FONT_AUTO_MAX_PERCENT = 500
+local FONT_SCALE_MAX_PERCENT = 200
+local FONT_AUTO_MAX_PERCENT = 200
 -- Preserve the released AUTO sizes through 1080p, then let large displays
 -- resume growing instead of pinning every 4K/5K presentation to the old cap.
 local UI_AUTO_LEGACY_CEILING_PERCENT = 150
 local FONT_AUTO_LEGACY_CEILING_PERCENT = 200
 local PIXEL_FONT_SCALE_CHOICES = {
   { "AUTO", "auto" }, { "1X", "100" }, { "2X", "200" },
-  { "3X", "300" }, { "4X", "400" },
 }
 local FONT_SCALE_CHOICES = { { "AUTO", "auto" } }
 for percent = 80, 200, 5 do
@@ -514,7 +513,7 @@ local function normalizedPixelFontScale(value, pixelEnabled)
     local numeric = tonumber(value)
     if not numeric then return "100" end
     local scale = numeric < 10 and numeric or numeric / 100
-    return tostring(clamp(math.floor(scale + 0.5), 1, 4) * 100)
+    return tostring(clamp(math.floor(scale + 0.5), 1, 2) * 100)
   end
   if value ~= nil and tostring(value):lower() == "auto" then return "auto" end
   local numeric = tonumber(value) or 100
@@ -526,7 +525,7 @@ local function resolvedPixelFontPercent(value, uiPercent)
   local normalized = normalizedPixelFontScale(value, true)
   if normalized == "auto" then
     local desired = (tonumber(uiPercent) or 100) / 100 / 1.5
-    local step = clamp(math.floor(desired + 0.5), 1, 4)
+    local step = clamp(math.floor(desired + 0.5), 1, 2)
     return step * 100, true
   end
   return tonumber(normalized) or 100, false
@@ -3451,7 +3450,7 @@ return function(mod)
         UI_AUTO_LEGACY_CEILING_PERCENT, UI_SCALE_MAX_PERCENT, true),
       default = "100" },
     { key = "fontScale", label = "FONT SCALE", type = "choice",
-      description = "Scale title, body, caption, value, and hint text manually from 80% to 400%, or choose AUTO for ratio-preserving 4K/5K sizing up to 500%.",
+      description = "Scale title, body, caption, value, and hint text manually from 80% to 200%, or choose AUTO for responsive sizing up to 200%.",
       choices = FONT_SCALE_CHOICES, default = "100" },
     { key = "pixelFont", label = "PIXEL ART FONT", type = "toggle", default = false,
       description = "Enable the experimental multilingual Plain Pixel font. Its 11-row artwork uses the author's crisp 15-point raster steps, and fractional text origins snap to whole pixels. Older builds and missing glyphs fall back safely to the system font.", },
@@ -4722,12 +4721,10 @@ return function(mod)
   }
   runtime.uiGallerySystemFontScales = {
     { "80%", "80" }, { "100%", "100" }, { "125%", "125" },
-    { "150%", "150" }, { "200%", "200" }, { "300%", "300" },
-    { "400%", "400" }, { "AUTO", "auto" },
+    { "150%", "150" }, { "200%", "200" }, { "AUTO", "auto" },
   }
   runtime.uiGalleryPixelFontScales = {
     { "AUTO", "auto" }, { "1X", "100" }, { "2X", "200" },
-    { "3X", "300" }, { "4X", "400" },
   }
   runtime.uiGalleryContentLevels = {
     { id = "empty", label = "EMPTY", count = 0 },
@@ -13836,7 +13833,10 @@ return function(mod)
   -- status, or any other Modern UI screen.
   function battleRuntime.lowerPanelSizeScale()
     local percent = tonumber(runtime.option("battleUiSize", "100")) or 100
-    return clamp(percent, 60, 100) / 100
+    -- KIM's authored lower battle panel ran slightly larger than the preferred
+    -- neutral footprint. Keep the user-facing/default value at 100%, but bake
+    -- the former 95% calibration into the renderer so 100% is the new neutral.
+    return (clamp(percent, 60, 100) / 100) * 0.95
   end
 
   function battleRuntime.lowerPanelVisualTheme(theme)

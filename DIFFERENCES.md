@@ -1,14 +1,12 @@
-# Kanto in Motion v1.6.3 scope
+# Kanto in Motion v1.6.4 scope
 
-Compared with v1.6.2, v1.6.3 is a focused Gold / Silver / Crystal Battle Art compatibility and Modern UI polish update.
+Compared with v1.6.3, v1.6.4 focuses on Emerald presentation compatibility and responsive large-font UI behavior.
 
-- Finalizes the Battle Art Voxel Gen2 2.1.x bridge for higher-resolution 4x KIM HD battler cards.
-- Adds KIM-owned, foot-anchored contact shadows for KIM HD battlers inside Battle Art while leaving Battle Art's arena/camera/environment untouched.
-- Preserves and repositions the native G/S/C HP/status HUD to the outer sides of Battle Art's live widescreen battlefield.
-- Fixes Crystal CONTINUE after Battle Art's voxel-cache preload.
-- Cleans up Pack `<NEXT>` control markers and Start Menu `<PK><MN>` text tokens.
-- Replaces unsupported font-arrow glyphs with KIM-drawn arrows across Gen 2 Modern UI.
-- Makes long menu/footer hints responsive so they stay inside their cards on mobile and at larger font scales.
-- Centers affected list-row text inside selection highlight bars.
+- Suppresses Emerald's native alternate 2D front-sprite frame when KIM owns the HD/3D battler presentation, replacing the visual cry beat with a small hop while keeping native audio/timing.
+- Presents Emerald's opening starter Pokémon through KIM's animated HD final-resolution path instead of a low-resolution Game3-scaled copy.
+- Repairs the Gen 2 CONTINUE save-summary layout so the TIME row and footer remain separated on smaller windows.
+- Caps general Modern UI font scaling at 200% and makes affected title/settings/list layouts adapt row spacing, fitting, scrolling, descriptions, and footer hints to large fonts.
+- Keeps affected selection bars vertically centered around enlarged text.
+- Recalibrates BATTLE UI SIZE so 100% is the new neutral value with the former 95% physical footprint.
 
-The v1.6.0 persistent external HD asset cache remains in place, and normal KIM code updates do not require users to redownload an already-installed pack.
+The persistent external HD asset cache remains in place, and normal KIM code updates do not require users to redownload an already-installed healthy pack.

@@ -594,7 +594,7 @@ return function(mod)
         default = true, description = "Replace only the native Gen 2 lower battle dialogue/command/move surface; the HP/status HUD and battle logic remain native." },
       { key = "battleUiSize", label = "BATTLE UI SIZE", type = "choice",
         default = "100", choices = percentChoices(60, 100, 5),
-        description = "Adjust the Gen 2 Modern lower battle-panel footprint while keeping it bottom-anchored." },
+        description = "Adjust the Gen 2 Modern lower battle-panel footprint while keeping it bottom-anchored. 100% is KIM's calibrated neutral size." },
       { key = "battleUiOpacity", label = "BATTLE UI OPACITY", type = "choice",
         default = "100", choices = percentChoices(25, 100, 5),
         description = "Adjust only the Gen 2 Modern lower battle-panel background opacity." },
@@ -723,7 +723,7 @@ return function(mod)
         { "60%", "60" }, { "65%", "65" }, { "70%", "70" },
         { "75%", "75" }, { "80%", "80" }, { "85%", "85" },
         { "90%", "90" }, { "95%", "95" }, { "100%", "100" },
-      }, description = "Adjust the lower battle command/move/message panel footprint while keeping it bottom-anchored. Desktop layouts can grow upward when a large pixel font needs more room; mobile keeps its authored battle-dialog footprint at 100%." },
+      }, description = "Adjust the lower battle command/move/message panel footprint while keeping it bottom-anchored. 100% is KIM's calibrated neutral size (the former 95% footprint). Desktop layouts can grow upward when a large pixel font needs more room." },
     { key = "battleUiOpacity", label = "BATTLE UI OPACITY", type = "choice",
       default = "100", choices = {
         { "25%", "25" }, { "30%", "30" }, { "35%", "35" },
@@ -6004,6 +6004,142 @@ return function(mod)
     end
   end
   if not IS_GEN2 then installStockSummaryPortraitPass() end
+
+  -- Emerald's starter-choose screen is rendered inside Game3's native 240x160
+  -- fullscreen UI.  To preserve the original HD KIM pixels, remove only the
+  -- Pokemon from StarterChoose:draw(), let Game3 finish presenting the COMPLETE
+  -- screen, and then draw the current atlas frame from a Game3.draw() wrapper.
+  -- This wrapper is deliberately outside Display.present/render.hud so it runs
+  -- after every Game3 presentation path has completed.
+  local function patchGame3StarterChoose()
+    if IS_GEN2 then return end
+
+    local okStarter, StarterChoose = pcall(require, "src.ui.game3.rse.starter_choose")
+    local okDisplay, G3Display = pcall(require, "src.core.game3.display")
+    local okGame3, Game3 = pcall(require, "src.core.Game3")
+    if not (okStarter and type(StarterChoose) == "table"
+        and type(StarterChoose.draw) == "function"
+        and okDisplay and type(G3Display) == "table"
+        and type(G3Display.fit) == "function"
+        and okGame3 and type(Game3) == "table"
+        and type(Game3.draw) == "function") then
+      if mod.log and type(mod.log.warn) == "function" then
+        mod.log:warn("Emerald starter HD outer draw bridge unavailable")
+      end
+      return
+    end
+
+    -- Remove the Pokemon from Emerald's low-resolution fullscreen UI pass.
+    if not StarterChoose._kantoInMotionHdStarterDrawV31 then
+      local nativeStarterDraw = StarterChoose.draw
+      StarterChoose._kantoInMotionHdStarterDrawV31 = nativeStarterDraw
+      StarterChoose.draw = function(self, ...)
+        if not (self and self.mon and menuSpritesEnabled()) then
+          return nativeStarterDraw(self, ...)
+        end
+
+        local species = self.mon.species
+        local front = species and bridgeFront(species, selectedGeneration()) or nil
+        if not front then return nativeStarterDraw(self, ...) end
+
+        local savedMon = self.mon
+        self.mon = nil
+        local result = { pcall(nativeStarterDraw, self, ...) }
+        self.mon = savedMon
+        if not result[1] then error(result[2], 0) end
+        return unpackCompat(result, 2)
+      end
+    end
+
+    if not Game3._kantoInMotionHdStarterOuterDrawV31 then
+      local nativeGame3Draw = Game3.draw
+      Game3._kantoInMotionHdStarterOuterDrawV31 = nativeGame3Draw
+
+      Game3.draw = function(self, ...)
+        local result = { pcall(nativeGame3Draw, self, ...) }
+        if not result[1] then error(result[2], 0) end
+
+        local screen = type(StarterChoose.active) == "function"
+          and StarterChoose.active() or nil
+        if not (screen and screen.mon and menuSpritesEnabled()) then
+          return unpackCompat(result, 2)
+        end
+
+        local species = screen.mon.species
+        local front, generation, normalized = bridgeFront(species, selectedGeneration())
+        if not front then return unpackCompat(result, 2) end
+        local entry = cacheEntry(front, generation, normalized)
+        if not entry then return unpackCompat(result, 2) end
+
+        local frame = currentFrame(front)
+        local frameCount = math.max(1, math.floor(tonumber(front.frames) or 1))
+        frame = math.max(1, math.min(math.floor(tonumber(frame) or 1), frameCount))
+        local quad = quadFor(entry, frame)
+        if not quad then return unpackCompat(result, 2) end
+
+        local iw, ih = tonumber(entry.width), tonumber(entry.height)
+        if not (iw and ih and iw > 0 and ih > 0) then
+          return unpackCompat(result, 2)
+        end
+
+        local winW, winH = love.graphics.getDimensions()
+        local fit, ox, oy, _, _, fitY = G3Display.fit(winW, winH)
+        fitY = fitY or fit
+        if not (fit and fitY and fit > 0 and fitY > 0) then
+          return unpackCompat(result, 2)
+        end
+
+        -- Follow Emerald's native starter movement and affine zoom, but do not
+        -- enlarge an HD atlas cell above 1:1 source size. At confirmation this
+        -- makes the image intentionally smaller than the native 64x64 slot on a
+        -- large desktop window, but each source pixel stays a real screen pixel
+        -- instead of being blown up by the 240x160 presentation scale.
+        local affine = screen.mon.affine
+        local nativeScale = math.max(0,
+          (tonumber(affine and affine.scale) or 256) / 256)
+        local desiredW = 64 * nativeScale * fit
+        local desiredH = 64 * nativeScale * fitY
+        local drawScale = math.min(desiredW / iw, desiredH / ih, 1.0)
+        if not drawScale or drawScale <= 0 then
+          return unpackCompat(result, 2)
+        end
+
+        local cx = ox + (tonumber(screen.mon.x) or 120) * fit
+        local cy = oy + (tonumber(screen.mon.y) or 64) * fitY
+        local dw, dh = iw * drawScale, ih * drawScale
+        local dx, dy = cx - dw * 0.5, cy - dh * 0.5
+
+        love.graphics.push("all")
+        love.graphics.origin()
+        love.graphics.setCanvas()
+        love.graphics.setScissor()
+        love.graphics.setShader()
+        love.graphics.setBlendMode("alpha")
+        love.graphics.setColor(1, 1, 1, 1)
+        if entry.atlas.setFilter then
+          pcall(entry.atlas.setFilter, entry.atlas, "linear", "linear")
+        end
+        love.graphics.draw(entry.atlas, quad, dx, dy, 0, drawScale, drawScale)
+        if entry.atlas.setFilter then
+          pcall(entry.atlas.setFilter, entry.atlas, "nearest", "nearest")
+        end
+        love.graphics.pop()
+
+        if not mod._kantoInMotionEmeraldStarterOuterLogged
+            and mod.log and type(mod.log.info) == "function" then
+          mod._kantoInMotionEmeraldStarterOuterLogged = true
+          mod.log:info("Emerald starter HD atlas drawn from outer Game3 frame")
+        end
+
+        return unpackCompat(result, 2)
+      end
+    end
+
+    if mod.log and type(mod.log.info) == "function" then
+      mod.log:info("Emerald starter HD outer Game3 bridge enabled")
+    end
+  end
+  patchGame3StarterChoose()
 
   -- Gen1Recomp's evolution movie caches the old and new front images once at
   -- EvolutionState.new(), then alternates those two images while the sequence

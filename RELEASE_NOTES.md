@@ -1,21 +1,19 @@
-# Kanto in Motion v1.6.3
+# Kanto in Motion v1.6.4
 
-v1.6.3 is a focused Gold / Silver / Crystal compatibility and Modern UI polish release.
+v1.6.4 focuses on **Emerald compatibility**, **large-font Modern UI responsiveness**, and a few presentation calibrations carried forward from community testing.
 
 ## Highlights
 
-- **Gen 2 Battle Art HD presentation** — KIM HD Pokémon now use higher-resolution 4x battler cards in Battle Art Voxel Gen2 2.1.x, reducing visible enlargement pixelation in the 3D scene.
-- **Gen 2 Battle Art shadows** — KIM HD battlers use KIM-owned, camera-aligned contact shadows anchored to Battle Art's shared battler-foot plane. `PKMN SHADOWS` and `SHADOW OPACITY` continue to control the result.
-- **Native G/S/C HUD placement in Battle Art** — the real Gen 2 enemy/player HP/status HUD is preserved and repositioned to the outer edges of the live widescreen 3D battlefield instead of sitting over the centered native battle area.
-- **Crystal CONTINUE compatibility** — resuming a Crystal save after Battle Art's voxel-cache preload now returns to the native CONTINUE action correctly.
-- **Gen 2 arrow rendering** — navigation arrows, scroll indicators, dialogue/battle continue prompts, clock arrows, and similar controls are drawn directly by KIM so unsupported font glyphs no longer appear as square boxes.
-- **Responsive menu hints** — long footer/control hints now fit their available Modern UI panels more safely on mobile and when font scaling is increased.
-- **Pack text cleanup** — Crystal `<NEXT>` markers are converted to description line breaks instead of being shown literally.
-- **Start Menu text cleanup** — the Pokémon entry description now reads **Party POKéMON status** instead of exposing `<PK><MN>` control tokens.
-- **Selection alignment** — affected Gen 2 Start Menu, Pack/CANCEL, and related list highlights now center their text vertically in the selection bar.
+- **Emerald battle compatibility** — when KIM owns the HD/3D battler presentation, Emerald's native alternate 2D front-sprite frame is suppressed during the entrance/cry sequence so it no longer overlays the KIM Pokémon. The original cry/timing remains intact, with a small KIM-friendly hop providing the visual beat.
+- **Emerald HD starter preview** — Treecko, Torchic, and Mudkip now use KIM's animated HD presentation at final window resolution on the opening starter confirmation screen while Emerald retains ownership of the surrounding scene and selection logic.
+- **Gen 2 CONTINUE layout** — the save-summary card now keeps the TIME row, divider, and `A CONTINUE / B BACK` footer separated correctly on smaller layouts.
+- **Font scale capped at 200%** — the general Modern UI font range now stops at 2×, including AUTO scaling.
+- **Responsive extreme-font layouts** — title/main menu, Options, UI Settings, KIM settings, Pack/list rows, right-side values, descriptions, and footer/control hints now adapt their row spacing, fitting, and scrolling for small-panel/large-font combinations such as COMPACT + 75% UI + 200% font.
+- **Selection-bar centering** — affected title/settings/list highlights use rendered font height so the text remains vertically centered at enlarged font sizes.
+- **BATTLE UI SIZE recalibrated** — 100% remains the displayed/default value, but now renders at the former 95% physical footprint. Existing saved values are not rewritten.
 
 ## Compatibility notes
 
-Battle Art itself is not modified. KIM continues to preserve native Gold/Silver/Crystal battle logic, HP/status/EXP state, party-ball timing, caught-state behavior, trainers, and move timing underneath the presentation changes.
+The persistent external HD asset-cache architecture is unchanged. Existing healthy HD asset installs do **not** need to be downloaded again for v1.6.4.
 
-The v1.6.0 persistent external HD asset-cache architecture is unchanged. Existing healthy HD asset installs do **not** need to be downloaded again for v1.6.3.
+Emerald compatibility is implemented entirely on the KIM presentation side. Native Emerald battle timing, cry audio, starter-scene input/state, and surrounding Game3 UI remain source-owned.

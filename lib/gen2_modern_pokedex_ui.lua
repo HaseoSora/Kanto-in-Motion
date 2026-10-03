@@ -1,4 +1,4 @@
--- Kanto in Motion v1.6.3 - Gen 2 Modern Pokedex UI v29 -- responsive footer hints
+-- Kanto in Motion v1.6.4 - Gen 2 Modern Pokedex UI v29 -- responsive footer hints
 --
 -- The Pokédex data model and presentation conversion below are the exact
 -- Gen2 Clean UI 0.4.1 adapter/presenter supplied by the user, vendored into

@@ -559,12 +559,92 @@ return function(mod)
   local okChrome, BattleChrome = pcall(require, "src.ui.game3.battle_chrome")
   local okAnim, BattleAnim = pcall(require, "src.core.game3.battle.anim")
   local okState, BattleState = pcall(require, "src.core.game3.battle.state")
+  local okMonAnimBattle, MonAnimBattle = pcall(require, "src.core.game3.battle.mon_anim_battle")
+  local okGameVersion, GameVersion = pcall(require, "src.core.GameVersion")
+  local function currentVersionIsEmerald()
+    if not (okGameVersion and GameVersion and type(GameVersion.get) == "function") then
+      return false
+    end
+    local ok, id = pcall(GameVersion.get)
+    return ok and tostring(id or ""):lower() == "emerald"
+  end
   local okPicSizes, PicSizes = pcall(require, "src.core.game3.battle.anim_port.g1_pic_sizes")
   local okDisplay, Display = pcall(require, "src.core.game3.display")
   local okRenderer, Renderer = pcall(require, "src.render.Renderer")
   local okBg, BattleBg = pcall(require, "src.core.game3.battle.bg")
   local okMap, Game3Map = pcall(require, "src.core.game3.map")
   local okRuntime, Game3Runtime = pcall(require, "src.core.game3.runtime")
+
+  -- Emerald front battlers use species-specific two-frame entrance animations
+  -- while their cry plays.  The ordinary KIM picture provider already blanks
+  -- the native 64x64 battler during battle, but those entrance animations fetch
+  -- their alternate frame directly from mon_anim and therefore bypass that
+  -- provider.  Keep the native timing/cry, suppress the alternate-frame leak,
+  -- and replace the species-specific transform with one small KIM-friendly hop.
+  -- This also gives staged/3D presenters that consume Game3's live presentation
+  -- offsets a simple entrance motion without drawing the original 2D frame.
+  if okMonAnimBattle and type(MonAnimBattle) == "table"
+      and type(MonAnimBattle.start) == "function"
+      and type(MonAnimBattle.apply) == "function" then
+    local bridge = MonAnimBattle._kantoInMotionEmeraldCryHop
+    if type(bridge) ~= "table" then
+      bridge = {
+        nativeStart = MonAnimBattle.start,
+        nativeApply = MonAnimBattle.apply,
+        mod = mod,
+      }
+      MonAnimBattle._kantoInMotionEmeraldCryHop = bridge
+
+      local function hopEnabled()
+        local currentMod = bridge.mod
+        if not currentMod or not currentVersionIsEmerald() then return false end
+        if not battleActive() then return false end
+        if not (currentMod.options and type(currentMod.options.get) == "function") then return true end
+        local ok, value = pcall(currentMod.options.get, currentMod.options, "battleSprites")
+        return not ok or value ~= false
+      end
+
+      MonAnimBattle.start = function(key, kind, opts)
+        local sprite = bridge.nativeStart(key, kind, opts)
+        if sprite and kind == "front" and hopEnabled() then
+          sprite._kantoInMotionEmeraldCryHop = true
+        end
+        return sprite
+      end
+
+      MonAnimBattle.apply = function(pres, sprite)
+        bridge.nativeApply(pres, sprite)
+        if not (pres and sprite and sprite._kantoInMotionEmeraldCryHop and hopEnabled()) then
+          return
+        end
+
+        -- Never expose Emerald's alternate 64x64 frame.  draw_mon_sprite() only
+        -- calls MonAnim.framePic() when this value is non-zero, so zero keeps the
+        -- transparent KIM battle placeholder in the native layer.
+        pres.monFrame = 0
+
+        -- Replace the species-specific affine animation with a short, restrained
+        -- hop.  Six native Game3 pixels is visible in both flat HD and staged 3D
+        -- presentation without pulling the Pokemon away from its battle anchor.
+        local frames = math.max(0, tonumber(sprite.frames) or 0)
+        local duration = 18
+        local t = math.min(1, frames / duration)
+        local hop = -6 * math.sin(math.pi * t)
+        pres.ox = 0
+        pres.oy = hop
+        pres.sx = 1
+        pres.sy = 1
+        pres.rotation = 0
+        pres.invisible = nil
+        pres.blendCoeff = nil
+        pres.blendColor = nil
+      end
+    else
+      -- Hot reload: keep the installed wrappers but point them at the current
+      -- KIM instance/options instead of closing over the previous mod object.
+      bridge.mod = mod
+    end
+  end
 
   -- Game3's preferred plane presenter uses the shared Renderer placement.
   -- On Android/iOS portrait that presenter intentionally reserves a large
@@ -1480,6 +1560,48 @@ return function(mod)
     return #entries > 0 and { kind = "mon_pic", entries = entries } or nil
   end
 
+  -- Emerald does not use FR/LG's generic mon_pic presenter for its opening
+  -- starter choice.  rse/starter_choose.lua owns a separate fullscreen scene
+  -- and draws Pokemon.frontPic() directly into the native 240x160 Game3 frame.
+  -- Capture that scene explicitly so it can use the same final-resolution atlas
+  -- replay path that already keeps FR/LG's starter/script pictures sharp.
+  local function emeraldStarterPreviewState(StarterChoose)
+    if not currentVersionIsEmerald() then return nil end
+    if not StarterChoose or not StarterChoose.mon then return nil end
+
+    local mon = StarterChoose.mon
+    local species = tonumber(mon.species)
+    if not species or species <= 0 then return nil end
+
+    local personality = 0x8000
+    local picSpecies = type(Pokemon.picSpecies) == "function"
+      and Pokemon.picSpecies(species, personality) or species
+    local rec = previewRec(picSpecies, false, personality)
+    if not rec then return nil end
+
+    local nativeScale = 1
+    if type(mon.affine) == "table" then
+      nativeScale = (tonumber(mon.affine.scale) or 256) / 256
+    end
+    if nativeScale <= 0 then return nil end
+
+    local cx = tonumber(mon.x) or 120
+    local cy = tonumber(mon.y) or 64
+    local box = 64 * nativeScale
+    local entries = {}
+    addPreviewEntry(entries, rec,
+      cx - box * 0.5, cy - box * 0.5,
+      box, box, false)
+    if entries[1] then
+      -- The final-resolution atlas bridge is now confirmed working for
+      -- Emerald's starter screen.  Let the authored KIM preview scale breathe
+      -- like the other Game3 HD previews instead of pinning it to a strict
+      -- 1:1 physical-pixel diagnostic cap.
+      entries[1].maxPhysicalScale = 1.5
+    end
+    return #entries > 0 and { kind = "emerald_starter", entries = entries } or nil
+  end
+
   local function drawHdPreviewEntry(entry, originX, originY, ux, uy)
     local rec = entry and entry.rec
     if not rec then return false end
@@ -1497,6 +1619,13 @@ return function(mod)
       math.max(1, boxW - 2) / source.width,
       math.max(1, boxH - 2) / source.height
     )
+
+    local maxPhysicalScale = tonumber(entry.maxPhysicalScale)
+    if maxPhysicalScale and maxPhysicalScale > 0 then
+      local presentationScale = math.max(math.abs(tonumber(ux) or 1),
+        math.abs(tonumber(uy) or 1), 0.0001)
+      scale = math.min(scale, maxPhysicalScale / presentationScale)
+    end
 
     local drawW = source.width * scale
     local drawH = source.height * scale
@@ -1602,6 +1731,27 @@ return function(mod)
 
         local ok, err = pcall(nativeDraw, ...)
         MonPic._img, MonPic._w, MonPic._h = oldImg, oldW, oldH
+        if state then pendingHdPreview = state end
+        if not ok then error(err, 0) end
+      end
+    end
+
+    local okStarter, StarterChoose = pcall(require, "src.ui.game3.rse.starter_choose")
+    if okStarter and StarterChoose and type(StarterChoose.draw) == "function"
+        and not StarterChoose._kantoInMotionHdPreviewDraw then
+      local nativeDraw = StarterChoose.draw
+      StarterChoose._kantoInMotionHdPreviewDraw = nativeDraw
+      StarterChoose.draw = function(self, ...)
+        local state = emeraldStarterPreviewState(self)
+        local savedMon = self and self.mon or nil
+
+        -- StarterChoose:draw() touches self.mon only for its final Pokemon draw,
+        -- after the native scene/circle/text/yes-no chrome is already complete.
+        -- Hide just that rasterized 64x64 Pokemon, then replay the atlas frame
+        -- from render.hud using the same proven path as FR/LG MonPic previews.
+        if state and self then self.mon = nil end
+        local ok, err = pcall(nativeDraw, self, ...)
+        if state and self then self.mon = savedMon end
         if state then pendingHdPreview = state end
         if not ok then error(err, 0) end
       end
