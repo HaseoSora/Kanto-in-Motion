@@ -1,4 +1,4 @@
-# Kanto in Motion v1.6.2
+# Kanto in Motion v1.6.3
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -9,6 +9,20 @@ It supports:
 - **Pokémon FireRed / LeafGreen** — National Dex #001–386
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
+
+## What’s new in v1.6.3
+
+v1.6.3 is a focused **Gold / Silver / Crystal** compatibility and Modern UI polish update, with the largest changes targeting **Battle Art Voxel Gen2 2.1.x** and responsive Gen 2 menu presentation.
+
+- **Gen 2 Battle Art HD battlers:** KIM now feeds Battle Art higher-resolution 4x battler cards for G/S/C HD Pokémon, reducing the visible pixelation that occurred when the native-sized cards were enlarged in the 3D scene.
+- **Gen 2 Battle Art shadows:** KIM HD battlers use KIM-owned, camera-aligned contact shadows on Battle Art's shared battle-floor plane. **PKMN SHADOWS** still controls quality and **SHADOW OPACITY** controls darkness, while Battle Art continues to own the arena, camera, lighting, move effects, and environment.
+- **Gen 2 Battle Art native HUD placement:** the actual G/S/C enemy/player HP/status HUD is captured inside Battle Art's widescreen pass and placed at the outer-left / outer-right of the live 3D battlefield. Native names, levels, status, HP/EXP, party-ball timing, and caught-state behavior remain source-owned.
+- **Crystal CONTINUE + Battle Art:** resuming a Crystal save after Battle Art's voxel-cache preload no longer re-enters the preload callback instead of the game's native CONTINUE action.
+- **Pack description cleanup:** embedded Crystal `<NEXT>` control markers are now rendered as proper description line breaks instead of appearing as literal text.
+- **Reliable arrows across Gen 2 Modern UI:** menu navigation arrows, scroll indicators, dialogue/battle continue prompts, clock arrows, and similar controls are now drawn by KIM instead of depending on unsupported font glyphs that could appear as square boxes.
+- **Responsive control hints:** Pack, Trainer Card, Pokégear, Options, KIM Settings, Pokédex, Mart/dialog, Dex Radar, and related footer hints now fit their available panel width more safely on mobile and at larger font scales instead of running outside the card.
+- **Gen 2 text-token cleanup:** the Start Menu Pokémon description now displays **Party POKéMON status** instead of exposing the internal `<PK><MN>` control tokens.
+- **Selection-bar alignment:** affected Gen 2 list rows now vertically center their text within the highlight bar, including Start Menu and Pack/CANCEL-style rows. Pokégear and Pokémon Party retain their already-correct presentation.
 
 ## What’s new in v1.6.2
 
@@ -284,7 +298,7 @@ No files in the Dex Radar mod are patched or replaced.
 
 Kanto in Motion includes compatibility paths for optional external mods such as:
 
-- Battle Art
+- Battle Art — Gen 1 compatibility plus a Gen 2 Battle Art Voxel 2.1.x bridge. G/S/C KIM HD Pokémon use higher-resolution 4x battler cards, KIM-owned `PKMN SHADOWS` / `SHADOW OPACITY` contact shadows, and native G/S/C HP/status HUD placement at the outer edges of the 3D battlefield while Battle Art keeps the arena, camera, lighting, environment, and move effects.
 - PotatoVoxel
 - Typed Move Colors
 - Useful Bag
@@ -298,7 +312,7 @@ External compatibility mod packages are not bundled. v1.6.0 directly vendors onl
 
 ### Installation / first launch
 
-1. Install **Kanto in Motion v1.6.2** and enable it in Gen1Recomp.
+1. Install **Kanto in Motion v1.6.3** and enable it in Gen1Recomp.
 2. On Red/Blue/Yellow and Gold/Silver/Crystal, KIM opens the **HD ASSET MANAGER** when the external HD battle pack is not already cached. On FireRed/LeafGreen, open the native Start Menu and choose **KIM ASSETS**.
 3. Choose **A — DOWNLOAD** to download the official asset ZIP once, or **B — USE VANILLA / LATER** to continue without it.
 4. After a successful install, the HD assets remain in Gen1Recomp's installation-scoped KIM cache and are reused by later KIM code updates.
@@ -371,3 +385,11 @@ Kanto in Motion is an unofficial fan-made mod and is not affiliated with or endo
 
 ### Slim-core asset split note
 The downloadable HD pack contains only the large HD Pokémon battle sprite sheets and HD battle backgrounds. KIM's small battle-support assets (including selectable player trainer frames/animations) remain packaged with the core mod so battles can initialize safely before/without the HD pack.
+
+### Gen 2 Battle Art compatibility
+
+For **Battle Art Voxel Gen2 2.1.x**, KIM supplies higher-resolution 4x G/S/C HD battler cards to the 3D presentation and draws its own camera-aligned contact shadows for those KIM HD cards. `PKMN SHADOWS` controls shadow quality and `SHADOW OPACITY` controls darkness. The contact ellipse is anchored to Battle Art's shared battler-foot plane so it stays planted beneath the Pokémon while the camera moves.
+
+When **3D-BTL** is active, KIM keeps the actual native G/S/C HP/status HUD. The live enemy and player HUD bands are captured during Battle Art's widescreen render pass and placed toward the outside-left and outside-right of the 3D battlefield rather than remaining over the centered 160×144 battle area. Native HP/status/EXP, party-ball timing, caught-state behavior, battle logic, trainers, and move timing remain source-owned.
+
+Battle Art's arena, camera, lighting, world geometry, and move effects remain Battle Art-owned; KIM does not modify Battle Art files. Fully closing and restarting Gen1Recomp after replacing either compatibility mod is recommended so old Lua modules are not left resident in the launcher process.

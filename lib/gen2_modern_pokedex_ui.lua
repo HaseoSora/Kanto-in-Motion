@@ -1,4 +1,4 @@
--- Kanto in Motion v1.5.3 - Gen 2 Modern Pokedex UI v28
+-- Kanto in Motion v1.6.3 - Gen 2 Modern Pokedex UI v29 -- responsive footer hints
 --
 -- The Pokédex data model and presentation conversion below are the exact
 -- Gen2 Clean UI 0.4.1 adapter/presenter supplied by the user, vendored into
@@ -79,6 +79,24 @@ return function(mod)
       local ok=pcall(G.printf,s,x,y,w,align or "left")
       if not ok then G.printf(s:gsub("[\128-\255]","?"),x,y,w,align or "left") end
     else G.print(s,x,y) end
+  end
+  local function fittedFont(basePx,value,maxW)
+    local px=math.max(8,tonumber(basePx) or 8)
+    local f=font(px)
+    value=tostring(value or "")
+    if not maxW or maxW<=0 then return f end
+    while px>8 and f:getWidth(value)>maxW do
+      local ratio=maxW/math.max(1,f:getWidth(value))
+      local nextPx=math.max(8,math.min(px-1,px*math.max(.72,ratio*.97)))
+      if nextPx>=px then nextPx=px-1 end
+      px=nextPx
+      f=font(px)
+    end
+    return f
+  end
+  local function fittedText(value,basePx,x,y,w,align,c)
+    local f=fittedFont(basePx,value,w)
+    return text(value,f,x,y,w,align,c)
   end
   local function playfield()
     local ww,wh=G.getDimensions()
@@ -233,7 +251,7 @@ return function(mod)
     local desc=type(m.description)=="table"
       and table.concat(m.description,"  ")
       or (m.description or "UP/DOWN SPECIES   A DATA   SELECT OPTIONS   B BACK")
-    text(desc,small,x,y+h-small:getHeight(),w,"left",c.muted)
+    fittedText(desc,18*scale,x,y+h-small:getHeight(),w,"left",c.muted)
   end
 
   local function drawEntry(prepared,x,y,w,h,c,big,body,small,scale)
@@ -312,22 +330,25 @@ return function(mod)
     local desc=table.concat(lines," "):gsub("(%a)%- (%a)","%1%2")
     text(desc,body,x+28*scale,descY,w-56*scale,"left",c.text)
 
-    text("LEFT/RIGHT PAGE   A SELECT   B BACK",small,
+    fittedText("LEFT/RIGHT PAGE   A SELECT   B BACK",18*scale,
       x,y+h-small:getHeight(),w,"left",c.muted)
   end
-  local function drawMenu(prepared,x,y,w,h,c,big,body,small)
+  local function drawMenu(prepared,x,y,w,h,c,big,body,small,scale)
     local m=prepared.model; text(m.title or "POKéDEX",big,x,y,w,"left",c.text)
     local rows=m.rows or {}; local selected=tonumber(m.selected) or 1
     local rh=math.max(50,body:getHeight()+22)
     for i,row in ipairs(rows) do
       if i>9 then break end
       local yy=y+58+(i-1)*rh
-      if i==selected then color(c.selected); G.rectangle("fill",x,yy,w,rh-5,6,6) end
-      text(row.label or row.id or "—",body,x+18,yy+11,w*.68,"left",i==selected and c.text or c.muted)
-      text(row.right or "",small,x+w*.70,yy+14,w*.26,"right",i==selected and c.text or c.muted)
+      local inset=2*scale
+      local barY=yy+inset
+      local barH=math.max(1,rh-inset*2)
+      if i==selected then color(c.selected); G.rectangle("fill",x,barY,w,barH,6,6) end
+      text(row.label or row.id or "—",body,x+18,barY+math.max(0,(barH-body:getHeight())*.5),w*.68,"left",i==selected and c.text or c.muted)
+      text(row.right or "",small,x+w*.70,barY+math.max(0,(barH-small:getHeight())*.5),w*.26,"right",i==selected and c.text or c.muted)
     end
     local desc=m.description; if type(desc)=="table" then desc=table.concat(desc,"  ") end
-    text(desc or "A CHOOSE   B BACK",small,x,y+h-24,w,"left",c.muted)
+    fittedText(desc or "A CHOOSE   B BACK",19*scale,x,y+h-24,w,"left",c.muted)
   end
   local function drawDex(state)
     local prepared=prepare(state); if not prepared then return end
@@ -346,7 +367,7 @@ return function(mod)
     local view=tostring(prepared.model.sourceView or prepared.sourceModel and prepared.sourceModel.view or "list")
     if view=="list" then drawList(prepared,vx,vy,vw,vh,c,big,body,small,scale)
     elseif view=="entry" then drawEntry(prepared,vx,vy,vw,vh,c,big,body,small,scale)
-    else drawMenu(prepared,vx,vy,vw,vh,c,big,body,small) end
+    else drawMenu(prepared,vx,vy,vw,vh,c,big,body,small,scale) end
   end
 
   local upstreamNew=PokedexMenu.new

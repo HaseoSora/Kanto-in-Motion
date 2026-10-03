@@ -1,4 +1,4 @@
--- Kanto in Motion v1.5.3 - Gen 2 Modern Dialog UI v30 -- Full NEW GAME Modern UI
+-- Kanto in Motion v1.6.3 - Gen 2 Modern Dialog UI v31 -- responsive control hints
 --
 -- Shared Modern UI presentation for Gen 2 dialogue/choice surfaces.
 --
@@ -129,6 +129,26 @@ return function(mod)
     end
   end
 
+  local function fittedFont(basePx,value,maxW)
+    local px=math.max(8,tonumber(basePx) or 8)
+    local f=fontFor(px)
+    value=tostring(value or "")
+    if not maxW or maxW<=0 then return f end
+    while px>8 and f:getWidth(value)>maxW do
+      local ratio=maxW/math.max(1,f:getWidth(value))
+      local nextPx=math.max(8,math.min(px-1,px*math.max(.72,ratio*.97)))
+      if nextPx>=px then nextPx=px-1 end
+      px=nextPx
+      f=fontFor(px)
+    end
+    return f
+  end
+
+  local function drawFittedText(value,basePx,x,y,w,align,c)
+    local f=fittedFont(basePx,value,w)
+    return drawText(value,f,x,y,w,align,c)
+  end
+
   local function panel(x, y, w, h, c, alpha)
     if Style and Style.panel then return Style.panel(x,y,w,h,c,alpha) end
     local r = math.max(8, math.min(w,h) * 0.025)
@@ -139,6 +159,16 @@ return function(mod)
     color(c.frame or c.accent)
     G.setLineWidth(math.max(2, math.min(w,h) * 0.006))
     G.rectangle("line", x, y, w, h, r, r)
+  end
+
+  local function centeredRowRect(y,h,inset)
+    inset=math.max(0,tonumber(inset) or 0)
+    local rh=math.max(1,h-inset*2)
+    return y+inset,rh
+  end
+  local function centeredTextY(y,h,font)
+    local fh=(font and type(font.getHeight)=="function") and font:getHeight() or 0
+    return y+math.max(0,(h-fh)*.5)
   end
 
   local function playfield()
@@ -188,6 +218,25 @@ return function(mod)
     return tostring(value or "")
   end
 
+  local function drawContinueArrow(x,y,size,colorValue)
+    local half=size*.5
+    color(colorValue)
+    G.polygon("fill",
+      x-half, y-half*.2,
+      x+half, y-half*.2,
+      x, y+half)
+  end
+
+  local function drawVerticalArrow(cx,y,size,direction,colorValue)
+    local half=size*.5
+    color(colorValue)
+    if direction=="up" then
+      G.polygon("fill", cx, y, cx-half, y+size, cx+half, y+size)
+    else
+      G.polygon("fill", cx-half, y, cx+half, y, cx, y+size)
+    end
+  end
+
   local function drawDialogBox(box, choice)
     local c = theme()
     local sx, sy, sw, sh = playfield()
@@ -233,8 +282,10 @@ return function(mod)
       arrow = ok and visible
     end
     if arrow and ((tonumber(box.blink) or 0) % 32 < 16) then
-      drawText("▼", body, x + w - padX - body:getWidth("▼"),
-        y + h - body:getHeight() - 10*scale, nil, nil, c.accent)
+      local arrowSize=math.max(12*scale, body:getHeight()*.72)
+      drawContinueArrow(x + w - padX - arrowSize*.45,
+        y + h - arrowSize*.85 - 10*scale,
+        arrowSize,c.accent)
     end
 
     if choice then
@@ -247,14 +298,15 @@ return function(mod)
       panel(cx,cy,cw,ch,c,.99)
       for i=1,2 do
         local yy = cy + 10*scale + (i-1)*rowH
+        local barY,barH=centeredRowRect(yy,rowH,2*scale)
         if i == (choice.index or 1) then
           color(c.selected)
-          G.rectangle("fill", cx+8*scale, yy, cw-16*scale,rowH-4*scale,6,6)
+          G.rectangle("fill", cx+8*scale, barY, cw-16*scale,barH,6,6)
           color(c.accent)
-          G.rectangle("fill", cx+8*scale, yy, 4*scale,rowH-4*scale,2,2)
+          G.rectangle("fill", cx+8*scale, barY, 4*scale,barH,2,2)
         end
         drawText(resolveLabel(labels[i]), body,
-          cx+24*scale, yy+(rowH-body:getHeight())*.42,
+          cx+24*scale, centeredTextY(barY,barH,body),
           cw-40*scale, "left",
           i==(choice.index or 1) and c.text or c.muted)
       end
@@ -275,11 +327,12 @@ return function(mod)
     panel(x,y,w,h,c,.99)
     for i=1,2 do
       local yy=y+12*scale+(i-1)*rowH
+      local barY,barH=centeredRowRect(yy,rowH,2*scale)
       if i==(choice.index or 1) then
-        color(c.selected); G.rectangle("fill",x+10*scale,yy,w-20*scale,rowH-5*scale,6,6)
+        color(c.selected); G.rectangle("fill",x+10*scale,barY,w-20*scale,barH,6,6)
       end
       drawText(resolveLabel(labels[i]),body,x+28*scale,
-        yy+(rowH-body:getHeight())*.4,w-50*scale,"left",
+        centeredTextY(barY,barH,body),w-50*scale,"left",
         i==(choice.index or 1) and c.text or c.muted)
     end
   end
@@ -312,12 +365,13 @@ return function(mod)
       local col=(i-1)%cols
       local cx=x+18*scale+col*actualCellW
       local cy=top+r*cellH
+      local barY,barH=centeredRowRect(cy,cellH,2*scale)
       if i==selected then
         color(c.selected)
-        G.rectangle("fill",cx+3*scale,cy,actualCellW-6*scale,cellH-5*scale,6,6)
+        G.rectangle("fill",cx+3*scale,barY,actualCellW-6*scale,barH,6,6)
       end
       drawText(resolveLabel(label),body,cx+16*scale,
-        cy+(cellH-body:getHeight())*.42,actualCellW-32*scale,
+        centeredTextY(barY,barH,body),actualCellW-32*scale,
         cols>1 and "center" or "left",
         i==selected and c.text or c.muted)
     end
@@ -374,10 +428,11 @@ return function(mod)
       for i,label in ipairs(opts) do
         local rh=58*scale
         local yy=contentY+(i-1)*(rh+8*scale)
+        local barY,barH=centeredRowRect(yy,rh,2*scale)
         if phase=="top" and i==(mart.topIndex or 1) then
-          color(c.selected); G.rectangle("fill",x+24*scale,yy,mw,rh,6,6)
+          color(c.selected); G.rectangle("fill",x+24*scale,barY,mw,barH,6,6)
         end
-        drawText(label,body,x+42*scale,yy+(rh-body:getHeight())*.42,
+        drawText(label,body,x+42*scale,centeredTextY(barY,barH,body),
           mw-36*scale,"left",
           phase=="top" and i==(mart.topIndex or 1) and c.text or c.muted)
       end
@@ -400,14 +455,15 @@ return function(mod)
         local row=rows[i]
         if not row then break end
         local yy=contentY+(slot-1)*rowH
+        local barY,barH=centeredRowRect(yy,rowH,2*scale)
         if i==idx then
-          color(c.selected); G.rectangle("fill",x+22*scale,yy,listW-36*scale,rowH-5*scale,6,6)
+          color(c.selected); G.rectangle("fill",x+22*scale,barY,listW-36*scale,barH,6,6)
         end
         drawText(row.name or row.id or "ITEM",body,x+38*scale,
-          yy+(rowH-body:getHeight())*.35,listW*.62,"left",
+          centeredTextY(barY,barH,body),listW*.62,"left",
           i==idx and c.text or c.muted)
         drawText("x"..tostring(row.count or 0),priceFont,x+listW*.69,
-          yy+(rowH-priceFont:getHeight())*.40,listW*.21,"right",
+          centeredTextY(barY,barH,priceFont),listW*.21,"right",
           i==idx and c.text or c.muted)
       end
       drawText("SELL",big,x+listW,contentY,w-listW-30*scale,"center",c.accent)
@@ -426,16 +482,17 @@ return function(mod)
         local isCancel=(not entry and i==#entries+1)
         if not entry and not isCancel then break end
         local yy=contentY+(slot-1)*rowH
+        local barY,barH=centeredRowRect(yy,rowH,2*scale)
         if i==idx then
-          color(c.selected); G.rectangle("fill",x+22*scale,yy,listW-36*scale,rowH-5*scale,6,6)
+          color(c.selected); G.rectangle("fill",x+22*scale,barY,listW-36*scale,barH,6,6)
         end
         local label=entry and entry.name or "CANCEL"
         drawText(label,body,x+38*scale,
-          yy+(rowH-body:getHeight())*.35,listW*.62,"left",
+          centeredTextY(barY,barH,body),listW*.62,"left",
           i==idx and c.text or c.muted)
         if entry then
           drawText(("¥%d"):format(entry.price or 0),priceFont,x+listW*.67,
-            yy+(rowH-priceFont:getHeight())*.40,listW*.22,"right",
+            centeredTextY(barY,barH,priceFont),listW*.22,"right",
             i==idx and c.text or c.muted)
         end
       end
@@ -489,17 +546,19 @@ return function(mod)
         local cx=x+w-cw-32*scale; local cy=dy-ch-10*scale
         panel(cx,cy,cw,ch,c,.99)
         for i,label in ipairs({"YES","NO"}) do
-          local yy=cy+10*scale+(i-1)*44*scale
+          local rowH=44*scale
+          local yy=cy+10*scale+(i-1)*rowH
+          local barY,barH=centeredRowRect(yy,rowH,2*scale)
           if i==(mart.confirm.choice or 1) then
-            color(c.selected); G.rectangle("fill",cx+8*scale,yy,cw-16*scale,40*scale,5,5)
+            color(c.selected); G.rectangle("fill",cx+8*scale,barY,cw-16*scale,barH,5,5)
           end
-          drawText(label,body,cx+24*scale,yy+4*scale,cw-42*scale,"left",
+          drawText(label,body,cx+24*scale,centeredTextY(barY,barH,body),cw-42*scale,"left",
             i==(mart.confirm.choice or 1) and c.text or c.muted)
         end
       end
     end
 
-    drawText("A CHOOSE   B BACK",small,x+22*scale,y+h-small:getHeight()-12*scale,
+    drawFittedText("A CHOOSE   B BACK",18*scale,x+22*scale,y+h-small:getHeight()-12*scale,
       w-44*scale,"left",c.muted)
   end
 
@@ -675,11 +734,11 @@ return function(mod)
       panel(cardX,cardY,cardW,cardH,c,.99)
       drawText(phase=="day" and "DAY" or "TIME",title,
         cardX+22*scale,cardY+15*scale,cardW-44*scale,"left",c.accent)
-      drawText("▲",small,cardX,cardY+53*scale,cardW,"center",c.muted)
+      drawVerticalArrow(cardX+cardW*.5,cardY+53*scale,math.max(12*scale,small:getHeight()*.7),"up",c.muted)
       drawText(tostring(display or ""),body,
         cardX+24*scale,cardY+79*scale,cardW-48*scale,"center",c.text)
-      drawText("▼",small,cardX,cardY+132*scale,cardW,"center",c.muted)
-      drawText("UP/DOWN CHANGE   A CONFIRM",small,
+      drawVerticalArrow(cardX+cardW*.5,cardY+132*scale,math.max(12*scale,small:getHeight()*.7),"down",c.muted)
+      drawFittedText("UP/DOWN CHANGE   A CONFIRM",18*scale,
         cardX+18*scale,cardY+cardH-small:getHeight()-12*scale,
         cardW-36*scale,"center",c.muted)
     elseif phase=="confirm-hour" or phase=="confirm-minute"

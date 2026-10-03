@@ -1,14 +1,13 @@
 -- Kanto in Motion animated-battler ground shadows.
 --
--- This first test implementation owns only KIM's direct 2D animated battler
--- presentation. The renderer passes the already-resolved species/frame scale
--- and ground anchor, so shadows automatically follow HD test sprites, player
--- size, HD arena placement, player-size changes, and send-out grow-in.
+-- KIM owns a single shadow style across its direct 2D battlers and compatible
+-- 3D battle presenters.  drawDirect() paints the familiar screen-space ellipse;
+-- paramsFor() publishes the exact same footprint/quality/opacity math so a 3D
+-- compatibility layer can render the shadow on the arena floor without
+-- duplicating KIM's settings or silently substituting another shadow system.
 --
--- Quality is intentionally real workload scaling rather than a cosmetic label:
+-- Quality is real workload scaling rather than a cosmetic label:
 -- LOW draws 1 ellipse; MEDIUM 3; HIGH 6; ULTRA 10 feather layers.
--- v2 calibrates 100% opacity to the old v1 150% look and adds a small
--- species-footprint correction for Rattata.
 return function(mod)
   local M = {}
 
@@ -49,18 +48,15 @@ return function(mod)
       and mod and mod.options and mod.options:get("battleSprites") ~= false
   end
 
-  -- metrics is directSideMetrics() from main.lua. It publishes the exact final
-  -- frame size/scale and ground shift used by the Pokemon draw itself.
-  function M:drawDirect(metrics, side, transformAlpha)
-    if not self:enabled() or type(metrics) ~= "table" then return false end
-    local g = love and love.graphics
-    if not (g and type(g.ellipse) == "function" and type(g.setColor) == "function") then
-      return false
-    end
+  -- Return KIM's final contact-shadow parameters without drawing them.
+  -- A Battle Art compatibility bridge uses this to put the same shadow on a
+  -- world-space floor instead of baking it into a Pokemon billboard texture.
+  function M:paramsFor(metrics, side, transformAlpha)
+    if not self:enabled() or type(metrics) ~= "table" then return nil end
 
     local q = quality()
     local profile = PROFILES[q]
-    if not profile then return false end
+    if not profile then return nil end
 
     -- Gen 1 publishes one uniform final scale. Gen 2/3 can supply separate
     -- final X/Y scales when their presentation transform is non-square.
@@ -69,7 +65,7 @@ return function(mod)
     local scaleY = tonumber(metrics.scaleY) or uniformScale
     local sw = math.abs((tonumber(metrics.w) or 0) * scaleX)
     local sh = math.abs((tonumber(metrics.h) or 0) * scaleY)
-    if sw <= 0 or sh <= 0 then return false end
+    if sw <= 0 or sh <= 0 then return nil end
 
     -- Use both dimensions so wide wings/tails do not create gigantic shadows,
     -- while squat Pokemon still receive enough contact width to feel planted.
@@ -82,23 +78,45 @@ return function(mod)
     local rx = diameter * 0.5
     local ry = math.max(2, rx * (side == "player" and 0.22 or 0.20))
 
-    -- directSideMetrics ax/ay is the authored ground anchor. shinyGroundOffset
-    -- shifts the actual feet, so apply the same shift to the shadow centre.
-    local cx = tonumber(metrics.ax) or tonumber(metrics.centerX) or 0
-    local cy = (tonumber(metrics.ay) or 0) + (tonumber(metrics.groundShift) or 0)
-    -- Tuck the ellipse slightly behind the feet/body rather than centring it on
-    -- the exact anchor line. This reads as contact shadow instead of a halo.
-    cy = cy - ry * 0.18
-
     local externalAlpha = tonumber(transformAlpha) or 1
     externalAlpha = math.max(0, math.min(1, externalAlpha))
     local baseAlpha = (tonumber(profile.opacity) or 0.16)
       * opacityMultiplier() * externalAlpha
     baseAlpha = math.max(0, math.min(0.55, baseAlpha))
-    if baseAlpha <= 0 then return false end
+    if baseAlpha <= 0 then return nil end
 
-    local layers = math.max(1, math.floor(tonumber(profile.layers) or 1))
-    local feather = math.max(0, tonumber(profile.feather) or 0)
+    return {
+      quality = q,
+      profile = profile,
+      rx = rx,
+      ry = ry,
+      alpha = baseAlpha,
+      layers = math.max(1, math.floor(tonumber(profile.layers) or 1)),
+      feather = math.max(0, tonumber(profile.feather) or 0),
+      cx = tonumber(metrics.ax) or tonumber(metrics.centerX) or 0,
+      cy = (tonumber(metrics.ay) or 0) + (tonumber(metrics.groundShift) or 0),
+    }
+  end
+
+  -- metrics is directSideMetrics() from main.lua. It publishes the exact final
+  -- frame size/scale and ground anchor used by the Pokemon draw itself.
+  function M:drawDirect(metrics, side, transformAlpha)
+    local params = self:paramsFor(metrics, side, transformAlpha)
+    if not params then return false end
+    local g = love and love.graphics
+    if not (g and type(g.ellipse) == "function" and type(g.setColor) == "function") then
+      return false
+    end
+
+    local rx, ry = params.rx, params.ry
+    local cx, cy = params.cx, params.cy
+    -- Tuck the ellipse slightly behind the feet/body rather than centring it on
+    -- the exact anchor line. This reads as contact shadow instead of a halo.
+    cy = cy - ry * 0.18
+
+    local layers = params.layers
+    local feather = params.feather
+    local baseAlpha = params.alpha
 
     -- Paint broad/transparent first and dense/contact last. All layers overlap
     -- at the centre; per-layer alpha is normalized so higher quality becomes

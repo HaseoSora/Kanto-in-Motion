@@ -5720,21 +5720,34 @@ return function(mod)
         -- slide/SCX/SCY motion has been applied, so it follows the Pokemon
         -- instead of being baked into the low-resolution battle field.
         local shadows = mod._kantoInMotionBattlerShadows
-        if shadows and type(shadows.drawDirect) == "function" then
+        local shadowMetrics = {
+          w = iw,
+          h = ih,
+          scale = scale,
+          ax = px + dw * 0.5,
+          ay = py + dh,
+          groundShift = 0,
+          species = tonumber(mon.species),
+          dex = tonumber(mon.species),
+        }
+        -- Battle Art Gen2 owns a 3D arena. Never bake KIM's ellipse into the
+        -- upright Pokemon texture. Publish the exact live battler metrics to
+        -- the Gen2 Battle Art bridge instead, which renders this SAME KIM
+        -- shadow horizontally on the arena floor and keeps its quality/
+        -- opacity settings authoritative.
+        if mod._kantoInMotionGen2BattleArtCapture then
+          local bySide = mod._kantoInMotionGen2BattleArtShadowMetrics
+          if type(bySide) ~= "table" then
+            bySide = {}
+            mod._kantoInMotionGen2BattleArtShadowMetrics = bySide
+          end
+          bySide[sideName] = shadowMetrics
+        elseif shadows and type(shadows.drawDirect) == "function" then
           G.push("all")
           G.setShader()
           G.setBlendMode("alpha")
           G.setColor(1, 1, 1, 1)
-          pcall(shadows.drawDirect, shadows, {
-            w = iw,
-            h = ih,
-            scale = scale,
-            ax = px + dw * 0.5,
-            ay = py + dh,
-            groundShift = 0,
-            species = tonumber(mon.species),
-            dex = tonumber(mon.species),
-          }, sideName, 1)
+          pcall(shadows.drawDirect, shadows, shadowMetrics, sideName, 1)
           G.pop()
         end
         local function paint()
@@ -7212,6 +7225,33 @@ return function(mod)
         tostring(bridgeResult))
     end
   end
+
+  -- Battle Art Voxel Gen2 2.1.x still captures each G/S/C battler into a
+  -- fixed 160x144 texture before putting that texture on its 3D billboard.
+  -- KIM's normal Gen2 HD bridge is intentionally drawn in the native 48/56px
+  -- battle slots, so that extra capture would throw most of the HD detail
+  -- away. Install a KIM-only supersampled card bridge when Battle Art Gen2 is
+  -- present; Battle Art itself remains untouched.
+  if IS_GEN2 then
+    local okHelper, helper = pcall(function()
+      local src = assert(mod:read("lib/battle_art_gen2_212_compat.lua"))
+      local loader = loadstring or load
+      return assert(loader(src,
+        "@" .. mod.path .. "/lib/battle_art_gen2_212_compat.lua"))()
+    end)
+    if okHelper and type(helper) == "function" then
+      okHelper, helper = pcall(helper, mod, battleHudGeometry,
+        battleUiViewportRect, battleWorldMetrics, touchBattleOrientation)
+    end
+    if okHelper and helper then
+      mod._kantoInMotionBattleArtGen2Compat = helper
+      mod.exports.battleArtGen2Compatibility = true
+    elseif not okHelper then
+      mod.log:error("Battle Art Gen2 compatibility bridge failed: %s",
+        tostring(helper))
+    end
+  end
+
   -- Integrated Gen 1 battle helpers. The move-animation code/data is the same
   -- KIM 1.3.7 implementation, now paired with the remediated animation/SFX
   -- asset set that passed the user's follow-up scanner.

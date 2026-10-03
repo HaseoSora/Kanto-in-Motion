@@ -322,6 +322,12 @@ return function(mod)
     end
   end
 
+  local function drawDownArrow(x,y,size,colorValue)
+    local half=size*.5
+    color(colorValue)
+    G.polygon("fill", x-half, y, x+half, y, x, y+size)
+  end
+
   local function roundedPanel(x, y, w, h, alpha, scale)
     if Style and Style.panel then return Style.panel(x,y,w,h,COLORS,alpha) end
     local r = math.max(3, 3.0 * scale)
@@ -441,8 +447,10 @@ return function(mod)
     if type(state.messageArrowVisible) == "function" then
       local ok, visible = pcall(state.messageArrowVisible, state)
       if ok and visible then
-        drawText("▼", captionFont, x + w - pad - captionFont:getWidth("▼"),
-          y + h - pad - captionFont:getHeight(), nil, nil, COLORS.accent)
+        local arrowSize=math.max(8, captionFont:getHeight()*.68)
+        drawDownArrow(x + w - pad - arrowSize*.45,
+          y + h - pad - arrowSize,
+          arrowSize, COLORS.accent)
       end
     end
   end
@@ -481,8 +489,10 @@ return function(mod)
   local function drawMoveInfo(state, move, x, y, w, h, bodyFont, captionFont, scale)
     local pad = math.max(3, 3.5 * scale)
     local def = moveDefinition(state, move)
-    drawText("MOVE INFO", captionFont, x + pad, y + pad,
-      w - pad * 2, "left", COLORS.accent)
+    local arrowSize=math.max(8, captionFont:getHeight()*.68)
+    drawDownArrow(x + w - pad - arrowSize*.45,
+      y + h - pad - arrowSize,
+      arrowSize, COLORS.accent)
     local yy = y + pad + captionFont:getHeight() + scale
     drawText(truncate(moveName(state, move), bodyFont, w - pad * 2),
       bodyFont, x + pad, yy, w - pad * 2, "left", COLORS.text)

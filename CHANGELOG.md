@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.6.3
+
+- Added the finalized Gen 2 Battle Art Voxel 2.1.x compatibility path for KIM HD battlers using higher-resolution 4x battle cards in the 3D scene.
+- Added KIM-owned, camera-aligned Gen 2 Battle Art contact shadows for KIM HD battlers. `PKMN SHADOWS` and `SHADOW OPACITY` continue to control quality and darkness while Battle Art retains arena/camera/environment ownership.
+- Fixed Gen 2 Battle Art shadow placement so the contact ellipse sits on Battle Art's shared battler-foot plane instead of appearing offset on the terrain.
+- Fixed Gen 2 Battle Art HP/status placement by capturing the real native G/S/C enemy/player HUD during Battle Art's widescreen pass and moving those bands to the outside-left / outside-right of the 3D battlefield.
+- Fixed Crystal CONTINUE with Battle Art so resuming after voxel-cache preload dispatches the native continue action instead of re-entering the preload callback.
+- Fixed Pack item descriptions that exposed the internal `<NEXT>` control marker; it now becomes a proper line break.
+- Replaced font-dependent arrow glyphs across current Gen 2 Modern UI presenters with KIM-drawn arrows/chevrons, covering menu navigation, scroll indicators, clock controls, dialogue prompts, and battle-message continue prompts.
+- Added responsive control-hint/footer fitting across Gen 2 Modern UI so Pack and other long hints remain inside their panels on mobile and at larger font scales.
+- Fixed the Start Menu Pokémon description so internal `<PK><MN>` tokens display as `POKéMON`.
+- Centered affected Gen 2 list-selection text within its highlight bar, including Start Menu and Pack/CANCEL-style rows, while preserving already-correct Pokégear and Pokémon Party layouts.
+
 ## v1.6.2
 
 - Added HD Asset Manager removal/re-download support for the persistent external HD Pokémon/background cache. Removed assets can be downloaded again immediately or later; KIM does not force a new download after removal.

@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -21,6 +21,7 @@
     "typed_move_colors",
     "overworld_wild_spawns",
     "BATTLE_ART_VOXEL_FORK",
+    "BATTLE_ART_VOXEL_GEN2",
     "recomp-spanish",
     "advanced_box_system",
     "weather_fx",
@@ -39,6 +40,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen; v1.6.2 expands HD Asset Manager maintenance and portable/mobile support, fixes shared HD asset use across G/S/C and FR/LG, improves Gen 2/FRLG menu presentation, and strengthens the iOS Battle Art world-orientation compatibility bridge.",
+  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen; v1.6.3 improves Gen 2 Battle Art HD battlers, shadows and native HUD placement, and polishes Gen 2 Modern UI text, arrows, responsive control hints, and selection alignment.",
   "github": "HaseoSora/Kanto-in-Motion"
 }

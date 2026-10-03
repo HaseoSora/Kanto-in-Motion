@@ -1,4 +1,4 @@
--- Kanto in Motion v1.5.3 - Gen 2 Modern Core Menus v33 -- Dex Radar 1.2.0 compatibility
+-- Kanto in Motion v1.6.3 - Gen 2 Modern Core Menus v34 -- responsive text/footer layout
 --
 -- Modern overlay presentation for the native Gen 2 Start Menu, Pack,
 -- Pokegear, Trainer Card, Save Menu, Options Menu and KIM Mod Settings. Their original objects remain authoritative for
@@ -82,6 +82,32 @@ return function(mod)
     G.setFont(f); color(c,nil,true); s=tostring(s or "")
     G.print(s,x,y); G.print(s,x+1,y)
   end
+  local function normalizeUiText(value,joiner)
+    if type(value)=="table" then value=table.concat(value,joiner or " ") end
+    value=tostring(value or "")
+    value=value:gsub("<PO><KE>","POKé")
+    value=value:gsub("<PK><MN>","POKéMON")
+    return value
+  end
+  local function fittedFont(basePx,value,maxW)
+    local px=math.max(8,tonumber(basePx) or 8)
+    local f=font(px)
+    value=tostring(value or "")
+    if not maxW or maxW<=0 then return f end
+    while px>8 and f:getWidth(value)>maxW do
+      local ratio=maxW/math.max(1,f:getWidth(value))
+      local nextPx=math.max(8,math.min(px-1,px*math.max(.72,ratio*.97)))
+      if nextPx>=px then nextPx=px-1 end
+      px=nextPx
+      f=font(px)
+    end
+    return f
+  end
+  local function fittedText(value,basePx,x,y,w,align,c)
+    value=tostring(value or "")
+    local f=fittedFont(basePx,value,w)
+    return text(value,f,x,y,w,align or "left",c)
+  end
   local function playfield()
     local ww,wh=G.getDimensions()
     if okChrome and Chrome and type(Chrome.playfieldRect)=="function" then
@@ -107,6 +133,16 @@ return function(mod)
     color(c.surface,math.min(1,(c.surface[4] or 1)*(alpha or .94))); G.rectangle("fill",x,y,w,h,r,r)
     color(c.frame or c.accent); G.setLineWidth(math.max(2,math.min(w,h)*.0045)); G.rectangle("line",x,y,w,h,r,r)
   end
+  local function centeredRowRect(y,h,inset)
+    inset=math.max(0,tonumber(inset) or 0)
+    local rh=math.max(1,h-inset*2)
+    return y+inset,rh
+  end
+  local function centeredTextY(y,h,font)
+    local fh=(font and type(font.getHeight)=="function") and font:getHeight() or 0
+    return y+math.max(0,(h-fh)*.5)
+  end
+
   local function modal(x,y,w,h,c,title,rows,selected,body,small,message)
     color({0,0,0,1},.35); G.rectangle("fill",0,0,G.getDimensions())
     local rh=math.max(52,small:getHeight()+20)
@@ -133,8 +169,9 @@ return function(mod)
     local startY=my+listTop
     for i,row in ipairs(rows) do
       local yy=startY+(i-1)*rh
-      if i==selected then color(c.selected); G.rectangle("fill",mx+12,yy,mw-24,rh-4,5,5) end
-      text(row,small,mx+24,yy+8,mw-48,"left",i==selected and c.text or c.muted)
+      local barY,barH=centeredRowRect(yy,rh,2)
+      if i==selected then color(c.selected); G.rectangle("fill",mx+12,barY,mw-24,barH,5,5) end
+      text(row,small,mx+24,centeredTextY(barY,barH,small),mw-48,"left",i==selected and c.text or c.muted)
     end
   end
 
@@ -313,16 +350,18 @@ return function(mod)
     for slot=1,maxRows do
       local i=scroll+slot; local row=rows[i]; if not row then break end
       local yy=y+70*scale+(slot-1)*rh
-      if i==index then color(c.selected); G.rectangle("fill",x+12*scale,yy,w-24*scale,rh-5*scale,5,5) end
+      local barY,barH=centeredRowRect(yy,rh,2*scale)
+      if i==index then color(c.selected); G.rectangle("fill",x+12*scale,barY,w-24*scale,barH,5,5) end
       local label = row.label or row.value or "OPTION"
       if tostring(row.value or row.id or ""):lower() == "pokegear" then
         label = "POKéGEAR"
       end
-      text(label,body,x+28*scale,yy+11*scale,w-56*scale,"left",i==index and c.text or c.muted)
+      text(label,body,x+28*scale,centeredTextY(barY,barH,body),w-56*scale,"left",i==index and c.text or c.muted)
     end
     local row=rows[index]; local desc=row and row.desc or {}
+    local descText=normalizeUiText(desc,"  ")
     color(c.divider,nil,true); G.rectangle("fill",x+16*scale,y+h-86*scale,w-32*scale,1)
-    text(type(desc)=="table" and table.concat(desc,"  ") or "",small,x+18*scale,y+h-66*scale,w-36*scale,"left",c.muted)
+    fittedText(descText,23*scale,x+18*scale,y+h-66*scale,w-36*scale,"left",c.muted)
 
     -- Gen 1 parity: optional compact party quick-view beside the Start Menu.
     if opt("startMenuQuickView",true)~=false then
@@ -421,8 +460,15 @@ return function(mod)
     MainMenu.choose=function(self,value,...)
       local item=self and self.list and type(self.list.items)=="table"
         and self.list.items[tonumber(self.list.index) or 1] or nil
-      if type(item)=="table" and type(item.onSelect)=="function" then
-        return item.onSelect(self.game)
+      if value==nil and type(item)=="table" and type(item.onSelect)=="function" then
+        -- Gen 2 injected rows use onSelect(game, menu) only when the row has
+        -- no native `value`.  Keep that distinction here.  Battle Art Gen2
+        -- deliberately turns CONTINUE into an onSelect preload row, then
+        -- resumes by calling menu:choose("continue").  Re-running onSelect
+        -- for that explicit native value recurses back into the preload hook
+        -- until Lua stack-overflows.  An explicit value must therefore fall
+        -- through to the original MainMenu.choose path.
+        return item.onSelect(self.game, self)
       end
       return oldMainChoose(self,value,...)
     end
@@ -511,17 +557,18 @@ return function(mod)
         text(r[2],labelFont,x+w*.50,ry+11*scale,w*.40,"right",c.text)
       end
       color(c.divider); G.rectangle("fill",x+20*scale,y+h-58*scale,w-40*scale,1)
-      text("A  CONTINUE    B  BACK",small,x+24*scale,y+h-42*scale,w-48*scale,"left",c.accent)
+      fittedText("A  CONTINUE    B  BACK",21*scale,x+24*scale,y+h-42*scale,w-48*scale,"left",c.accent)
       return
     end
 
     for i,row in ipairs(rows) do
       local yy=top+(i-1)*rh
+      local barY,barH=centeredRowRect(yy,rh,2*scale)
       if i==index then
-        color(c.selected); G.rectangle("fill",x+12*scale,yy,w-24*scale,rh-5*scale,6,6)
+        color(c.selected); G.rectangle("fill",x+12*scale,barY,w-24*scale,barH,6,6)
       end
       local label=type(row)=="table" and (row.label or row.name or row.value) or row
-      text(label or "OPTION",body,x+28*scale,yy+12*scale,w-56*scale,"left",
+      text(label or "OPTION",body,x+28*scale,centeredTextY(barY,barH,body),w-56*scale,"left",
         i==index and c.text or c.muted)
     end
     local footerY=y+h-footerH
@@ -536,12 +583,90 @@ return function(mod)
   end
 
   local POCKET_LABELS={"ITEMS","POKé BALLS","KEY ITEMS","TM/HM"}
+  local function normalizeInlineText(value)
+    value=normalizeUiText(value," ")
+    value=value:gsub("<NEXT>","\n")
+    return value
+  end
   local function itemDescription(s,row)
     local def=row and s.items and s.items[row.id]
     local d=def and def.description
-    if type(d)=="table" then return table.concat(d," ") end
-    return tostring(d or "")
+    return normalizeInlineText(d)
   end
+  local function drawChevronPair(x,y,size,colorValue,gap)
+    gap=gap or math.max(10,size*.85)
+    local cx=x
+    local cy=y+size*.52
+    color(colorValue)
+    G.setLineWidth(math.max(2,size*.16))
+    G.setLineJoin("miter")
+    G.line(cx+size*.55,cy-size*.42,cx+size*.05,cy,cx+size*.55,cy+size*.42)
+    cx=x+gap
+    G.line(cx-size*.55,cy-size*.42,cx-size*.05,cy,cx-size*.55,cy+size*.42)
+  end
+  local function drawVerticalArrow(cx,y,size,direction,colorValue)
+    local half=size*.5
+    local top=y
+    local midY=y+half
+    local bottom=y+size
+    color(colorValue)
+    if direction=="up" then
+      G.polygon("fill", cx, top, cx-half, bottom, cx+half, bottom)
+    else
+      G.polygon("fill", cx-half, top, cx+half, top, cx, bottom)
+    end
+  end
+  local function packFooterSpec(maxW,scale)
+    local function metrics(footerPx,buttonPx)
+      local ff=font(footerPx)
+      local bf=font(buttonPx)
+      local arrowSize=math.max(8,ff:getHeight()*.50)
+      local gap=math.max(7,ff:getHeight()*.38)
+      local micro=math.max(4,ff:getHeight()*.18)
+      local arrowBlock=arrowSize*2.35
+      local pocketW=ff:getWidth("POCKET")
+      local line2W=bf:getWidth("A")+micro+ff:getWidth("CHOOSE")+gap
+        +bf:getWidth("B")+micro+ff:getWidth("BACK")
+      return {footerFont=ff,buttonFont=bf,arrowSize=arrowSize,gap=gap,micro=micro,
+        arrowBlock=arrowBlock,pocketW=pocketW,line2W=line2W,
+        totalW=arrowBlock+gap+pocketW+gap+line2W}
+    end
+
+    local baseFooterPx=21*scale
+    local baseButtonPx=23*scale
+    local spec=metrics(baseFooterPx,baseButtonPx)
+    if spec.totalW<=maxW then
+      spec.wrapped=false
+      spec.height=math.max(62*scale,spec.footerFont:getHeight()+24*scale)
+      return spec
+    end
+
+    -- Small overages (typical phone landscape at 100% font size) stay on one
+    -- line and scale down only as much as needed. Larger accessibility-font
+    -- overages switch to two rows instead of running past the card edge.
+    local fit=(maxW/math.max(1,spec.totalW))*.97
+    if fit>=.78 then
+      spec=metrics(baseFooterPx*fit,baseButtonPx*fit)
+      spec.wrapped=false
+      spec.height=math.max(62*scale,spec.footerFont:getHeight()+24*scale)
+      return spec
+    end
+
+    local line1=metrics(baseFooterPx,baseButtonPx)
+    local line2=line1
+    if line1.line2W>maxW then
+      local f2=(maxW/math.max(1,line1.line2W))*.97
+      line2=metrics(baseFooterPx*f2,baseButtonPx*f2)
+    end
+    line1.wrapped=true
+    line1.line2Font=line2.footerFont
+    line1.line2ButtonFont=line2.buttonFont
+    line1.line2Gap=line2.gap
+    line1.line2Micro=line2.micro
+    line1.height=math.max(94*scale,line1.footerFont:getHeight()+line2.footerFont:getHeight()+34*scale)
+    return line1
+  end
+
   local function drawPack(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
     local scale=uiScale(sw,sh); local den=density()
@@ -551,8 +676,6 @@ return function(mod)
     local big, body, small = font(35*scale), font(26*scale), font(19*scale)
     local tabFont = font(23*scale)
     local countFont = font(22*scale)
-    local footerFont = font(21*scale)
-    local buttonFont = font(23*scale)
     local pad=22*scale
     text("PACK",big,x+pad,y+15*scale,w*.32,"left",c.text)
 
@@ -563,8 +686,13 @@ return function(mod)
       text(label,tabFont,tx+4,y+64*scale,tabW-10,"center",sel and c.text or c.muted)
     end
 
-    local contentY=y+112*scale; local contentH=h-176*scale
+    local contentY=y+112*scale
     local listW=w*.57; local detailX=x+listW+16*scale
+    local footerRight=x+w-20*scale
+    local footerAvail=math.max(80,footerRight-detailX)
+    local footerSpec=packFooterSpec(footerAvail,scale)
+    local footerH=footerSpec.height
+    local contentH=math.max(140*scale,h-112*scale-footerH)
     color(c.divider,nil,true); G.rectangle("fill",x+listW+8*scale,contentY,1,contentH)
     local rows=s.rows or {}; local idx=tonumber(s.index) or 1; local scroll=tonumber(s.scroll) or 0
     local visible=math.max(5,math.min(10,math.floor(8/den+.5))); local rh=contentH/visible
@@ -573,25 +701,50 @@ return function(mod)
       if i==#rows+1 then row={name="CANCEL"} end
       if not row then break end
       local yy=contentY+(slot-1)*rh; local sel=i==idx
-      if sel then color(c.selected); G.rectangle("fill",x+pad*.65,yy,listW-pad*1.2,rh-4,5,5) end
-      text(row.name or "CANCEL",body,x+pad,yy+12*scale,listW*.62,"left",sel and c.text or c.muted)
+      local barY,barH=centeredRowRect(yy,rh,2*scale)
+      if sel then color(c.selected); G.rectangle("fill",x+pad*.65,barY,listW-pad*1.2,barH,5,5) end
+      text(row.name or "CANCEL",body,x+pad,centeredTextY(barY,barH,body),listW*.62,"left",sel and c.text or c.muted)
       local right=row.teaches or (row.showCount and ("x"..tostring(row.count or 0))) or ""
-      text(right,countFont,x+listW*.65,yy+9*scale,listW*.27,"right",sel and c.text or c.muted)
+      text(right,countFont,x+listW*.65,centeredTextY(barY,barH,countFont),listW*.27,"right",sel and c.text or c.muted)
     end
     local selected=idx<=#rows and rows[idx] or nil
     text(selected and selected.name or "CANCEL",big,detailX,contentY+12*scale,w-listW-40*scale,"left",c.text)
     text(itemDescription(s,selected),body,detailX,contentY+78*scale,w-listW-40*scale,"left",c.muted)
-    local footerY = y+h-62*scale
-    local fx = detailX
-    text("←/→ POCKET",footerFont,fx,footerY,nil,nil,c.accent)
-    fx = fx + footerFont:getWidth("←/→ POCKET") + 18*scale
-    boldText("A",buttonFont,fx,footerY-1*scale,c.accent)
-    fx = fx + buttonFont:getWidth("A") + 5*scale
-    text("CHOOSE",footerFont,fx,footerY,nil,nil,c.accent)
-    fx = fx + footerFont:getWidth("CHOOSE") + 18*scale
-    boldText("B",buttonFont,fx,footerY-1*scale,c.accent)
-    fx = fx + buttonFont:getWidth("B") + 5*scale
-    text("BACK",footerFont,fx,footerY,nil,nil,c.accent)
+
+    local footerTop=y+h-footerH
+    local function drawActionRow(fx,fy,ff,bf,gap,micro)
+      boldText("A",bf,fx,fy-1*scale,c.accent)
+      fx=fx+bf:getWidth("A")+micro
+      text("CHOOSE",ff,fx,fy,nil,nil,c.accent)
+      fx=fx+ff:getWidth("CHOOSE")+gap
+      boldText("B",bf,fx,fy-1*scale,c.accent)
+      fx=fx+bf:getWidth("B")+micro
+      text("BACK",ff,fx,fy,nil,nil,c.accent)
+    end
+
+    if footerSpec.wrapped then
+      local line1Y=footerTop+10*scale
+      local fx=detailX
+      local arrowSize=footerSpec.arrowSize
+      drawChevronPair(fx+arrowSize*.55,line1Y+footerSpec.footerFont:getHeight()*.08,
+        arrowSize,c.accent,arrowSize*1.45)
+      fx=fx+footerSpec.arrowBlock+footerSpec.gap
+      text("POCKET",footerSpec.footerFont,fx,line1Y,nil,nil,c.accent)
+      local line2Y=line1Y+footerSpec.footerFont:getHeight()+8*scale
+      drawActionRow(detailX,line2Y,footerSpec.line2Font,footerSpec.line2ButtonFont,
+        footerSpec.line2Gap,footerSpec.line2Micro)
+    else
+      local lineY=footerTop+(footerH-footerSpec.footerFont:getHeight())*.5
+      local fx=detailX
+      local arrowSize=footerSpec.arrowSize
+      drawChevronPair(fx+arrowSize*.55,lineY+footerSpec.footerFont:getHeight()*.08,
+        arrowSize,c.accent,arrowSize*1.45)
+      fx=fx+footerSpec.arrowBlock+footerSpec.gap
+      text("POCKET",footerSpec.footerFont,fx,lineY,nil,nil,c.accent)
+      fx=fx+footerSpec.pocketW+footerSpec.gap
+      drawActionRow(fx,lineY,footerSpec.footerFont,footerSpec.buttonFont,
+        footerSpec.gap,footerSpec.micro)
+    end
 
     if s.submenu and type(s.submenu.rows)=="table" then
       local labels={use="USE",give="GIVE",toss="TOSS",sel="REGISTER",quit="QUIT"}
@@ -651,7 +804,12 @@ return function(mod)
         text(yes and "EARNED" or "----",small,bx+12*scale,by+43*scale,colW-28*scale,"right",yes and c.accent or c.muted)
       end
     end
-    text("←/→ PAGE   A NEXT   B/START BACK",footerFont,x+24*scale,y+h-54*scale,w-48*scale,"left",c.muted)
+    local footerY=y+h-54*scale
+    local footerX=x+24*scale
+    local footerArrowSize=math.max(10*scale,footerFont:getHeight()*.5)
+    drawChevronPair(footerX+footerArrowSize*.55, footerY+footerFont:getHeight()*.1, footerArrowSize, c.muted, footerArrowSize*1.45)
+    footerX=footerX+footerArrowSize*2.45
+    fittedText("PAGE   A NEXT   B/START BACK",22*scale,footerX,footerY,w-48*scale-(footerArrowSize*2.45),"left",c.muted)
   end
 
   local function cardId(s)
@@ -705,7 +863,13 @@ return function(mod)
     local id=cardId(s); local cy=y+138*scale; local ch=h-202*scale
     if s.mode=="strip" then
       text("Choose a POKéGEAR card.",body,x+36*scale,cy,w-72*scale,"center",c.text)
-      text("←/→ CARD   A OPEN   B BACK",small,x+36*scale,y+h-52*scale,w-72*scale,"center",c.muted)
+      local footerText = "CARD   A OPEN   B BACK"
+      local tw = small:getWidth(footerText)
+      local tx = x + (w - tw) * .5
+      local ty = y + h - 52*scale
+      local arrowSize = math.max(10*scale, small:getHeight()*.5)
+      drawChevronPair(tx - arrowSize*1.9, ty + small:getHeight()*.08, arrowSize, c.muted, arrowSize*1.45)
+      fittedText(footerText,19*scale,tx,ty,math.max(1,x+w-24*scale-tx),"left",c.muted)
       return
     end
     if id=="clock" then
@@ -753,7 +917,18 @@ return function(mod)
     else
       text(tostring(id):upper(),big,x+36*scale,cy+20*scale,w-72*scale,"center",c.text)
     end
-    text("B RETURN   ←/→ CARD",footerFont,x+36*scale,y+h-58*scale,w-72*scale,"center",c.muted)
+    local footerY=y+h-58*scale
+    local leftText="B RETURN"
+    local rightText="CARD"
+    local arrowSize=math.max(10*scale,footerFont:getHeight()*.5)
+    local gap=18*scale
+    local groupW=footerFont:getWidth(leftText)+gap+arrowSize*2.35+gap+footerFont:getWidth(rightText)
+    local gx=x+(w-groupW)*.5
+    text(leftText,footerFont,gx,footerY,nil,nil,c.muted)
+    gx=gx+footerFont:getWidth(leftText)+gap
+    drawChevronPair(gx+arrowSize*.55, footerY+footerFont:getHeight()*.1, arrowSize, c.muted, arrowSize*1.45)
+    gx=gx+arrowSize*2.35+gap
+    text(rightText,footerFont,gx,footerY,nil,nil,c.muted)
   end
 
 
@@ -943,22 +1118,23 @@ return function(mod)
       if not row then break end
       local yy=top+(slot-1)*rh
       local selected=i==idx
+      local barY,barH=centeredRowRect(yy,rh,3*scale)
       if selected then
         color(c.selected)
-        G.rectangle("fill",x+22*scale,yy,w-44*scale,rh-6*scale,7,7)
+        G.rectangle("fill",x+22*scale,barY,w-44*scale,barH,7,7)
         color(c.accent,nil,true)
-        G.rectangle("fill",x+22*scale,yy,5*scale,rh-6*scale,2,2)
+        G.rectangle("fill",x+22*scale,barY,5*scale,barH,2,2)
       end
 
       local label=optionLabel(row)
       local value=optionValue(s,row)
       text(label,body,x+48*scale,
-        yy+math.max(4*scale,(rh-body:getHeight())*.42),
+        centeredTextY(barY,barH,body),
         w*.57,"left",selected and c.text or c.muted)
 
       if value~="" then
         text(value,valueFont,x+w*.63,
-          yy+math.max(5*scale,(rh-valueFont:getHeight())*.45),
+          centeredTextY(barY,barH,valueFont),
           w*.29,"right",selected and c.text or c.accent)
       end
     end
@@ -975,13 +1151,13 @@ return function(mod)
     elseif selected and selected.activate then
       hint="A OPEN   B BACK"
     end
-    text(hint,small,x+28*scale,y+h-footerH+18*scale,w-56*scale,"left",c.muted)
+    fittedText(hint,19*scale,x+28*scale,y+h-footerH+18*scale,w-56*scale,"left",c.muted)
 
     if scroll>0 then
-      text("▲",body,x+w-58*scale,y+22*scale,nil,nil,c.accent)
+      drawVerticalArrow(x+w-58*scale,y+22*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent)
     end
     if scroll+visible<#rows then
-      text("▼",body,x+w-58*scale,y+h-footerH-42*scale,nil,nil,c.accent)
+      drawVerticalArrow(x+w-58*scale,y+h-footerH-42*scale,math.max(12*scale,body:getHeight()*.65),"down",c.accent)
     end
   end
 
@@ -1050,24 +1226,25 @@ return function(mod)
       if not row then break end
       local yy=listTop+(slot-1)*rh
       local selected=i==idx
+      local barY,barH=centeredRowRect(yy,rh,3*scale)
 
       if selected then
         color(c.selected)
-        G.rectangle("fill",x+22*scale,yy,w-44*scale,rh-6*scale,7,7)
+        G.rectangle("fill",x+22*scale,barY,w-44*scale,barH,7,7)
         color(c.accent,nil,true)
-        G.rectangle("fill",x+22*scale,yy,5*scale,rh-6*scale,2,2)
+        G.rectangle("fill",x+22*scale,barY,5*scale,barH,2,2)
       end
 
       local label=tostring(row.label or row.id or "OPTION")
       local value=managerOptionValue(row)
 
       text(label,body,x+50*scale,
-        yy+math.max(4*scale,(rh-body:getHeight())*.42),
+        centeredTextY(barY,barH,body),
         w*.60,"left",selected and c.text or c.muted)
 
       if value~="" then
         text(value,valueFont,x+w*.64,
-          yy+math.max(4*scale,(rh-valueFont:getHeight())*.44),
+          centeredTextY(barY,barH,valueFont),
           w*.27,"right",selected and c.text or c.accent)
       end
     end
@@ -1083,15 +1260,15 @@ return function(mod)
         w-64*scale,"left",c.muted)
     end
 
-    text("UP/DOWN  SELECT   LEFT/RIGHT  CHANGE   A  CHANGE   B  DONE",
-      small,x+32*scale,y+h-small:getHeight()-16*scale,
+    fittedText("UP/DOWN  SELECT   LEFT/RIGHT  CHANGE   A  CHANGE   B  DONE",
+      19*scale,x+32*scale,y+h-small:getHeight()-16*scale,
       w-64*scale,"left",c.accent)
 
     if scroll>0 then
-      text("▲",body,x+w-58*scale,y+24*scale,nil,nil,c.accent)
+      drawVerticalArrow(x+w-58*scale,y+24*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent)
     end
     if scroll+visible<#rows then
-      text("▼",body,x+w-58*scale,y+h-footerH-42*scale,nil,nil,c.accent)
+      drawVerticalArrow(x+w-58*scale,y+h-footerH-42*scale,math.max(12*scale,body:getHeight()*.65),"down",c.accent)
     end
   end
 
@@ -1132,24 +1309,25 @@ return function(mod)
       if not row then break end
       local yy=listTop+(slot-1)*rh
       local selected=i==idx
+      local barY,barH=centeredRowRect(yy,rh,3*scale)
 
       if selected then
         color(c.selected)
-        G.rectangle("fill",x+22*scale,yy,w-44*scale,rh-6*scale,7,7)
+        G.rectangle("fill",x+22*scale,barY,w-44*scale,barH,7,7)
         color(c.accent,nil,true)
-        G.rectangle("fill",x+22*scale,yy,5*scale,rh-6*scale,2,2)
+        G.rectangle("fill",x+22*scale,barY,5*scale,barH,2,2)
       end
 
       local label=tostring(row.label or row.id or "OPTION")
       local value=tostring(row.right or "")
 
       text(label,body,x+50*scale,
-        yy+math.max(4*scale,(rh-body:getHeight())*.42),
+        centeredTextY(barY,barH,body),
         w*.60,"left",selected and c.text or c.muted)
 
       if value~="" then
         text(value,valueFont,x+w*.64,
-          yy+math.max(4*scale,(rh-valueFont:getHeight())*.44),
+          centeredTextY(barY,barH,valueFont),
           w*.27,"right",selected and c.text or c.accent)
       end
     end
@@ -1180,15 +1358,15 @@ return function(mod)
         w-64*scale,"left",c.muted)
     end
 
-    text("UP/DOWN  SELECT   LEFT/RIGHT  CHANGE   A  CHANGE/OPEN   B  BACK",
-      small,x+32*scale,y+h-small:getHeight()-16*scale,
+    fittedText("UP/DOWN  SELECT   LEFT/RIGHT  CHANGE   A  CHANGE/OPEN   B  BACK",
+      19*scale,x+32*scale,y+h-small:getHeight()-16*scale,
       w-64*scale,"left",c.accent)
 
     if scroll>0 then
-      text("▲",body,x+w-58*scale,y+24*scale,nil,nil,c.accent)
+      drawVerticalArrow(x+w-58*scale,y+24*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent)
     end
     if scroll+visible<#rows then
-      text("▼",body,x+w-58*scale,y+h-footerH-42*scale,nil,nil,c.accent)
+      drawVerticalArrow(x+w-58*scale,y+h-footerH-42*scale,math.max(12*scale,body:getHeight()*.65),"down",c.accent)
     end
   end
 
@@ -1376,10 +1554,10 @@ return function(mod)
     G.setScissor()
 
     color(c.divider); G.rectangle("fill",x+pad,y+h-footerH,w-pad*2,1)
-    text("UP/DOWN/LEFT/RIGHT  MOVE    B  BACK",tiny,x+pad,
+    fittedText("UP/DOWN/LEFT/RIGHT  MOVE    B  BACK",16*scale,x+pad,
       y+h-footerH+17*scale,w-pad*2,"left",c.accent)
-    if first>1 then text("▲",body,x+w-52*scale,listTop+4*scale,nil,nil,c.accent) end
-    if last<#rows then text("▼",body,x+w-52*scale,listBottom-34*scale,nil,nil,c.accent) end
+    if first>1 then drawVerticalArrow(x+w-52*scale,listTop+4*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent) end
+    if last<#rows then drawVerticalArrow(x+w-52*scale,listBottom-34*scale,math.max(12*scale,body:getHeight()*.65),"down",c.accent) end
   end
 
   local function syncDexRadarOpacity(game)
