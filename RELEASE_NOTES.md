@@ -1,19 +1,18 @@
-# Kanto in Motion v1.6.4
+# Kanto in Motion v1.6.5
 
-v1.6.4 focuses on **Emerald compatibility**, **large-font Modern UI responsiveness**, and a few presentation calibrations carried forward from community testing.
+v1.6.5 focuses on **1025Dex battle compatibility**, **Game3 presentation consistency**, and a couple of UI/asset-menu polish fixes.
 
 ## Highlights
 
-- **Emerald battle compatibility** — when KIM owns the HD/3D battler presentation, Emerald's native alternate 2D front-sprite frame is suppressed during the entrance/cry sequence so it no longer overlays the KIM Pokémon. The original cry/timing remains intact, with a small KIM-friendly hop providing the visual beat.
-- **Emerald HD starter preview** — Treecko, Torchic, and Mudkip now use KIM's animated HD presentation at final window resolution on the opening starter confirmation screen while Emerald retains ownership of the surrounding scene and selection logic.
-- **Gen 2 CONTINUE layout** — the save-summary card now keeps the TIME row, divider, and `A CONTINUE / B BACK` footer separated correctly on smaller layouts.
-- **Font scale capped at 200%** — the general Modern UI font range now stops at 2×, including AUTO scaling.
-- **Responsive extreme-font layouts** — title/main menu, Options, UI Settings, KIM settings, Pack/list rows, right-side values, descriptions, and footer/control hints now adapt their row spacing, fitting, and scrolling for small-panel/large-font combinations such as COMPACT + 75% UI + 200% font.
-- **Selection-bar centering** — affected title/settings/list highlights use rendered font height so the text remains vertically centered at enlarged font sizes.
-- **BATTLE UI SIZE recalibrated** — 100% remains the displayed/default value, but now renders at the former 95% physical footprint. Existing saved values are not rewritten.
+- **1025Dex split ownership** — with the optional 1025Dex mod present, KIM keeps its HD animated battle sprites for National Dex #001–386 and delegates #387–1025 to 1025Dex. The rule is applied independently to the player and opponent slots.
+- **No duplicate battlers** — KIM remains the outer Game3 Pokémon-picture router, preventing KIM and 1025Dex from drawing the same battler on top of each other.
+- **Unified battle-floor placement** — 1025Dex fallback battlers are presented through KIM's final battle plane so their visible sprites sit on the authored platform instead of floating above it. Opponent/front sprites include the confirmed grounding adjustment.
+- **KIM shadows for post-Gen3 battlers** — 1025Dex fallback Pokémon use KIM's ground-contact shadow system and the existing shadow quality/opacity settings while 1025Dex continues to supply the art.
+- **Gen 2 mobile arrow spacing** — Modern UI up/down scroll arrows reserve their own right-side gutter instead of overlapping option values.
+- **Cleaner Game3 Start Menu** — **KIM ASSETS** is shown on FireRed/LeafGreen/Emerald only when the shared HD asset pack is missing or incomplete. A healthy cache hides the entry automatically.
 
 ## Compatibility notes
 
-The persistent external HD asset-cache architecture is unchanged. Existing healthy HD asset installs do **not** need to be downloaded again for v1.6.4.
+1025Dex is optional and is not modified by Kanto in Motion. When it is absent, normal KIM/Game3 behavior is unchanged.
 
-Emerald compatibility is implemented entirely on the KIM presentation side. Native Emerald battle timing, cry audio, starter-scene input/state, and surrounding Game3 UI remain source-owned.
+The persistent external HD asset-cache format is unchanged. Existing healthy HD asset installs do **not** need to be downloaded again for v1.6.5.

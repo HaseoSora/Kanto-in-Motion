@@ -1677,12 +1677,12 @@ return function(mod)
   end)
 
   if IS_GEN3 then
-    -- Game3 does not expose mod.content.screens. Put a permanent KIM ASSETS
-    -- entry in FR/LG's native Start menu instead, so users can install,
-    -- remove, and later re-download the shared pack on both desktop/mobile.
+    -- Game3 does not expose mod.content.screens. Expose KIM ASSETS in the
+    -- native Start menu only while the shared pack is missing/incomplete.
+    -- Once the cache validates as complete, keep the normal Start menu clean.
     local function addGen3AssetItem(nextFn, game, items)
       local out = nextFn(game, items)
-      if type(out) ~= "table" then return out end
+      if type(out) ~= "table" or manager:isComplete() then return out end
       for _, row in ipairs(out) do
         if type(row) == "table" and row.id == SCREEN_ID then return out end
       end

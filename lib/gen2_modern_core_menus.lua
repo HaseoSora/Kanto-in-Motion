@@ -1185,9 +1185,11 @@ return function(mod)
 
       local label=tostring(optionLabel(row) or "")
       local value=tostring(optionValue(s,row) or "")
+      local arrowGutter=30*scale
       local labelW=w*.53
       local valueX=x+w*.63
-      local valueW=w*.29
+      local valueRight=x+w-34*scale-arrowGutter
+      local valueW=math.max(80*scale,valueRight-valueX)
       local rowLabelFont=fittedFont(26*scale,label,labelW)
       text(label,rowLabelFont,x+48*scale,
         centeredTextY(barY,barH,rowLabelFont),
@@ -1208,10 +1210,10 @@ return function(mod)
       y+h-hintFont:getHeight()-14*scale,w-56*scale,"left",c.muted)
 
     if scroll>0 then
-      drawVerticalArrow(x+w-58*scale,y+22*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent)
+      drawVerticalArrow(x+w-30*scale,y+22*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent)
     end
     if scroll+visible<#rows then
-      drawVerticalArrow(x+w-58*scale,y+h-footerH-42*scale,math.max(12*scale,body:getHeight()*.65),"down",c.accent)
+      drawVerticalArrow(x+w-30*scale,y+h-footerH-42*scale,math.max(12*scale,body:getHeight()*.65),"down",c.accent)
     end
   end
 
@@ -1310,9 +1312,11 @@ return function(mod)
 
       local label=tostring(row.label or row.id or "OPTION")
       local value=tostring(managerOptionValue(row) or "")
+      local arrowGutter=30*scale
       local labelW=w*.54
       local valueX=x+w*.64
-      local valueW=w*.27
+      local valueRight=x+w-34*scale-arrowGutter
+      local valueW=math.max(76*scale,valueRight-valueX)
       local rowLabelFont=fittedFont(27*scale,label,labelW)
 
       text(label,rowLabelFont,x+50*scale,
@@ -1340,10 +1344,10 @@ return function(mod)
       y+h-hintFont:getHeight()-14*scale,w-64*scale,"left",c.accent)
 
     if scroll>0 then
-      drawVerticalArrow(x+w-58*scale,y+24*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent)
+      drawVerticalArrow(x+w-30*scale,y+24*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent)
     end
     if scroll+visible<#rows then
-      drawVerticalArrow(x+w-58*scale,y+h-footerH-42*scale,math.max(12*scale,body:getHeight()*.65),"down",c.accent)
+      drawVerticalArrow(x+w-30*scale,y+h-footerH-42*scale,math.max(12*scale,body:getHeight()*.65),"down",c.accent)
     end
   end
 
@@ -1459,10 +1463,10 @@ return function(mod)
       y+h-hintFont:getHeight()-14*scale,w-64*scale,"left",c.accent)
 
     if scroll>0 then
-      drawVerticalArrow(x+w-58*scale,y+24*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent)
+      drawVerticalArrow(x+w-30*scale,y+24*scale,math.max(12*scale,body:getHeight()*.65),"up",c.accent)
     end
     if scroll+visible<#rows then
-      drawVerticalArrow(x+w-58*scale,y+h-footerH-42*scale,math.max(12*scale,body:getHeight()*.65),"down",c.accent)
+      drawVerticalArrow(x+w-30*scale,y+h-footerH-42*scale,math.max(12*scale,body:getHeight()*.65),"down",c.accent)
     end
   end
 

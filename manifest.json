@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.6.4",
+  "version": "1.6.5",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -28,7 +28,8 @@
     "potato_voxel",
     "HGSS_SPRITES",
     "gen2_clean_ui",
-    "dex_radar"
+    "dex_radar",
+    "1025dex"
   ],
   "conflicts": [
     "gen1_modern_ui",
@@ -40,6 +41,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen/Emerald; v1.6.4 adds Emerald battle/starter presentation compatibility, improves large-font Modern UI responsiveness, fixes the Gen 2 CONTINUE summary layout, and recalibrates BATTLE UI SIZE so 100% is the new neutral footprint.",
+  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen/Emerald; v1.6.5 adds cooperative 1025Dex battle-sprite routing with KIM grounding/shadows, improves Gen 2 mobile scroll-arrow spacing, and hides the Game3 KIM ASSETS Start Menu entry when the shared HD cache is healthy.",
   "github": "HaseoSora/Kanto-in-Motion"
 }

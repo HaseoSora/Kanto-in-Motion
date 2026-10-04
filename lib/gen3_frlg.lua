@@ -419,6 +419,14 @@ return function(mod)
   local backWrapper
   local providerInstalled = false
   local routeLogged = { front = false, back = false }
+  -- Forward-declared so the provider wrappers can recognize 1025Dex-owned
+  -- post-Gen3 species even though the compatibility installer is defined below.
+  local completeDexCompat = {
+    ensureWrapper = nil,
+    upstreamEnsure = nil,
+    active = false,
+    logged = false,
+  }
 
   local function callFrontProvider(fn, species, form, shiny, personality)
     if frontDelegateActive then
@@ -462,7 +470,8 @@ return function(mod)
   end
 
   frontWrapper = function(species, form, shiny, personality)
-    if battleActive() and mod.options:get("battleSprites") == false then
+    local inBattle = battleActive()
+    if inBattle and mod.options:get("battleSprites") == false then
       return callFrontProvider(upstreamFront, species, form, shiny, personality)
     end
     local rec, dex = recordFor(species, "front", shiny == true, personality, form)
@@ -473,11 +482,22 @@ return function(mod)
         return entry
       end
     end
+
+    -- For post-Gen3 1025Dex battlers, prime the upstream mutable provider but
+    -- keep Game3's native 64x64 battle slot transparent. KIM will replay that
+    -- exact 1025Dex Image at the final battle plane with KIM grounding/shadows.
+    local fallbackDex = nationalDex(species)
+    if inBattle and completeDexCompat.active and fallbackDex and fallbackDex > 386 then
+      callFrontProvider(upstreamFront, species, form, shiny, personality)
+      return battlePlaceholder()
+    end
+
     return callFrontProvider(upstreamFront, species, form, shiny, personality)
   end
 
   backWrapper = function(species, form, shiny)
-    if battleActive() and mod.options:get("battleSprites") == false then
+    local inBattle = battleActive()
+    if inBattle and mod.options:get("battleSprites") == false then
       return callBackProvider(upstreamBack, species, form, shiny)
     end
     local personality = personalityForBack(species)
@@ -489,6 +509,13 @@ return function(mod)
         return entry
       end
     end
+
+    local fallbackDex = nationalDex(species)
+    if inBattle and completeDexCompat.active and fallbackDex and fallbackDex > 386 then
+      callBackProvider(upstreamBack, species, form, shiny)
+      return battlePlaceholder()
+    end
+
     return callBackProvider(upstreamBack, species, form, shiny)
   end
 
@@ -523,10 +550,62 @@ return function(mod)
     return providerInstalled
   end
 
+  -- 1025Dex compatibility ---------------------------------------------------
+  --
+  -- 1025Dex also owns Pokemon.frontPic/backPic and deliberately reasserts its
+  -- provider on every core.update so post-Gen3 species can never fall back to
+  -- missing ROM art.  KIM, meanwhile, needs to remain the OUTER provider for
+  -- National #001-386 so the native 64x64 battle slot stays transparent and
+  -- our original HD atlas frame can be replayed at final window resolution.
+  --
+  -- Make the two providers cooperate instead of fighting for ownership:
+  --   #001-386  -> KIM when an authored KIM record/asset exists
+  --   #387-1025 -> upstream 1025Dex provider
+  -- KIM's frontWrapper/backWrapper already implement exactly that fall-through
+  -- rule.  The only missing piece is reclaiming the outer seam after 1025Dex's
+  -- per-frame ensure pass.  Wrap its exported ensure callback and also keep a
+  -- post-core.update safety net in case a future 1025Dex build replaces it.
+  -- completeDexCompat is forward-declared above so the provider wrappers can
+  -- route post-Gen3 battle species through the final KIM presentation pass.
+
+  local function completeDexHandle()
+    if type(mod.find) ~= "function" then return nil end
+    local ok, handle = pcall(mod.find, mod, "1025dex")
+    if not ok or not handle then ok, handle = pcall(mod.find, "1025dex") end
+    if ok and handle then return handle end
+    return nil
+  end
+
+  local function install1025DexProviderSplit(reason)
+    if not completeDexHandle() then return false end
+    completeDexCompat.active = true
+
+    local ensure = Pokemon.__completeDexEnsurePics
+    if type(ensure) == "function" and ensure ~= completeDexCompat.ensureWrapper then
+      completeDexCompat.upstreamEnsure = ensure
+      completeDexCompat.ensureWrapper = function(...)
+        local upstream = completeDexCompat.upstreamEnsure
+        if type(upstream) == "function" then upstream(...) end
+        -- 1025Dex has just reclaimed its provider. Capture that provider as
+        -- KIM's upstream and immediately put KIM back on the outside.
+        installProvider("1025dex.ensure")
+      end
+      Pokemon.__completeDexEnsurePics = completeDexCompat.ensureWrapper
+    end
+
+    installProvider(reason or "1025dex.compat")
+    if not completeDexCompat.logged and mod.log and mod.log.info then
+      completeDexCompat.logged = true
+      mod.log:info("1025Dex battle sprite split active: KIM #001-386; 1025Dex #387-1025 with KIM grounding/shadows")
+    end
+    return true
+  end
+
   -- Game3 emits game.ready only after Gen3Compat.applyMerged() has completed,
   -- making this the correct point to take final ownership of the picture seam.
   mod.events:on("game.ready", function()
     installProvider("game.ready")
+    install1025DexProviderSplit("1025dex.game.ready")
 
     -- Pokemon.install()/reload can rebuild Gen 3 species data. Register after
     -- Gen3Compat's own reload callback so KIM is reasserted last.
@@ -535,6 +614,7 @@ return function(mod)
       mod._kantoInMotionFrlgReloadHookInstalled = true
       Pokemon.onReload(function()
         installProvider("pokemon.reload")
+        install1025DexProviderSplit("1025dex.pokemon.reload")
       end, "kanto-in-motion-frlg")
     end
   end)
@@ -543,6 +623,21 @@ return function(mod)
   -- already occurred before this module was reconstructed.
   if mod.game then
     pcall(installProvider, "live-game")
+    pcall(install1025DexProviderSplit, "1025dex.live-game")
+  end
+
+  -- 1025Dex's sprite component performs its own ensure both before and after
+  -- the downstream core.update chain.  Run outside it (high hook priority),
+  -- then reclaim KIM only AFTER downstream returns.  This is intentionally
+  -- conditional: without 1025Dex installed KIM adds no extra per-frame work.
+  if mod.hooks and type(mod.hooks.wrap) == "function" then
+    mod.hooks:wrap("core.update", function(nextFn, game, dt)
+      local result = { nextFn(game, dt) }
+      if completeDexCompat.active or completeDexHandle() then
+        pcall(install1025DexProviderSplit, "1025dex.post-update")
+      end
+      return (table.unpack or unpack)(result)
+    end, 1000)
   end
 
   -- Final-resolution FRLG battle battlers ---------------------------------
@@ -1159,12 +1254,33 @@ return function(mod)
     end
     local side = (id % 2 == 0) and "back" or "front"
     local rec, dex = recordFor(picSp, side, shiny, personality, 0)
-    if not rec then return nil end
-    return {
-      battler = b, pres = pres, species = sp, picSpecies = picSp,
-      personality = personality, shiny = shiny, side = side,
-      rec = rec, dex = dex,
-    }
+    if rec then
+      return {
+        battler = b, pres = pres, species = sp, picSpecies = picSp,
+        personality = personality, shiny = shiny, side = side,
+        rec = rec, dex = dex,
+      }
+    end
+
+    -- KIM owns presentation for 1025Dex's post-Gen3 battle art while 1025Dex
+    -- remains the art provider. Its mutable 64x64 Image keeps animating in place.
+    dex = nationalDex(picSp)
+    if completeDexCompat.active and dex and dex > 386 then
+      local pic
+      if side == "back" then
+        pic = callBackProvider(upstreamBack, picSp, 0, shiny)
+      else
+        pic = callFrontProvider(upstreamFront, picSp, 0, shiny, personality)
+      end
+      if type(pic) == "table" and pic.image then
+        return {
+          battler = b, pres = pres, species = sp, picSpecies = picSp,
+          personality = personality, shiny = shiny, side = side,
+          dex = dex, completeDexPic = pic, completeDexFallback = true,
+        }
+      end
+    end
+    return nil
   end
 
   local function frameMetrics(game, viewport)
@@ -1350,6 +1466,139 @@ return function(mod)
       rot, drawSx, drawSy,
       source.width * 0.5, source.height)
     if source.image.setFilter then pcall(source.image.setFilter, source.image, "nearest", "nearest") end
+  end
+
+  -- 1025Dex fallback sprites arrive as a live mutable 64x64 Image. Its own
+  -- Game3 helper lifts that whole box upward according to transparent headroom,
+  -- which makes the art float over KIM's authored platforms. KIM instead draws
+  -- the same 1025Dex Image from Game3's un-lifted battler centre and gives it the
+  -- standard KIM contact shadow. Art ownership remains entirely with 1025Dex.
+  local completeDexBounds = setmetatable({}, { __mode = "k" })
+  local function completeDexVisibleBounds(image)
+    if not image then
+      return { w = 64, h = 64, minX = 0, minY = 0, maxX = 63, maxY = 63, imageW = 64, imageH = 64 }
+    end
+    local hit = completeDexBounds[image]
+    if hit then return hit end
+    if type(image.newImageData) ~= "function" then
+      return { w = 64, h = 64, minX = 0, minY = 0, maxX = 63, maxY = 63, imageW = 64, imageH = 64 }
+    end
+    local okData, data = pcall(image.newImageData, image)
+    if not okData or not data or type(data.getDimensions) ~= "function" then
+      return { w = 64, h = 64, minX = 0, minY = 0, maxX = 63, maxY = 63, imageW = 64, imageH = 64 }
+    end
+    local w, h = data:getDimensions()
+    local minX, minY, maxX, maxY = w, h, -1, -1
+    for py = 0, h - 1 do
+      for px = 0, w - 1 do
+        local a = select(4, data:getPixel(px, py))
+        if a and a > 0 then
+          if px < minX then minX = px end
+          if px > maxX then maxX = px end
+          if py < minY then minY = py end
+          if py > maxY then maxY = py end
+        end
+      end
+    end
+    if maxX >= minX and maxY >= minY then
+      hit = { w = maxX - minX + 1, h = maxY - minY + 1, minX = minX, minY = minY, maxX = maxX, maxY = maxY, imageW = w, imageH = h }
+      completeDexBounds[image] = hit
+      return hit
+    end
+    -- Pending mutable proxies can be transparent for a few build ticks. Do not
+    -- cache that state; the next frame will measure once 1025Dex fills the Image.
+    return { w = 64, h = 64, minX = 0, minY = 0, maxX = 63, maxY = 63, imageW = w or 64, imageH = h or 64 }
+  end
+
+  local function drawCompleteDexBattler(info, st, id, ox, oy, ux, uy)
+    local pic = info and info.completeDexPic
+    local image = pic and pic.image
+    if not image then return false end
+
+    local base = logicalBase(st, id)
+    local x = tonumber(base.x) or ((id % 2 == 0) and 72 or 176)
+    local cy = tonumber(base.y) or ((id % 2 == 0) and 80 or 40)
+
+    -- Use the engine's normal centre BEFORE 1025Dex's extra bounceOffset lift.
+    -- This preserves double-battle slots / native per-species coordinates while
+    -- placing the 64x64 box itself back on the platform.
+    if okUi and type(BattleUi.battlerSpriteCenter) == "function" then
+      local ok, nativeX, nativeY = pcall(BattleUi.battlerSpriteCenter,
+        id, info.picSpecies or info.species, base, 0, false)
+      if ok and tonumber(nativeY) then
+        x = tonumber(nativeX) or x
+        cy = tonumber(nativeY) or cy
+      end
+    end
+
+    local pres = info.pres
+    if pres then
+      x = x + (tonumber(pres.ox) or 0)
+      cy = cy + (tonumber(pres.oy) or 0)
+    end
+    local groundY = cy + 32
+
+    local animScale = pres and (tonumber(pres.scale) or 1) or 1
+    local sxExtra = pres and (tonumber(pres.sx) or 1) or 1
+    local syExtra = pres and (tonumber(pres.sy) or 1) or 1
+    local hFlip = pres and pres.hFlip == true
+    local rot = pres and (tonumber(pres.rotation) or 0) or 0
+    local alpha = pres and (tonumber(pres.alpha) or 1) or 1
+    local darken = pres and (tonumber(pres.darken) or 0) or 0
+    local flash = pres and (tonumber(pres.flash) or 0) or 0
+
+    local visible = completeDexVisibleBounds(image)
+    local bottomInset = math.max(0, (tonumber(visible.imageH) or 64) - 1 - (tonumber(visible.maxY) or 63))
+    local groundingLift = bottomInset
+    if groundingLift ~= 0 then
+      cy = cy + groundingLift
+      groundY = cy + 32
+    end
+
+    if battlerShadows and type(battlerShadows.drawDirect) == "function" then
+      love.graphics.setShader()
+      love.graphics.setBlendMode("alpha")
+      love.graphics.setColor(1, 1, 1, 1)
+      pcall(battlerShadows.drawDirect, battlerShadows, {
+        w = visible.w,
+        h = visible.h,
+        scaleX = ux * animScale * math.abs(sxExtra),
+        scaleY = uy * animScale * math.abs(syExtra),
+        ax = ox + x * ux,
+        ay = oy + groundY * uy,
+        groundShift = 0,
+        species = info.dex or info.species,
+        dex = info.dex,
+      }, info.side == "back" and "player" or "enemy", alpha)
+    end
+
+    local shade = 1 - darken * (1 - 8 / 255)
+    if flash > 0 then
+      love.graphics.setColor(1, 1, 1, alpha * (0.4 + 0.6 * ((flash % 2 == 0) and 1 or 0.3)))
+    else
+      love.graphics.setColor(shade, shade, shade, alpha)
+    end
+    if image.setFilter then pcall(image.setFilter, image, "nearest", "nearest") end
+    -- 1025Dex front sprites still read slightly high against KIM's authored
+    -- opponent platform even when the native 64x64 proxy reaches its bottom row.
+    -- Keep the already-correct KIM shadow/floor anchor untouched and lower only
+    -- the visible opponent art by three Game3 logical pixels. Player/back sprites
+    -- keep their existing placement until separately calibrated.
+    local spriteGroundNudge = (info.side == "back") and 0 or 3
+    love.graphics.draw(image,
+      ox + x * ux, oy + (cy + spriteGroundNudge) * uy,
+      rot,
+      ux * animScale * sxExtra * (hFlip and -1 or 1),
+      uy * animScale * syExtra,
+      32, 32)
+    return true
+  end
+
+  local function drawBattleBattler(info, st, id, ox, oy, ux, uy, hdGeo)
+    if info and info.completeDexFallback then
+      return drawCompleteDexBattler(info, st, id, ox, oy, ux, uy)
+    end
+    return drawHdBattler(info, st, id, ox, oy, ux, uy, hdGeo)
   end
 
   -- KIM's HD battlers are composited after the native 240x160 battle surface
@@ -1864,7 +2113,7 @@ return function(mod)
           -- them trapped underneath the final-resolution Pokemon.
           if not (st.absent and st.absent[1]) then
             local enemyInfo = battlerRecord(st, 1)
-            if enemyInfo then drawHdBattler(enemyInfo, st, 1, originX, originY, ux, uy, nil) end
+            if enemyInfo then drawBattleBattler(enemyInfo, st, 1, originX, originY, ux, uy, nil) end
           end
           if not wantBackground and okAnim and type(BattleAnim.drawParticles) == "function" then
             withNativeViewport(originX, originY, ux, uy, function()
@@ -1874,7 +2123,7 @@ return function(mod)
 
           if not (st.absent and st.absent[0]) then
             local playerInfo = battlerRecord(st, 0)
-            if playerInfo then drawHdBattler(playerInfo, st, 0, originX, originY, ux, uy, nil) end
+            if playerInfo then drawBattleBattler(playerInfo, st, 0, originX, originY, ux, uy, nil) end
           end
           if not wantBackground and okAnim and type(BattleAnim.drawParticles) == "function" then
             withNativeViewport(originX, originY, ux, uy, function()
@@ -1891,7 +2140,7 @@ return function(mod)
           for _, id in ipairs(order) do
             if not (st.absent and st.absent[id]) then
               local info = battlerRecord(st, id)
-              if info then drawHdBattler(info, st, id, originX, originY, ux, uy, nil) end
+              if info then drawBattleBattler(info, st, id, originX, originY, ux, uy, nil) end
             end
           end
           if not wantBackground and okAnim and type(BattleAnim.drawParticles) == "function" then
