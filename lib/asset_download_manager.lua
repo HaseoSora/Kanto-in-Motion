@@ -9,20 +9,24 @@ return function(mod)
   local IS_GEN3 = tonumber(mod.generation) == 3
   local SCREEN_ID = "animated_menu_pokemon:asset_manager"
   local REPO = "HaseoSora/Kanto-in-Motion-Assets"
-  local ASSET_VERSION = "1.0.0"
+  -- v1.1.0 is an additive Unown-form supplement layered on top of the
+  -- existing v1.0.0 full asset pack. Existing users download only the small
+  -- supplement; fresh installs automatically fetch v1.0.0 first, then v1.1.0.
+  local BASE_ASSET_VERSION = "1.0.0"
+  local ASSET_VERSION = "1.1.0"
   local CACHE_ROOT = "kim_assets/files/"
   local COMPLETE_KEY = "kim_assets/complete.txt"
   local PACK_META_KEY = "kim_assets/asset-pack.json"
   local PACK_INDEX_KEY = "kim_assets/installed-files.txt"
   local DEFER_KEY = "kim_assets/deferred.txt"
   local COMPLETE_VALUE = "zip:" .. ASSET_VERSION
-  local LEGACY_COMPLETE_VALUE = "legacy:" .. ASSET_VERSION
+  local LEGACY_COMPLETE_VALUE = "legacy:" .. BASE_ASSET_VERSION
   local LEGACY_EXPECTED_FILES = 768
   local LEGACY_ROOTS = {
     "assets/battle/hd-pokemon",
     "assets/battle/backgrounds/hd",
   }
-  -- Asset pack v1.0.0 contains National Dex #001-386. Species in this
+  -- Base asset pack v1.0.0 contains National Dex #001-386. Species in this
   -- set have separate male/female files instead of one default file.
   local PACK_POKEMON_MAX_DEX = 386
   local PACK_GENDER_VARIANTS = {
@@ -35,7 +39,10 @@ return function(mod)
     [267]=true,[269]=true,[272]=true,[274]=true,[275]=true,[307]=true,[308]=true,[315]=true,
     [316]=true,[317]=true,[322]=true,[323]=true,[332]=true,[350]=true,[369]=true,
   }
-  local TEMP_NAME = "kim_assets_v" .. ASSET_VERSION:gsub("[^%w]", "_") .. ".tmp.zip"
+  local function tempNameFor(version)
+    return "kim_assets_v" .. tostring(version or ASSET_VERSION):gsub("[^%w]", "_") .. ".tmp.zip"
+  end
+  local TEMP_NAME = tempNameFor(ASSET_VERSION)
   local MOUNT_POINT = "kim_asset_pack_mount"
   local EXTRACT_BUDGET = 0.010 -- seconds of extraction work per update tick
   local MAX_CACHE_FILE = 64 * 1024 * 1024
@@ -59,6 +66,7 @@ return function(mod)
     imageCache = {},
     releaseHandle = nil,
     release = nil,
+    targetVersion = nil,
     downloadHandle = nil,
     downloadTotal = 0,
     downloadBytes = 0,
@@ -186,7 +194,7 @@ return function(mod)
     end
     if base == "" then return nil, nil, "Gen1Recomp save directory is empty." end
     local sep = base:find("\\", 1, true) and "\\" or "/"
-    return base .. sep .. TEMP_NAME, SaveData
+    return base .. sep .. tostring(manager.tempName or TEMP_NAME), SaveData
   end
 
   local function safeCacheInfo(key)
@@ -347,16 +355,33 @@ return function(mod)
   end
 
 
+  local function installedAssetVersion()
+    local value = safeCacheRead(COMPLETE_KEY)
+    if type(value) ~= "string" then return nil, nil end
+    local zip = value:match("^zip:(.+)$")
+    if zip then return zip, "download" end
+    local legacy = value:match("^legacy:(.+)$")
+    if legacy then return legacy, "legacy" end
+    return nil, nil
+  end
+
+  local function nextAssetVersion()
+    local version = installedAssetVersion()
+    if version == ASSET_VERSION then return nil end
+    if version == BASE_ASSET_VERSION then return ASSET_VERSION end
+    -- Unknown/empty caches need the full base pack before the overlay.
+    return BASE_ASSET_VERSION
+  end
+
   function manager:isComplete()
     if not cacheAvailable() then return false end
-    local value = safeCacheRead(COMPLETE_KEY)
-    return value == COMPLETE_VALUE or value == LEGACY_COMPLETE_VALUE
+    local version = installedAssetVersion()
+    return version == ASSET_VERSION
   end
 
   function manager:completionSource()
-    local value = safeCacheRead(COMPLETE_KEY)
-    if value == LEGACY_COMPLETE_VALUE then return "legacy" end
-    if value == COMPLETE_VALUE then return "download" end
+    local version, source = installedAssetVersion()
+    if version == ASSET_VERSION then return source end
     return nil
   end
 
@@ -486,14 +511,24 @@ return function(mod)
     return out
   end
 
-  local function writeInstalledAssetIndex(files)
-    local lines = {}
+  local function writeInstalledAssetIndex(files, mergeExisting)
+    local set = {}
+    if mergeExisting then
+      local existing = safeCacheRead(PACK_INDEX_KEY)
+      if type(existing) == "string" then
+        for line in existing:gmatch("[^\r\n]+") do
+          if line:sub(1, 7) == "assets/" then set[line] = true end
+        end
+      end
+    end
     for _, item in ipairs(files or {}) do
       local relative = type(item) == "table" and item.relative or item
       if type(relative) == "string" and relative:sub(1, 7) == "assets/" then
-        lines[#lines + 1] = relative
+        set[relative] = true
       end
     end
+    local lines = {}
+    for relative in pairs(set) do lines[#lines + 1] = relative end
     table.sort(lines)
     if #lines == 0 then return true end
     local ok, err = safeCacheWrite(PACK_INDEX_KEY, table.concat(lines, "\n") .. "\n")
@@ -661,6 +696,8 @@ return function(mod)
     logInfo("KIM found %d legacy HD assets; migrating locally without download", #self.legacyFiles)
     return true
   end
+
+  local beginReleaseCheck
 
   local function setError(message)
     cleanupArchive()
@@ -951,8 +988,10 @@ return function(mod)
     if not rawMeta then return setError("Could not read asset-pack.json: " .. tostring(metaReadErr)) end
     local meta, metaErr = parsePackMeta(rawMeta)
     if not meta then return setError(metaErr) end
-    if tostring(meta.version or "") ~= ASSET_VERSION then
-      return setError("Asset pack version mismatch: " .. tostring(meta.version or "unknown"))
+    local expectedVersion = tostring(manager.targetVersion or ASSET_VERSION)
+    if tostring(meta.version or "") ~= expectedVersion then
+      return setError("Asset pack version mismatch: expected " .. expectedVersion
+        .. ", got " .. tostring(meta.version or "unknown"))
     end
     if meta.id ~= nil and tostring(meta.id) ~= "kanto_in_motion_assets" then
       return setError("This ZIP is not the Kanto in Motion asset pack.")
@@ -974,18 +1013,31 @@ return function(mod)
   end
 
   local function finishExtraction()
-    writeInstalledAssetIndex(manager.extractFiles)
+    local installedVersion = tostring(manager.targetVersion or ASSET_VERSION)
+    local overlay = installedVersion ~= BASE_ASSET_VERSION
+    writeInstalledAssetIndex(manager.extractFiles, overlay)
     local wroteMeta, metaErr = safeCacheWrite(PACK_META_KEY, manager.packMetaRaw or "")
     if not wroteMeta then return setError("Could not save asset-pack metadata: " .. tostring(metaErr)) end
-    local wroteDone, doneErr = safeCacheWrite(COMPLETE_KEY, COMPLETE_VALUE)
+    local wroteDone, doneErr = safeCacheWrite(COMPLETE_KEY, "zip:" .. installedVersion)
     if not wroteDone then return setError("Could not save completion marker: " .. tostring(doneErr)) end
     manager:clearDefer()
     cleanupArchive()
-    manager.state = "done"
     manager.error = nil
     manager.installSource = "download"
     manager.revision = manager.revision + 1
-    logInfo("Kanto in Motion HD assets %s ready (%d files)", ASSET_VERSION, manager.extractedCount)
+    logInfo("Kanto in Motion HD assets %s installed (%d files)",
+      installedVersion, manager.extractedCount)
+
+    local nextVersion = nextAssetVersion()
+    if nextVersion then
+      -- Fresh installs continue straight from the full v1.0.0 pack into the
+      -- small v1.1.0 Unown overlay without asking for another menu action.
+      if beginReleaseCheck and beginReleaseCheck(nextVersion) then return end
+      return setError("Could not continue to asset supplement v" .. tostring(nextVersion) .. ".")
+    end
+
+    manager.state = "done"
+    logInfo("Kanto in Motion HD assets %s ready", ASSET_VERSION)
   end
 
   local function pumpExtraction()
@@ -1112,13 +1164,14 @@ return function(mod)
     manager.releaseHandle = nil
     if not releases then return setError(err or "Could not check asset release.") end
     local wanted = nil
+    local wantedVersion = tostring(manager.targetVersion or ASSET_VERSION)
     for _, rel in ipairs(releases) do
-      if tostring(rel.version or "") == ASSET_VERSION and rel.zip and rel.zip.url then
+      if tostring(rel.version or "") == wantedVersion and rel.zip and rel.zip.url then
         wanted = rel
         break
       end
     end
-    if not wanted then return setError("Asset release v" .. ASSET_VERSION .. " was not found.") end
+    if not wanted then return setError("Asset release v" .. wantedVersion .. " was not found.") end
     beginDownloadForRelease(wanted)
   end
 
@@ -1220,6 +1273,38 @@ return function(mod)
     beginExtraction()
   end
 
+  beginReleaseCheck = function(version)
+    local okModUpdate, ModUpdate = pcall(require, "src.mods.ModUpdate")
+    if not okModUpdate or not ModUpdate or type(ModUpdate.beginFetchReleases) ~= "function" then
+      manager.state = "error"
+      manager.error = "Gen1Recomp's release downloader is unavailable."
+      return false
+    end
+    cleanupArchive()
+    manager.targetVersion = tostring(version or ASSET_VERSION)
+    manager.tempName = tempNameFor(manager.targetVersion)
+    -- Native/portable download paths include the temporary filename, so
+    -- refresh the handoff path whenever the install chain advances versions.
+    if manager.nativeFs and manager.portableTempPath then
+      local path, SaveData = resolveEngineSaveDirectory()
+      if path and SaveData then
+        manager.portableTempPath = path
+        manager.nativeFs = SaveData
+      end
+    end
+    manager.release = nil
+    manager.downloadTotal = 0
+    manager.downloadBytes = 0
+    manager.extractFiles = {}
+    manager.extractPos = 1
+    manager.extractedCount = 0
+    manager.extractedBytes = 0
+    manager.extractTotalBytes = 0
+    manager.releaseHandle = ModUpdate.beginFetchReleases(REPO, nil, { force = true })
+    manager.state = "checking"
+    return manager.releaseHandle ~= nil
+  end
+
   function manager:start()
     self.error = nil
     if not cacheAvailable() then
@@ -1275,26 +1360,13 @@ return function(mod)
       end
       self.rawFs = fs
     end
-    local okModUpdate, ModUpdate = pcall(require, "src.mods.ModUpdate")
-    if not okModUpdate or not ModUpdate or type(ModUpdate.beginFetchReleases) ~= "function" then
-      self.state = "error"
-      self.error = "Gen1Recomp's release downloader is unavailable."
-      return false
-    end
-
-    cleanupArchive()
-    self.release = nil
-    self.downloadTotal = 0
-    self.downloadBytes = 0
-    self.extractFiles = {}
-    self.extractPos = 1
-    self.extractedCount = 0
-    self.extractedBytes = 0
-    self.extractTotalBytes = 0
     self:clearDefer()
-    self.releaseHandle = ModUpdate.beginFetchReleases(REPO, nil, { force = true })
-    self.state = "checking"
-    return true
+    local target = nextAssetVersion()
+    if not target then
+      self.state = "done"
+      return true
+    end
+    return beginReleaseCheck(target)
   end
 
   function manager:cancel()

@@ -106,6 +106,12 @@ return function(mod)
     if dex and type(row) == "table" then byDex[dex] = row end
   end
 
+  -- Shared Unown HD form metadata. The heavy A-Z/!/? art itself is owned by
+  -- Kanto-in-Motion-Assets and resolved through mod._kimAssetProvider.
+  -- Form indices are 1=A, 2=B ... 26=Z, 27=!, 28=?.
+  local unownForms = loadTable("data/hd_unown_forms.lua", true)
+  mod._kimHdUnownForms = unownForms
+
   local okP, Pokemon = pcall(require, "src.core.game3.pokemon")
   if not okP or type(Pokemon) ~= "table" then
     if mod.log and mod.log.error then
@@ -192,12 +198,39 @@ return function(mod)
       or nil
   end
 
+  local function game3UnownFormIndex(picSpecies)
+    picSpecies = tonumber(picSpecies)
+    if picSpecies == 201 then return 1 end
+    -- Gen3's generated picture species are contiguous:
+    -- 413=B ... 437=Z, 438=!, 439=?.
+    if picSpecies and picSpecies >= 413 and picSpecies <= 439 then
+      return picSpecies - 411
+    end
+    return nil
+  end
+
   local function recordFor(species, side, shiny, personality, form)
     if not enabledForCurrentSurface(side) then return nil end
+
+    -- Unown's generated Game3 picture species are not National-Dex species.
+    -- Route B-Z/!/? back to National Dex #201 and select KIM's matching
+    -- external HD form art before the normal >386 fallback can see them.
+    local unownForm = game3UnownFormIndex(species)
+    if unownForm and unownForm > 1 then
+      local row = unownForms and unownForms[unownForm]
+      local sideData = type(row) == "table" and row[side] or nil
+      local colorData = type(sideData) == "table"
+        and sideData[shiny and "shiny" or "normal"] or nil
+      local rec = chooseVariant(colorData, 201, personality)
+      if type(rec) == "table" and type(rec.image) == "string" then
+        return rec, 201
+      end
+      return nil
+    end
     -- FRLG has native special presentation for Castform's weather forms.
     -- Until KIM has form-specific HD assets, fail open instead of showing the
-    -- wrong base form.  The same rule preserves Unown letter forms and
-    -- personality-generated Spinda spots.
+    -- wrong base form. Unown forms are handled above; this guard primarily
+    -- preserves Castform form state and personality-generated Spinda spots.
     if tonumber(form or 0) ~= 0 then return nil end
     local dex = nationalDex(species)
     if not dex or dex < 1 or dex > 386 then return nil end

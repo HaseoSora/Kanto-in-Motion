@@ -82,6 +82,64 @@ return function(mod)
     end
   end
 
+  -- Crystal's Unown are 26 FORMS of National Dex #201, not 26 species.
+  -- The engine already derives the live form from the mon's DVs and uses the
+  -- same value for Ruins of Alph encounter unlocks / Unown Dex tracking. KIM
+  -- only selects the matching HD artwork here. Letter A remains the ordinary
+  -- #201 National-Dex record; B-Z are the supplemental form atlases.
+  local unownForms = loadTable("data/hd_unown_forms.lua", true)
+  local okUnown, Unown = pcall(require, "src.core.gen2.Unown")
+  if not okUnown then Unown = nil end
+  local UNOWN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+  local function unownIndex(value)
+    if Unown and type(Unown.index) == "function" then
+      local ok, index = pcall(Unown.index, value)
+      if ok and tonumber(index) then return tonumber(index) end
+    end
+    local n = tonumber(value)
+    if n and n >= 1 and n <= 26 then return math.floor(n) end
+    if type(value) == "string" and #value == 1 then
+      local at = UNOWN_ALPHABET:find(value:upper(), 1, true)
+      if at then return at end
+    end
+    return nil
+  end
+
+  local function isUnownSpecies(species)
+    return tonumber(species) == 201
+      or tostring(species or ""):upper() == "UNOWN"
+  end
+
+  local function fallbackUnownLetterFromDVs(dvs)
+    if type(dvs) ~= "table" then return nil end
+    local function field(...)
+      for i = 1, select("#", ...) do
+        local v = tonumber(dvs[select(i, ...)])
+        if v ~= nil then return v end
+      end
+      return 0
+    end
+    local function middleBits(v) return math.floor((v or 0) / 2) % 4 end
+    local packed = middleBits(field("attack", "atk")) * 64
+      + middleBits(field("defense", "def")) * 16
+      + middleBits(field("speed", "spd")) * 4
+      + middleBits(field("special", "spc", "specialAttack"))
+    return math.floor(packed / 10) + 1
+  end
+
+  local function unownLetterForMon(mon)
+    if type(mon) ~= "table" then return nil end
+    if not isUnownSpecies(mon.species) then return nil end
+    if Unown and type(Unown.monLetter) == "function" then
+      local ok, letter = pcall(Unown.monLetter, mon)
+      if ok and unownIndex(letter) then return unownIndex(letter) end
+    end
+    local stored = unownIndex(mon.unownLetter)
+    if stored then return stored end
+    return unownIndex(fallbackUnownLetterFromDVs(mon.dvs))
+  end
+
   local atlasCache = {}
   local sourceCache = {}
   local timingCache = setmetatable({}, { __mode = "k" })
@@ -109,7 +167,12 @@ return function(mod)
     if provider and type(provider.image) == "function" then
       local ok, value = pcall(provider.image, path)
       if ok then image = value end
-    elseif mod.assets and type(mod.assets.image) == "function" then
+    end
+    -- Heavy HD art, including the Unown form set, normally comes from the
+    -- persistent Kanto-in-Motion-Assets provider. Keep the ordinary mod-asset
+    -- fallback only for development/legacy installs; public KIM does not bundle
+    -- these Unown sheets.
+    if not image and mod.assets and type(mod.assets.image) == "function" then
       local ok, value = pcall(function() return mod.assets:image(path) end)
       if ok then image = value end
     end
@@ -237,16 +300,18 @@ return function(mod)
       or nil
   end
 
-  local function recordFor(species, side, shiny, gender)
-    species = tonumber(species)
-    if not species or species < 1 or species > 251 then return nil end
+  local function recordFor(species, side, shiny, gender, unownLetter)
+    local row
+    if isUnownSpecies(species) then
+      local index = unownIndex(unownLetter)
+      if not index then return nil end
+      row = index == 1 and byDex[201] or unownForms[index]
+    else
+      species = tonumber(species)
+      if not species or species < 1 or species > 251 then return nil end
+      row = byDex[species]
+    end
 
-    -- Gen 2 Unown owns 26 letter-specific pictures. The current KIM National
-    -- Dex pack has one generic #201 atlas, so leave Unown native rather than
-    -- replacing every letter with the same form.
-    if species == 201 then return nil end
-
-    local row = byDex[species]
     local sideData = type(row) == "table" and row[side] or nil
     local colorData = type(sideData) == "table"
       and sideData[shiny and "shiny" or "normal"] or nil
@@ -361,7 +426,8 @@ return function(mod)
         mon.species,
         back and "back" or "front",
         mon.shiny == true,
-        mon.gender
+        mon.gender,
+        unownLetterForMon(mon)
       )
       if not rec then return nativeDrawPic(self, mon, back) end
 
@@ -422,7 +488,8 @@ return function(mod)
       local mon = self.mon
       if not mon then return nativeDrawPic(self) end
 
-      local rec = recordFor(mon.species, "front", mon.shiny == true, mon.gender)
+      local rec = recordFor(mon.species, "front", mon.shiny == true, mon.gender,
+        unownLetterForMon(mon))
       if not rec then return nativeDrawPic(self) end
 
       -- Let the native Summary code paint its exact 7x7 palette/background
@@ -471,12 +538,23 @@ return function(mod)
     state._kantoInMotionGen2DexPatched = nativeDrawPic
 
     state.drawPic = function(self, row, tx, ty, ownColors)
+      local rowSpecies = row and row.species
+      local rowDex = tonumber(rowSpecies)
+      if not rowDex and isUnownSpecies(rowSpecies) then rowDex = 201 end
       if mod.options:get("pokedexSprites") == false
-          or not (row and row.seen and tonumber(row.species)) then
+          or not (row and row.seen and rowDex) then
         return nativeDrawPic(self, row, tx, ty, ownColors)
       end
 
-      local rec = recordFor(tonumber(row.species), "front", false, nil)
+      local letter
+      if isUnownSpecies(rowSpecies) or rowDex == 201 then
+        letter = tonumber(self.save and self.save.firstUnownSeen) or 0
+        if letter == 0 and self.save and type(self.save.unownDex) == "table" then
+          letter = tonumber(self.save.unownDex[1]) or 0
+        end
+        if letter == 0 then letter = 1 end
+      end
+      local rec = recordFor(rowDex, "front", false, nil, letter)
       if not rec then return nativeDrawPic(self, row, tx, ty, ownColors) end
 
       local blank
@@ -507,8 +585,29 @@ return function(mod)
       )
     end
 
+    -- Crystal UNOWN MODE is a form list and bypasses drawPic entirely. Replace
+    -- only its form picture so the ring, word, cursor and catching order remain
+    -- native while the selected A-Z letter uses KIM's matching HD animation.
+    if type(state.drawUnownPic) == "function"
+        and not state._kantoInMotionGen2UnownDexPatched then
+      local nativeDrawUnownPic = state.drawUnownPic
+      state._kantoInMotionGen2UnownDexPatched = nativeDrawUnownPic
+      state.drawUnownPic = function(self, letter, tx, ty)
+        if mod.options:get("pokedexSprites") == false then
+          return nativeDrawUnownPic(self, letter, tx, ty)
+        end
+        local rec = recordFor(201, "front", false, nil, letter)
+        if not rec then return nativeDrawUnownPic(self, letter, tx, ty) end
+        return drawRecordInBox(rec,
+          (tonumber(tx) or 0) * 8,
+          (tonumber(ty) or 0) * 8,
+          56, 56,
+          { centerY = true })
+      end
+    end
+
     if mod.log and mod.log.info then
-      mod.log:info("GSC HD Pokedex screen bridge attached")
+      mod.log:info("GSC HD Pokedex screen bridge attached; external Unown A-Z form art enabled")
     end
     return true
   end
@@ -547,4 +646,18 @@ return function(mod)
   mod.exports.gen2GscBridge = true
   mod.exports.gen2MaxNationalDex = 251
   mod.exports.gen2BridgeStrategy = "live-screen"
+  mod.exports.getGen2UnownSprite = function(letter, opts)
+    opts = opts or {}
+    local rec = recordFor(201,
+      opts.side == "back" and "back" or "front",
+      opts.shiny == true,
+      opts.gender,
+      letter)
+    if not rec then return nil end
+    local source = sourceFor(rec)
+    if not source then return nil end
+    local quad = sourceQuad(source, frameFor(rec))
+    if not quad then return nil end
+    return source.image, quad, rec, source
+  end
 end

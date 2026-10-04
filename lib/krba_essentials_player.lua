@@ -854,7 +854,7 @@ return function(mod, DATA)
           local mode = self.wideAnchorMode or "reflect"
           if mode == "target" then
             -- Keep the source animation's local geometry at the same scale as
-            -- its 192x192 effect art.  v43 translated the source offsets 1:1
+            -- its 192x192 effect art.  KIM translates the source offsets 1:1
             -- while scaling the art by WIDE_EFFECT_SCALE, which compressed the
             -- path around the target and could leave Slash/Gust beside it.
             cx = target.x + (cx-SRC_TARGET_X)*WIDE_EFFECT_SCALE

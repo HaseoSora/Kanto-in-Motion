@@ -833,6 +833,7 @@ return function(mod)
   -- to the game's native sprite for that surface.
   hdSprites = loadTable(HD_SPRITE_DATA_FILE, true)
   local nationalHdSprites = loadTable("data/hd_pokemon_national.lua", true)
+  mod._kimHdUnownForms = IS_GEN2 and loadTable("data/hd_unown_forms.lua", true) or {}
   local titlePlayer = loadTable("data/title_player_red.lua", true)
 
   local function selectedGeneration()
@@ -906,16 +907,72 @@ return function(mod)
     return nil
   end
 
-  local function hdRecord(species, side, color, mon)
-    local originalSpecies = species
-    species = normalizedSpecies(species)
-    local entry = species and hdSprites and hdSprites[species]
+  -- Crystal Unown is one species (#201) with 26 letter forms. The game
+  -- remains authoritative for the form; KIM maps that form to matching HD art.
+  mod._kimUnownCompat = mod._kimUnownCompat or {}
+  if IS_GEN2 then
+    local okUnown, value = pcall(require, "src.core.gen2.Unown")
+    if okUnown and type(value) == "table" then mod._kimUnownCompat.engine = value end
+  end
+  mod._kimUnownCompat.index = function(value)
+    if type(value) == "number" then
+      value = math.floor(value)
+      if value >= 1 and value <= 26 then return value end
+      return nil
+    end
+    if type(value) ~= "string" then return nil end
+    if #value == 1 then
+      local at = ("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):find(value:upper(), 1, true)
+      if at then return at end
+    end
+    local numeric = tonumber(value)
+    if numeric then return mod._kimUnownCompat.index(numeric) end
+    return nil
+  end
+  mod._kimUnownCompat.isSpecies = function(species, normalized)
+    if not IS_GEN2 then return false end
+    local numeric = tonumber(species)
+    if numeric and math.floor(numeric) == 201 then return true end
+    normalized = normalized or normalizedSpecies(species)
+    return normalized == "UNOWN"
+  end
+  mod._kimUnownCompat.letterForMon = function(mon)
+    if type(mon) ~= "table" then return nil end
+    local engine = mod._kimUnownCompat.engine
+    if engine and type(engine.monLetter) == "function" then
+      local ok, letter = pcall(engine.monLetter, mon)
+      if ok then
+        letter = mod._kimUnownCompat.index(letter)
+        if letter then return letter end
+      end
+    end
+    local stored = mod._kimUnownCompat.index(mon.unownLetter or mon.form or mon.letter)
+    if stored then return stored end
+    local dvs = mon.dvs
+    if type(dvs) ~= "table" then return nil end
+    local function middleBits(dv) return math.floor((tonumber(dv) or 0) / 2) % 4 end
+    local packed = middleBits(dvs.attack) * 64 + middleBits(dvs.defense) * 16
+      + middleBits(dvs.speed) * 4 + middleBits(dvs.special)
+    return math.floor(packed / 10) + 1
+  end
 
-    -- v1.2/v1.3's working Gen 2 menu bridge used species-keyed Gen 5 data.
-    -- The new HD import is National-Dex keyed for #152+, so adapt only the
-    -- provider lookup; keep every existing Gen 2 screen bridge unchanged.
-    if type(entry) ~= "table" and IS_GEN2 then
-      local dex = gen2NationalDex(originalSpecies, species)
+  local function hdRecord(species, side, color, mon, form)
+    local originalSpecies = species
+    local normalized = normalizedSpecies(species)
+    local cacheSpecies = normalized
+    local entry = normalized and hdSprites and hdSprites[normalized]
+
+    if IS_GEN2 and mod._kimUnownCompat.isSpecies(originalSpecies, normalized) then
+      local letter = mod._kimUnownCompat.index(form) or mod._kimUnownCompat.letterForMon(mon) or 1
+      if letter == 1 then
+        entry = nationalHdSprites and nationalHdSprites[201] or entry
+      else
+        entry = mod._kimHdUnownForms and mod._kimHdUnownForms[letter] or nil
+      end
+      cacheSpecies = "UNOWN_" .. tostring(letter)
+    elseif type(entry) ~= "table" and IS_GEN2 then
+      -- Gen 2's HD import is National-Dex keyed for #152-251.
+      local dex = gen2NationalDex(originalSpecies, normalized)
       local national = dex and nationalHdSprites and nationalHdSprites[dex]
       if type(national) == "table" then entry = national end
     end
@@ -924,23 +981,23 @@ return function(mod)
     local variants = type(sideData) == "table" and sideData[color] or nil
     local record = chooseHdVariant(variants, mon)
     if type(record) ~= "table" or type(record.image) ~= "string" then return nil end
-    return record, "hd", species
+    return record, "hd", cacheSpecies
   end
 
-  local function localFrontRecord(species, generation, mon)
-    return hdRecord(species, "front", "normal", mon)
+  local function localFrontRecord(species, generation, mon, form)
+    return hdRecord(species, "front", "normal", mon, form)
   end
 
-  local function localShinyFrontRecord(species, generation, mon)
-    return hdRecord(species, "front", "shiny", mon)
+  local function localShinyFrontRecord(species, generation, mon, form)
+    return hdRecord(species, "front", "shiny", mon, form)
   end
 
-  local function localBackRecord(species, generation, mon)
-    return hdRecord(species, "back", "normal", mon)
+  local function localBackRecord(species, generation, mon, form)
+    return hdRecord(species, "back", "normal", mon, form)
   end
 
-  local function localShinyBackRecord(species, generation, mon)
-    return hdRecord(species, "back", "shiny", mon)
+  local function localShinyBackRecord(species, generation, mon, form)
+    return hdRecord(species, "back", "shiny", mon, form)
   end
 
   local function presentationSize(generation, species, side, fallback)
@@ -1080,13 +1137,20 @@ return function(mod)
       imageCache[path] = nil
     end
     if imageCache[path] then return imageCache[path] end
-    if not (mod._kimAssetProvider and type(mod._kimAssetProvider.image) == "function") then
-      imageCache[path] = false
-      imageMissRevision[path] = revision
-      return nil
+
+    local image
+    if mod._kimAssetProvider and type(mod._kimAssetProvider.image) == "function" then
+      local ok, value = pcall(function() return mod._kimAssetProvider.image(path) end)
+      if ok then image = value end
     end
-    local ok, image = pcall(function() return mod._kimAssetProvider.image(path) end)
-    if not ok or not image then
+    -- Test/recovery supplements can live inside the mod package.  The
+    -- persistent external provider still wins whenever it owns the path.
+    if not image and mod.assets and type(mod.assets.image) == "function" then
+      local ok, value = pcall(mod.assets.image, mod.assets, path)
+      if not ok then ok, value = pcall(mod.assets.image, path) end
+      if ok then image = value end
+    end
+    if not image then
       imageCache[path] = false
       imageMissRevision[path] = revision
       return nil
@@ -1273,21 +1337,34 @@ return function(mod)
     if not menuSpritesEnabled() then return nil end
     local generation = opts and opts.generation or selectedGeneration()
     local mon = opts and opts.mon
+    local form = opts and (opts.form or opts.letter)
     local forcedFrame = nil
     -- Gen 2's SPRITE ANIMATION setting is presentation-only: it freezes KIM
     -- menu/Pokedex/party artwork on frame 1 without changing battle animation.
     if IS_GEN2 and mod.options:get("spriteAnimation") == false then forcedFrame = 1 end
     if isBattleShiny(mon) then
-      local shiny, actualGeneration, normalized = localShinyFrontRecord(species, generation, mon)
+      local shiny, actualGeneration, normalized = localShinyFrontRecord(species, generation, mon, form)
       if shiny then
         return renderPresentationFrame(shiny, actualGeneration, normalized,
           forcedFrame, "front", "shiny", false)
       end
     end
-    local front, actualGeneration, normalized = localFrontRecord(species, generation, mon)
+    local front, actualGeneration, normalized = localFrontRecord(species, generation, mon, form)
     if not front then return nil end
     return renderPresentationFrame(front, actualGeneration, normalized,
       forcedFrame, "front", "normal", false)
+  end
+
+  if IS_GEN2 then
+    mod.exports.getGen2UnownSprite = function(letter, opts)
+      opts = opts or {}
+      return getSprite(201, {
+        generation = "hd",
+        kind = opts.kind or "unown",
+        form = letter,
+        mon = opts.mon,
+      })
+    end
   end
 
   -- Title-only alternate-color lookup uses the same HD metadata as battles.
@@ -5926,13 +6003,42 @@ return function(mod)
       PokedexMenu.drawPic = function(self, row, tx, ty, ownColors, ...)
         if menuSpritesEnabled() and row and row.seen
             and row.species then
-          local animated = getSprite(row.species, { kind = "dex" })
+          local form
+          if mod._kimUnownCompat.isSpecies(row.species) then
+            local first = self and self.save and tonumber(self.save.firstUnownSeen) or nil
+            if not first or first < 1 or first > 26 then
+              local list = self and self.save and self.save.unownDex
+              first = type(list) == "table" and tonumber(list[1]) or nil
+            end
+            form = mod._kimUnownCompat.index(first) or 1
+          end
+          local animated = getSprite(row.species, { kind = "dex", form = form })
           if animated and drawCenteredPortrait(animated, (tx or 0) * 8,
               (ty or 0) * 8, 56, 56) then
             return
           end
         end
         return nativeDrawPic(self, row, tx, ty, ownColors, ...)
+      end
+    end
+
+    -- Crystal UNOWN MODE is a form list, not a species list.  Keep the
+    -- engine-owned caught-order/cursor/word logic and replace only the selected
+    -- form's picture with the matching KIM HD A-Z animation.
+    if okDex and type(PokedexMenu) == "table"
+        and type(PokedexMenu.drawUnownPic) == "function"
+        and not PokedexMenu._kantoInMotionGen2UnownPic then
+      local nativeDrawUnownPic = PokedexMenu.drawUnownPic
+      PokedexMenu._kantoInMotionGen2UnownPic = nativeDrawUnownPic
+      PokedexMenu.drawUnownPic = function(self, letter, tx, ty, ...)
+        if menuSpritesEnabled() then
+          local animated = getSprite(201, { kind = "unown-dex", form = letter })
+          if animated and drawCenteredPortrait(animated, (tx or 0) * 8,
+              (ty or 0) * 8, 56, 56) then
+            return
+          end
+        end
+        return nativeDrawUnownPic(self, letter, tx, ty, ...)
       end
     end
 

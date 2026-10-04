@@ -1,4 +1,4 @@
-# Kanto in Motion v1.6.5
+# Kanto in Motion v1.6.6
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -9,6 +9,17 @@ It supports:
 - **Pokémon FireRed / LeafGreen / Emerald** — National Dex #001–386
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
+
+## What’s new in v1.6.6
+
+v1.6.6 expands Kanto in Motion's **Unown presentation** across Gen 2 and Gen 3 while keeping the large form artwork in the external Kanto-in-Motion-Assets pack.
+
+- **Gold / Silver / Crystal Unown A-Z:** KIM now follows each individual Unown's native form and displays the matching HD animated letter in supported battle, Summary, and Pokédex presentation paths. The games remain authoritative for Ruins of Alph encounters, puzzle unlock groups, DVs, catches, and Unown form tracking; KIM only changes presentation.
+- **Gen 3 Unown A-Z + ! / ?:** FireRed/LeafGreen/Emerald now route all 28 Gen 3 Unown forms to the matching KIM HD art. Gen 3 personality/form selection remains native, including the exclamation and question-mark forms.
+- **Front/back + normal/shiny form parity:** each added form has matching front and back animated presentation with normal and shiny variants. Unown A continues to use KIM's existing National Dex #201 asset.
+- **External Unown artwork:** the new B-Z/!/? sprite sheets are **not bundled in the KIM mod ZIP**. They live in `Kanto-in-Motion-Assets`, keeping the main KIM package small and consistent with the existing external-HD architecture.
+- **Kanto-in-Motion-Assets v1.1.0 additive update:** existing healthy v1.0.0 asset installs only need the smaller v1.1.0 Unown overlay. Fresh installs automatically obtain the v1.0.0 base pack first and then apply v1.1.0.
+- **Persistent cache retained:** normal KIM updates still reuse the external asset cache; the full base pack does not need to be downloaded again just to add the new Unown forms.
 
 ## What’s new in v1.6.5
 
@@ -109,6 +120,7 @@ v1.6.0 is a major presentation, compatibility, and distribution update across al
 ### Gold / Silver / Crystal
 
 - HD animated Pokémon through National Dex **#251**
+- HD animated **Unown A-Z** form presentation, using each Pokémon's native Gen 2 form
 - Integrated KIM **Modern UI** for menus, dialogue, shops, save/options, Pokédex, Party, and supported battle UI surfaces
 - Native Gen 2 battle logic, HP/status HUD, trainers, backgrounds, and move animations
 - Modern UI themes and applicable UI customization controls shared with KIM’s Gen 1 presentation
@@ -125,6 +137,7 @@ v1.6.0 is a major presentation, compatibility, and distribution update across al
 ### FireRed / LeafGreen
 
 - HD animated Pokémon through National Dex **#386**
+- HD animated **Unown A-Z + ! + ?** form presentation using native Gen 3 personality/form selection
 - Native FR/LG HUD, commands, dialogs, and move animations
 - HD animated battle Pokémon
 - HD Summary / Pokédex / scripted Pokémon previews
@@ -140,6 +153,7 @@ v1.6.0 is a major presentation, compatibility, and distribution update across al
 
 ### Emerald
 
+- HD animated **Unown A-Z + ! + ?** form presentation using native Gen 3 personality/form selection
 - HD/3D KIM battle Pokémon presentation with Emerald-specific native-frame suppression during the entrance/cry sequence
 - Small KIM-owned hop replaces the native alternate 2D cry animation while preserving Emerald's cry audio and timing
 - Final-resolution animated HD starter confirmation preview for Treecko, Torchic, and Mudkip
@@ -358,6 +372,8 @@ The internal mod ID remains `animated_menu_pokemon`, so compatible KIM settings 
 The v1.6.0 release moves the large HD battle asset pack out of the KIM mod folder and into Gen1Recomp's persistent KIM cache. Because Gen1Recomp replaces the old mod directory during a normal update, the old embedded HD battle assets are not carried forward automatically.
 
 After updating to v1.6.0, KIM will offer the **one-time HD asset download** on first launch. Once that download finishes, the asset pack lives outside the KIM mod folder and is reused by future KIM updates, so normal updates after v1.6.0 no longer require downloading the large asset pack again.
+
+As of **v1.6.6**, the asset system can also apply additive pack updates. `Kanto-in-Motion-Assets v1.1.0` adds the new Unown B-Z/!/? form artwork on top of the original v1.0.0 base pack. Existing healthy v1.0.0 installs download only the smaller v1.1.0 overlay; fresh installs automatically install the base pack and then the overlay.
 
 ### Downloadable HD battle assets
 

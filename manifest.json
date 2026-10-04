@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.6.5",
+  "version": "1.6.6",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -41,6 +41,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen/Emerald; v1.6.5 adds cooperative 1025Dex battle-sprite routing with KIM grounding/shadows, improves Gen 2 mobile scroll-arrow spacing, and hides the Game3 KIM ASSETS Start Menu entry when the shared HD cache is healthy.",
+  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen/Emerald; v1.6.6 adds full HD Unown form routing (A-Z in Gen 2, A-Z plus !/? in Gen 3) with the new form artwork delivered through Kanto-in-Motion-Assets v1.1.0.",
   "github": "HaseoSora/Kanto-in-Motion"
 }

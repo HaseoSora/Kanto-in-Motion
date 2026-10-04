@@ -1,5 +1,5 @@
 # Package Variant
 
-Public **Kanto in Motion v1.6.5** release package.
+Public **Kanto in Motion v1.6.6** release package.
 
-This package contains the cumulative supported KIM code/UI assets for the release. Large HD Pokémon battle sheets and HD battle backgrounds remain in the persistent external KIM asset pack and are reused from an existing healthy installation.
+The main KIM ZIP contains Unown form-routing metadata/code but does not bundle the large B-Z/!/? HD sprite sheets. Those files are supplied through **Kanto-in-Motion-Assets v1.1.0**.
