@@ -593,13 +593,17 @@ return function(mod)
       (tonumber(opt("battleUiSize", "100")) or 100) / 100)) * 0.95
     local opacity = math.max(0.25, math.min(1.00,
       (tonumber(opt("battleUiOpacity", "100")) or 100) / 100))
-    local textPercent = math.max(100, math.min(400,
-      tonumber(opt("battleTextScale", "150")) or 150))
+    -- Gen 2/3 share the same practical battle-text range. Clamp saved
+    -- legacy values too, so an older 225-400% setting cannot escape the
+    -- new 200% ceiling after updating KIM.
+    local textPercent = math.max(50, math.min(200,
+      tonumber(opt("battleTextScale", "100")) or 100))
 
-    -- 150% is KIM's authored/default battle text size. Scale around that
-    -- reference instead of multiplying the native 8px font by 1.5 twice.
-    local logicalBody = 7.0 * (textPercent / 150)
-    local logicalCaption = 5.3 * (textPercent / 150)
+    -- 100% is the user-facing neutral/default size. Preserve the former
+    -- 150%-default physical footprint at 100%, then scale symmetrically
+    -- around that neutral reference.
+    local logicalBody = 7.0 * (textPercent / 100)
+    local logicalCaption = 5.3 * (textPercent / 100)
     local bodyFont = fontFor(logicalBody * fit)
     local captionFont = fontFor(logicalCaption * fit)
 

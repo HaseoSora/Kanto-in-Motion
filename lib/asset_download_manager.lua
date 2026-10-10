@@ -9,11 +9,12 @@ return function(mod)
   local IS_GEN3 = tonumber(mod.generation) == 3
   local SCREEN_ID = "animated_menu_pokemon:asset_manager"
   local REPO = "HaseoSora/Kanto-in-Motion-Assets"
-  -- v1.1.0 is an additive Unown-form supplement layered on top of the
-  -- existing v1.0.0 full asset pack. Existing users download only the small
-  -- supplement; fresh installs automatically fetch v1.0.0 first, then v1.1.0.
+  -- The HD pack is layered: v1.0.0 is the full base, v1.1.0 adds Unown
+  -- forms, and v1.2.0 adds Deoxys forms. Existing users download only the
+  -- missing supplement(s); fresh installs walk the chain in order.
   local BASE_ASSET_VERSION = "1.0.0"
-  local ASSET_VERSION = "1.1.0"
+  local ASSET_VERSION = "1.2.0"
+  local ASSET_CHAIN = { "1.0.0", "1.1.0", "1.2.0" }
   local CACHE_ROOT = "kim_assets/files/"
   local COMPLETE_KEY = "kim_assets/complete.txt"
   local PACK_META_KEY = "kim_assets/asset-pack.json"
@@ -368,8 +369,11 @@ return function(mod)
   local function nextAssetVersion()
     local version = installedAssetVersion()
     if version == ASSET_VERSION then return nil end
-    if version == BASE_ASSET_VERSION then return ASSET_VERSION end
-    -- Unknown/empty caches need the full base pack before the overlay.
+    if version == nil then return BASE_ASSET_VERSION end
+    for i = 1, #ASSET_CHAIN - 1 do
+      if version == ASSET_CHAIN[i] then return ASSET_CHAIN[i + 1] end
+    end
+    -- Unknown/legacy completion markers restart from the known full base.
     return BASE_ASSET_VERSION
   end
 
@@ -1030,8 +1034,8 @@ return function(mod)
 
     local nextVersion = nextAssetVersion()
     if nextVersion then
-      -- Fresh installs continue straight from the full v1.0.0 pack into the
-      -- small v1.1.0 Unown overlay without asking for another menu action.
+      -- Fresh installs continue through the supplement chain (Unown, then
+      -- Deoxys) without asking for another menu action.
       if beginReleaseCheck and beginReleaseCheck(nextVersion) then return end
       return setError("Could not continue to asset supplement v" .. tostring(nextVersion) .. ".")
     end

@@ -507,7 +507,6 @@ return function(mod)
     for n = 175, 400, 25 do uiScaleChoices[#uiScaleChoices + 1] = { n .. "%", tostring(n) } end
     local fontScaleChoices = { { "AUTO", "auto" } }
     for n = 80, 200, 5 do fontScaleChoices[#fontScaleChoices + 1] = { n .. "%", tostring(n) } end
-    for n = 225, 400, 25 do fontScaleChoices[#fontScaleChoices + 1] = { n .. "%", tostring(n) } end
     local opacityChoices = percentChoices(0, 100, 5)
 
     gen2UiOptionSchema = {
@@ -571,8 +570,6 @@ return function(mod)
         description = "Hide the native Gen 2 UI where KIM supplies the complete Modern UI presentation." },
       { key = "startMenuFastJump", label = "START MENU FAST JUMP", type = "toggle", default = true,
         description = "Let left/right directional presses jump five rows in the Gen 2 Start Menu." },
-      { key = "startMenuQuickView", label = "START MENU PARTY VIEW", type = "toggle", default = false,
-        description = "Show a compact party summary beside the Start Menu." },
       { key = "startMenuInset", label = "SIDE MENU INSET", type = "choice",
         default = "0", choices = {
           { "0", "0" }, { "10", "10" }, { "20", "20" },
@@ -599,8 +596,8 @@ return function(mod)
         default = "100", choices = percentChoices(25, 100, 5),
         description = "Adjust only the Gen 2 Modern lower battle-panel background opacity." },
       { key = "battleTextScale", label = "BATTLE TEXT SIZE", type = "choice",
-        default = "150", choices = percentChoices(100, 400, 25),
-        description = "Scale Gen 2 Modern battle command, move and message text independently of the native HP/status HUD." },
+        default = "100", choices = percentChoices(50, 200, 25),
+        description = "Scale Gen 2 Modern battle command, move and message text from 50% to 200%. 100% is the neutral/default size and remains independent of the native HP/status HUD." },
       { key = "battleMoveLayout", label = "MOVE LAYOUT", type = "choice",
         default = "grid", choices = { { "GRID", "grid" }, { "VERTICAL", "vertical" } },
         description = "GRID uses a 2x2 move selector. VERTICAL lists the four moves top-to-bottom." },
@@ -7285,6 +7282,36 @@ return function(mod)
       else
         mod.log:error("cannot read Gen2 Modern Party UI: %s",
           tostring(partyReadErr))
+      end
+
+      -- Gen 2 Summary/Status is presentation-only too: the native SummaryMenu
+      -- keeps page switching, party cycling, move management, cries and callbacks.
+      local summarySource, summaryReadErr = mod:read("lib/gen2_modern_summary_ui.lua")
+      if summarySource then
+        local summaryChunk, summaryCompileErr = load(summarySource,
+          "@" .. mod.path .. "/lib/gen2_modern_summary_ui.lua")
+        if summaryChunk then
+          local okSummaryModule, summarySetup = pcall(summaryChunk)
+          if okSummaryModule and type(summarySetup) == "function" then
+            local okSummaryInstall, summaryInstallErr = pcall(summarySetup, mod)
+            if okSummaryInstall then
+              mod._kantoInMotionGen2ModernSummaryUiInstalled = true
+              mod.log:info("Gen2 Modern Summary/Status UI installed; native SummaryMenu state/input retained")
+            else
+              mod.log:error("Gen2 Modern Summary UI failed to install: %s",
+                tostring(summaryInstallErr))
+            end
+          else
+            mod.log:error("cannot load Gen2 Modern Summary UI: %s",
+              tostring(summarySetup))
+          end
+        else
+          mod.log:error("cannot compile Gen2 Modern Summary UI: %s",
+            tostring(summaryCompileErr))
+        end
+      else
+        mod.log:error("cannot read Gen2 Modern Summary UI: %s",
+          tostring(summaryReadErr))
       end
 
       -- The Pokédex bridge deliberately consumes Gen2 Clean UI 0.4.1's

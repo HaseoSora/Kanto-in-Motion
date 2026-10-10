@@ -1,4 +1,4 @@
--- Kanto in Motion v1.5.3 - Gen 2 Modern Party UI v28
+-- Kanto in Motion v1.7.0 - Gen 2 Modern Party UI v30
 --
 -- The native PartyMenu remains the complete input/state owner. KIM makes the
 -- state transparent, hides only its native render, then draws a final-window
@@ -8,6 +8,9 @@ return function(mod)
   local Style = mod._kantoInMotionGen2Ui
   local okParty, PartyMenu = pcall(require, "src.ui.gen2.PartyMenu")
   local okChrome, Chrome = pcall(require, "src.ui.gen2.Chrome")
+  local okGbc, GbcPalette = pcall(require, "src.render.GbcPalette")
+  local okPalettes, Gen2Palettes = pcall(require, "src.world.gen2.Palettes")
+  local okStats, Stats = pcall(require, "src.pokemon.Stats")
   if not (okParty and type(PartyMenu) == "table" and okChrome and Chrome) then
     return false
   end
@@ -130,6 +133,29 @@ return function(mod)
     G.rectangle("line",x,y,w,h,radius,radius)
   end
 
+  -- Configurable KIM fonts do not all contain the gender glyphs. Draw the
+  -- symbol as vector geometry so the party detail header always matches the
+  -- Modern Summary UI and remains visible with every font.
+  local function genderSymbol(cx,cy,size,g,c)
+    size=math.max(7,tonumber(size) or 10)
+    color(c,nil,true); G.setLineWidth(math.max(1,size*.12))
+    local r=size*.22
+    if g=="male" or g=="M" then
+      local ox,oy=cx-size*.10,cy+size*.08
+      G.circle("line",ox,oy,r)
+      local ex,ey=cx+size*.34,cy-size*.34
+      G.line(ox+r*.72,oy-r*.72,ex,ey)
+      G.line(ex-size*.18,ey,ex,ey,ex,ey+size*.18)
+    elseif g=="female" or g=="F" then
+      local ox,oy=cx,cy-size*.12
+      G.circle("line",ox,oy,r)
+      local stemTop=oy+r
+      local stemBottom=cy+size*.34
+      G.line(ox,stemTop,ox,stemBottom)
+      G.line(ox-size*.18,cy+size*.16,ox+size*.18,cy+size*.16)
+    end
+  end
+
   local function hpColor(hp,maxHp)
     local f=(tonumber(hp) or 0)/math.max(1,tonumber(maxHp) or 1)
     if f<=0.2 then return {0.93,0.20,0.18,1} end
@@ -149,10 +175,29 @@ return function(mod)
     return ok and loadImage(path) or nil
   end
 
+  local function monIsShiny(mon)
+    if type(mon) ~= "table" then return false end
+    if mon.shiny == true or mon.isShiny == true or mon.is_shiny == true then return true end
+    local dvs = mon.dvs or mon.DVs or mon.dv
+    if okStats and type(Stats) == "table" and type(Stats.isShiny) == "function"
+        and type(dvs) == "table" then
+      local ok, value = pcall(Stats.isShiny, dvs)
+      if ok then return value == true end
+    end
+    return false
+  end
+
   local function nativePreview(self,mon)
     if not (self and mon and self.game and self.game.data and self.game.data.pokemon) then return nil end
     local def=self.game.data.pokemon[mon.species]
-    return def and loadImage(def.spriteFront) or nil
+    local image=def and loadImage(def.spriteFront) or nil
+    local colors
+    if image and okPalettes and type(Gen2Palettes) == "table"
+        and type(Gen2Palettes.monColors) == "function" then
+      local ok, value = pcall(Gen2Palettes.monColors, self.palettes, mon.species, monIsShiny(mon))
+      if ok then colors = value end
+    end
+    return image, colors
   end
 
   local function preview(self,mon)
@@ -162,7 +207,7 @@ return function(mod)
     end
     if mod.exports and type(mod.exports.getSprite)=="function" then
       local ok,image=pcall(mod.exports.getSprite,mon.species,{generation="hd",mon=mon})
-      if ok and image then return image end
+      if ok and image then return image, nil end
     end
     -- Missing KIM art must never leave a blank Gen 2 preview.
     return nativePreview(self,mon)
@@ -179,13 +224,59 @@ return function(mod)
     return (def and def.name) or (m and m.id) or "—"
   end
 
+  local nativeIconQuads=setmetatable({}, {__mode="k"})
+
+  local function nativeIconQuad(image,frame)
+    if not image then return nil end
+    local iw,ih=image:getDimensions()
+    local y=(ih>=32 and ((tonumber(frame) or 0)%2)*16) or 0
+    local rec=nativeIconQuads[image]
+    if not rec then rec={} nativeIconQuads[image]=rec end
+    local key=tostring(y)..":"..tostring(iw)..":"..tostring(ih)
+    local q=rec[key]
+    if not q then
+      q=G.newQuad(0,y,math.min(16,iw),math.min(16,ih-y),iw,ih)
+      rec[key]=q
+    end
+    return q
+  end
+
+  local function drawVanillaIcon(self,mon,x,y,size,selected)
+    if not (self and type(self.iconFor)=="function") then return false end
+    local ok,image,frame,trueColor=pcall(self.iconFor,self,mon)
+    if not ok or not image then return false end
+    local q=nativeIconQuad(image,frame)
+    if not q then return false end
+    local _,_,qw,qh=q:getViewport()
+    local s=math.min(size/math.max(1,qw),size/math.max(1,qh))
+    local bob=selected and ((math.floor((tonumber(self.clock) or 0)/16)%2==1) and -2 or 0) or 0
+    local dx=x+(size-qw*s)/2
+    local dy=y+(size-qh*s)/2+bob
+
+    local pals=self.palettes and self.palettes.partyMenu
+    local colors=pals and pals[1] or nil
+    local shaded=colors and okGbc and type(GbcPalette)=="table"
+      and type(GbcPalette.available)=="function" and GbcPalette.available()
+    local usePalette=shaded and not (trueColor and GbcPalette.mode=="gbc")
+    local previous=G.getShader and G.getShader() or nil
+    color({1,1,1,1})
+    if usePalette and type(GbcPalette.use)=="function" then GbcPalette.use(colors) end
+    G.draw(image,q,dx,dy,0,s,s)
+    if usePalette and G.setShader then G.setShader(previous) end
+    return true
+  end
+
   local function drawIcon(self,mon,x,y,size,selected)
     local image=hdIcon(self,mon)
     local bob=selected and ((math.floor((tonumber(self.clock) or 0)/16)%2==1) and -2 or 0) or 0
     if image then
       local iw,ih=image:getDimensions(); local s=math.min(size/iw,size/ih)
       color({1,1,1,1}); G.draw(image,x+(size-iw*s)/2,y+size-ih*s+bob,0,s,s)
+      return true
     end
+    -- POKEMON ICONS OFF means "use the game's icons", not "hide icons".
+    -- Replay the native Gen 2 16x16 party icon inside KIM's modern row.
+    return drawVanillaIcon(self,mon,x,y,size,selected)
   end
 
   local function drawParty(self)
@@ -240,15 +331,37 @@ return function(mod)
     if selected then
       local name,def=monName(self,selected)
       local px=detailX+pad; local py=contentY+pad
-      local portrait=preview(self,selected)
+      local portrait,portraitColors=preview(self,selected)
       local portraitBox=88*scale
       if portrait then
         local iw,ih=portrait:getDimensions(); local s=math.min(portraitBox/iw,portraitBox/ih)
-        color({1,1,1,1}); G.draw(portrait,px+(portraitBox-iw*s)/2,py+portraitBox-ih*s,0,s,s)
+        local dx=px+(portraitBox-iw*s)/2
+        local dy=py+portraitBox-ih*s
+        local function drawPortrait()
+          color({1,1,1,1}); G.draw(portrait,dx,dy,0,s,s)
+        end
+        if portraitColors and okGbc and type(GbcPalette)=="table"
+            and type(GbcPalette.with)=="function" and type(GbcPalette.available)=="function"
+            and GbcPalette.available() then
+          GbcPalette.with(portraitColors,drawPortrait)
+        else
+          drawPortrait()
+        end
       end
       local tx=px+portraitBox+10*scale
       drawText(name,bodyFont,tx,py,detailW-(tx-detailX)-pad,"left",colors.text)
-      drawText(("Lv %d"):format(tonumber(selected.level) or 0),smallFont,tx,py+30*scale,140*scale,"left",colors.muted)
+      local levelText=("Lv %d"):format(tonumber(selected.level) or 0)
+      local levelY=py+30*scale
+      drawText(levelText,smallFont,tx,levelY,140*scale,"left",colors.muted)
+      local gender=tostring(selected.gender or ""):lower()
+      if gender=="m" then gender="male" elseif gender=="f" then gender="female" end
+      if gender=="male" or gender=="female" then
+        local symbolSize=smallFont:getHeight()*.78
+        local gx=tx+smallFont:getWidth(levelText)+6*scale+symbolSize*.36
+        local gy=levelY+smallFont:getHeight()*.50
+        local gc=(gender=="male") and {0.28,0.66,1,1} or {1,0.40,0.66,1}
+        genderSymbol(gx,gy,symbolSize,gender,gc)
+      end
       local types=def and def.types or {}
       drawText(table.concat(types or {}, " / "),smallFont,tx,py+52*scale,detailW-(tx-detailX)-pad,"left",colors.accent)
 
@@ -296,10 +409,18 @@ return function(mod)
       panel(mx,my,mw,mh,colors,0.98)
       for i,item in ipairs(self.submenu.items) do
         local yy=my+8*scale+(i-1)*row
+        local textH=bodyFont:getHeight()
+        local textY=yy+(row-textH)*0.50
         if i==self.submenu.index then
-          color(colors.selected); G.rectangle("fill",mx+7*scale,yy,mw-14*scale,row-2*scale,4,4)
+          -- Keep the selection bar centered on the row/text instead of
+          -- starting at the row's top edge. This mirrors the main party list
+          -- highlight and stays centered when UI/font scale changes.
+          local highlightH=math.min(row-4*scale,textH+8*scale)
+          local highlightY=yy+(row-highlightH)*0.50
+          color(colors.selected)
+          G.rectangle("fill",mx+7*scale,highlightY,mw-14*scale,highlightH,4,4)
         end
-        drawText(item.label or item.id or "?",bodyFont,mx+14*scale,yy+4*scale,mw-28*scale,"left",
+        drawText(item.label or item.id or "?",bodyFont,mx+14*scale,textY,mw-28*scale,"left",
           i==self.submenu.index and colors.text or colors.muted)
       end
     end

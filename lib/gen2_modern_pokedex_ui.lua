@@ -1,4 +1,4 @@
--- Kanto in Motion v1.6.4 - Gen 2 Modern Pokedex UI v29 -- responsive footer hints
+-- Kanto in Motion v1.7.0 - Gen 2 Modern Pokedex UI v35 -- Unown-only transparency fix
 --
 -- The Pokédex data model and presentation conversion below are the exact
 -- Gen2 Clean UI 0.4.1 adapter/presenter supplied by the user, vendored into
@@ -8,8 +8,10 @@ return function(mod)
   local G=love.graphics
   local Style=mod._kantoInMotionGen2Ui
   local imageCache={}
+  local vanillaCutoutCache=setmetatable({}, {__mode="k"})
   local okDex,PokedexMenu=pcall(require,"src.ui.gen2.PokedexMenu")
   local okChrome,Chrome=pcall(require,"src.ui.gen2.Chrome")
+  local okGbcPalette,GbcPalette=pcall(require,"src.render.GbcPalette")
   if not (okDex and type(PokedexMenu)=="table") then return false end
   if PokedexMenu.__kimModernPokedexV4 then return true end
 
@@ -129,6 +131,113 @@ return function(mod)
     end
     imageCache[path]=false; return nil
   end
+  -- Native Gen 2 front pictures are opaque four-shade images. In the cartridge
+  -- renderer, shade 0 is the surrounding paper/background, not part of the mon.
+  -- Modern UI draws the image outside that native tile box, so we need alpha.
+  --
+  -- Do NOT simply key every white pixel transparent: white is also legitimate
+  -- artwork (eyes, mouths, bellies, etc.). Instead, find the dominant colour on
+  -- the image border and flood-fill only that colour when it is connected to an
+  -- outer edge. Enclosed regions of the same colour remain opaque. This removes
+  -- Unown's white rectangle and Victreebel's outside paper without punching
+  -- holes through legitimate white details inside the sprite.
+  local function imageDataFor(img)
+    if not img then return nil end
+    if type(img.newImageData)=="function" then
+      local ok,data=pcall(img.newImageData,img)
+      if ok and data then return data end
+    end
+    if not (G and type(G.newCanvas)=="function" and type(img.getDimensions)=="function") then return nil end
+    local okSize,iw,ih=pcall(img.getDimensions,img)
+    if not okSize or not iw or not ih or iw<1 or ih<1 then return nil end
+    local okCanvas,canvas=pcall(G.newCanvas,iw,ih,{dpiscale=1})
+    if not okCanvas or not canvas then okCanvas,canvas=pcall(G.newCanvas,iw,ih) end
+    if not okCanvas or not canvas then return nil end
+    local previous=type(G.getCanvas)=="function" and G.getCanvas() or nil
+    local pushed=pcall(G.push,"all")
+    if not pushed then pcall(G.push) end
+    local okDraw=pcall(function()
+      G.setCanvas(canvas)
+      if G.origin then G.origin() end
+      G.clear(0,0,0,0)
+      if G.setShader then G.setShader() end
+      if G.setBlendMode then G.setBlendMode("alpha") end
+      G.setColor(1,1,1,1)
+      G.draw(img,0,0)
+    end)
+    if previous then pcall(G.setCanvas,previous) else pcall(G.setCanvas) end
+    pcall(G.pop)
+    if not okDraw or type(canvas.newImageData)~="function" then return nil end
+    local okRead,data=pcall(canvas.newImageData,canvas)
+    return okRead and data or nil
+  end
+
+  local function nativeSpriteCutout(img)
+    if not img then return nil end
+    local cached=vanillaCutoutCache[img]
+    if cached~=nil then return cached or img end
+    local data=imageDataFor(img)
+    if not data or type(data.getDimensions)~="function" or type(data.getPixel)~="function"
+        or type(data.setPixel)~="function" then
+      vanillaCutoutCache[img]=false
+      return img
+    end
+    local w,h=data:getDimensions()
+    if not w or not h or w<1 or h<1 then vanillaCutoutCache[img]=false; return img end
+
+    local function byte(v)
+      v=tonumber(v) or 0
+      if v<=1.000001 then v=v*255 end
+      return math.max(0,math.min(255,math.floor(v+.5)))
+    end
+    local function pixelKey(x,y)
+      local r,g,b,a=data:getPixel(x,y)
+      if byte(a)<=0 then return nil end
+      return byte(r)..":"..byte(g)..":"..byte(b)
+    end
+
+    -- Use the most common opaque border colour rather than hard-coding white.
+    -- The extracted Gen 2 sheets normally make this 255:255:255, but deriving
+    -- it keeps the cleanup correct if another ROM/profile uses a different
+    -- shade-0 source colour.
+    local counts={}
+    local function countAt(x,y)
+      local k=pixelKey(x,y)
+      if k then counts[k]=(counts[k] or 0)+1 end
+    end
+    for x=0,w-1 do countAt(x,0); if h>1 then countAt(x,h-1) end end
+    for y=1,h-2 do countAt(0,y); if w>1 then countAt(w-1,y) end end
+    local bgKey,bgCount=nil,-1
+    for k,n in pairs(counts) do if n>bgCount then bgKey,bgCount=k,n end end
+    if not bgKey then vanillaCutoutCache[img]=false; return img end
+
+    local visited={}
+    local qx,qy={},{}
+    local head,tail=1,0
+    local function push(x,y)
+      if x<0 or y<0 or x>=w or y>=h then return end
+      local idx=y*w+x+1
+      if visited[idx] or pixelKey(x,y)~=bgKey then return end
+      visited[idx]=true; tail=tail+1; qx[tail]=x; qy[tail]=y
+    end
+    for x=0,w-1 do push(x,0); if h>1 then push(x,h-1) end end
+    for y=1,h-2 do push(0,y); if w>1 then push(w-1,y) end end
+    while head<=tail do
+      local x,y=qx[head],qy[head]; head=head+1
+      local r,g,b=data:getPixel(x,y)
+      data:setPixel(x,y,r,g,b,0)
+      -- Four-connected flood fill is intentional: it cannot leak diagonally
+      -- through a one-pixel outline corner into enclosed white artwork.
+      push(x-1,y); push(x+1,y); push(x,y-1); push(x,y+1)
+    end
+
+    local ok,newImg=pcall(G.newImage,data)
+    if not ok or not newImg then vanillaCutoutCache[img]=false; return img end
+    if newImg.setFilter then pcall(newImg.setFilter,newImg,"nearest","nearest") end
+    vanillaCutoutCache[img]=newImg
+    return newImg
+  end
+
   local function hdSprite(species)
     if not species or not mod.exports or type(mod.exports.getSprite)~="function" then return nil end
     local ok,img=pcall(mod.exports.getSprite,species,{generation="hd"}); return ok and img or nil
@@ -149,11 +258,47 @@ return function(mod)
     local current=selectedSource(prepared)
     if not current then return end
     local source=tostring(opt("gen2MenuSpriteSource","kim"))
-    local img=source=="vanilla" and loadImage(current.art and current.art.sprite) or hdSprite(current.species)
-    if not img then img=loadImage(current.art and current.art.sprite) end
+    local art=current.art or {}
+    local usingVanilla=source=="vanilla"
+    local img=usingVanilla and loadImage(art.sprite) or hdSprite(current.species)
+    if not img then
+      img=loadImage(art.sprite)
+      usingVanilla=true
+    end
     if not img then return end
+    -- Do not alpha-key ordinary native Gen 2 front pictures. Their shade-0
+    -- (white) pixels are used both for the surrounding paper AND for real
+    -- Pokemon artwork, and some legitimate white regions are connected to the
+    -- outer paper through openings in the sprite outline (for example Gengar's
+    -- teeth and parts of Goldeen's tail). Any automatic edge flood-fill can
+    -- therefore erase valid pixels. Preserve the source image losslessly until
+    -- KIM has explicit-alpha vanilla sprite assets.
+    --
+    -- Unown is the one confirmed-safe exception from the current set: its
+    -- exterior white box is removable with the conservative edge flood-fill
+    -- without damaging the glyph itself.
+    local speciesId=tostring(current.species or art.species or ""):upper()
+    if usingVanilla and (speciesId=="UNOWN" or tonumber(speciesId)==201) then
+      img=nativeSpriteCutout(img)
+    end
     local iw,ih=img:getDimensions(); local fit=math.min(w/iw,h/ih)
-    color({1,1,1,1}); G.draw(img,x+(w-iw*fit)/2,y+h-ih*fit,0,fit,fit)
+    local function body()
+      color({1,1,1,1})
+      G.draw(img,x+(w-iw*fit)/2,y+h-ih*fit,0,fit,fit)
+    end
+
+    -- Gen 2's extracted front pictures are four-shade source art. The native
+    -- Pokédex applies the selected species' GBC palette while drawing them;
+    -- Modern UI used to draw the raw sheet directly, which left VANILLA
+    -- previews black-and-white. Reuse the palette snapshot already supplied by
+    -- the Clean UI adapter so VANILLA matches the game's own colour rendering.
+    -- GbcPalette.with also respects the player's GEN 2 / DMG / CLASSIC colour
+    -- mode, so deliberately monochrome display modes remain native-correct.
+    local palette=usingVanilla and art.palette or nil
+    if palette and okGbcPalette and GbcPalette and type(GbcPalette.with)=="function" then
+      return GbcPalette.with(palette,body)
+    end
+    return body()
   end
   local function drawList(prepared,x,y,w,h,c,big,body,small,scale)
     local m=prepared.model

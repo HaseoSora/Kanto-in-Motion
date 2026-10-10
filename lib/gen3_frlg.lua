@@ -1,24 +1,134 @@
--- Kanto in Motion - FireRed / LeafGreen bridge
+-- Kanto in Motion - Gen 3 presentation bridge
 --
--- Gen 3 deliberately keeps Gen1Recomp's native FRLG UI, battle HUD, command
--- menus and move-animation engine. KIM supplies animated Pokemon art through
--- src.core.game3.pokemon for menus and redraws battle battlers at final window
--- resolution so the HD source is not crushed through FRLG's native 64x64 slot.
--- The Gen 1 Modern UI / BattleState stack is never loaded on this generation.
+-- Gen 3 keeps Gen1Recomp/Game3 ownership of gameplay, battle state, scripts,
+-- input and saves while KIM supplies optional Modern UI and HD Pokemon
+-- presentation. KIM redraws supported battlers/menu art at final window
+-- resolution so HD sources are not crushed through the native low-resolution
+-- Game3 slots. The Gen 1 BattleState stack is never loaded on this generation.
 return function(mod)
   local MOD_ID = "animated_menu_pokemon"
   local LEGACY_DATA = "data/hd_pokemon_sprites.lua"
   local NATIONAL_DATA = "data/hd_pokemon_national.lua"
 
   local schema = {
+    { key = "gen3IntegratedModernUi", label = "MODERN UI", type = "toggle", default = true,
+      description = "Master switch for Kanto in Motion's Gen 3 Modern UI presentation. The game keeps ownership of battle logic, input and state." },
+    { key = "gen3UiTheme", label = "UI THEME", type = "choice", default = "default", choices = {
+      { "GEN1 MODERN", "default" },
+      { "CLASSIC MONO", "gen1_modern_ui:classic_mono" },
+      { "CRIMSON", "gen1_modern_ui:crimson" },
+      { "CRIMSON GLASS", "gen1_modern_ui:crimson_glass" },
+      { "MODERN GLASS", "gen1_modern_ui:modern_glass" },
+      { "POCKET GREEN", "gen1_modern_ui:pocket_green" },
+      { "MIDNIGHT", "gen1_modern_ui:midnight" },
+      { "MIDNIGHT GLASS", "gen1_modern_ui:midnight_glass" },
+      { "FROST", "gen1_modern_ui:frost" },
+      { "LIGHT", "gen1_modern_ui:light" },
+      { "DARK", "gen1_modern_ui:dark" },
+    }, description = "Choose the palette used by the Gen 3 Modern UI." },
+    { key = "gen3UiScale", label = "UI SCALE", type = "choice", default = "100", choices = {
+      { "AUTO", "auto" },
+      { "75%", "75" }, { "80%", "80" }, { "85%", "85" }, { "90%", "90" },
+      { "95%", "95" }, { "100%", "100" }, { "105%", "105" }, { "110%", "110" },
+      { "115%", "115" }, { "120%", "120" }, { "125%", "125" }, { "130%", "130" },
+      { "135%", "135" }, { "140%", "140" }, { "145%", "145" }, { "150%", "150" },
+      { "175%", "175" }, { "200%", "200" }, { "225%", "225" }, { "250%", "250" },
+      { "275%", "275" }, { "300%", "300" }, { "325%", "325" }, { "350%", "350" },
+      { "375%", "375" }, { "400%", "400" },
+    }, description = "Scale Gen 3 Modern non-battle menu windows for layout testing. 100% is the current neutral size; battle UI keeps its separate BATTLE UI SIZE control." },
+    { key = "gen3FontScale", label = "FONT SCALE", type = "choice", default = "100", choices = {
+      { "AUTO", "auto" },
+      { "80%", "80" }, { "85%", "85" }, { "90%", "90" }, { "95%", "95" }, { "100%", "100" },
+      { "105%", "105" }, { "110%", "110" }, { "115%", "115" }, { "120%", "120" },
+      { "125%", "125" }, { "130%", "130" }, { "135%", "135" }, { "140%", "140" },
+      { "145%", "145" }, { "150%", "150" }, { "155%", "155" }, { "160%", "160" },
+      { "165%", "165" }, { "170%", "170" }, { "175%", "175" }, { "180%", "180" },
+      { "185%", "185" }, { "190%", "190" }, { "195%", "195" }, { "200%", "200" },
+    }, description = "Scale Modern UI fonts independently of panel size." },
+    { key = "gen3PixelFont", label = "PIXEL ART FONT", type = "toggle", default = false,
+      description = "Use the Plain Pixel font where available. OFF uses the normal scalable system font." },
+    { key = "gen3FrameStyle", label = "UI FRAME STYLE", type = "choice", default = "pixel", choices = {
+      { "THEME", "theme" }, { "PIXEL", "pixel" }, { "SOFT", "soft" }, { "PLAIN", "plain" },
+    }, description = "Choose the panel border treatment used by Gen 3 Modern UI." },
+    { key = "gen3FrameAsset", label = "PIXEL FRAME", type = "choice", default = "2", choices = {
+      { "FRAME 1", "1" }, { "FRAME 2", "2" }, { "FRAME 3", "3" },
+    }, description = "Choose the authored PNG used when PIXEL framing is active." },
+    { key = "gen3FrameScale", label = "PIXEL FRAME SCALE", type = "choice", default = "2", choices = {
+      { "1X", "1" }, { "2X", "2" }, { "3X", "3" }, { "4X", "4" },
+    }, description = "Scale PNG pixel frames by a whole-number multiplier." },
+    { key = "gen3Density", label = "UI DENSITY", type = "choice", default = "auto", choices = {
+      { "AUTO", "auto" }, { "COMPACT", "compact" }, { "COMFORTABLE", "comfortable" },
+    }, description = "Adjust spacing and row height used by Gen 3 Modern UI panels." },
+    { key = "gen3LayoutStyle", label = "LAYOUT STYLE", type = "choice", default = "auto", choices = {
+      { "ADAPTIVE", "auto" }, { "FLOATING", "floating" }, { "FULL SCREEN", "full" },
+    }, description = "Choose adaptive/floating cards or a larger full-screen presentation." },
+    { key = "gen3PanelOpacity", label = "PANEL OPACITY", type = "choice", default = "100", choices = {
+      { "0%", "0" }, { "5%", "5" }, { "10%", "10" }, { "15%", "15" }, { "20%", "20" },
+      { "25%", "25" }, { "30%", "30" }, { "35%", "35" }, { "40%", "40" }, { "45%", "45" },
+      { "50%", "50" }, { "55%", "55" }, { "60%", "60" }, { "65%", "65" }, { "70%", "70" },
+      { "75%", "75" }, { "80%", "80" }, { "85%", "85" }, { "90%", "90" }, { "95%", "95" }, { "100%", "100" },
+    }, description = "Set panel-background opacity independently from text and borders." },
+    { key = "gen3ForegroundOpacity", label = "TEXT / LINE OPACITY", type = "choice", default = "100", choices = {
+      { "0%", "0" }, { "5%", "5" }, { "10%", "10" }, { "15%", "15" }, { "20%", "20" },
+      { "25%", "25" }, { "30%", "30" }, { "35%", "35" }, { "40%", "40" }, { "45%", "45" },
+      { "50%", "50" }, { "55%", "55" }, { "60%", "60" }, { "65%", "65" }, { "70%", "70" },
+      { "75%", "75" }, { "80%", "80" }, { "85%", "85" }, { "90%", "90" }, { "95%", "95" }, { "100%", "100" },
+    }, description = "Set the opacity of text, labels, borders, dividers and accents." },
+    { key = "gen3MinimalUi", label = "MINIMAL UI", type = "toggle", default = false,
+      description = "Use a tighter presentation with reduced spacing and less secondary detail." },
+    { key = "gen3HideOriginalUi", label = "HIDE ORIGINAL UI", type = "toggle", default = true,
+      description = "Hide native Gen 3 menu pixels where KIM supplies the complete Modern UI presentation." },
+    { key = "gen3MenuUi", label = "MENU UI", type = "toggle", default = true,
+      description = "Use Modern UI for Gen 3 Start, Bag, Options and supported menu screens." },
+    { key = "gen3PokemonUi", label = "POKEMON SCREENS", type = "toggle", default = true,
+      description = "Use Modern UI for Gen 3 Party, Pokédex, Summary and Pokémon stat screens." },
+    { key = "gen3ManagerUi", label = "MOD MANAGER UI", type = "toggle", default = true,
+      description = "Use Modern UI presentation for Kanto in Motion and supported mod settings screens." },
+    { key = "gen3StartMenuFastJump", label = "START MENU FAST JUMP", type = "toggle", default = true,
+      description = "Let left/right directional presses jump five rows in the Gen 3 Start Menu." },
+    { key = "gen3StartMenuInset", label = "SIDE MENU INSET", type = "choice", default = "50", choices = {
+      { "0", "0" }, { "10", "10" }, { "20", "20" }, { "30", "30" }, { "40", "40" }, { "50", "50" },
+    }, description = "Move the floating Start Menu between the right edge and KIM's current centered position. 50 preserves the current Gen 3 layout." },
+    { key = "gen3DialogueUi", label = "DIALOGUE UI", type = "toggle", default = true,
+      description = "Use Modern UI for supported Gen 3 dialogue, choices and confirmations." },
+    { key = "gen3DialogueUiScale", label = "DIALOGUE UI SCALE", type = "choice", default = "100", choices = {
+      { "50%", "50" }, { "75%", "75" }, { "100%", "100" }, { "125%", "125" },
+      { "150%", "150" }, { "175%", "175" }, { "200%", "200" },
+    }, description = "Scale the Gen 3 Modern dialogue/choice panel footprint independently of DIALOGUE TEXT SCALE. 100% is the neutral/default box size." },
+    { key = "gen3DialogueTextScale", label = "DIALOGUE TEXT SCALE", type = "choice", default = "inherit", choices = {
+      { "INHERIT", "inherit" }, { "110%", "110" }, { "125%", "125" }, { "150%", "150" },
+      { "175%", "175" }, { "200%", "200" },
+    }, description = "Boost supported Gen 3 dialogue and confirmation text separately." },
     { key = "enabled", label = "MENU SPRITES", type = "toggle", default = true,
-      description = "Use Kanto in Motion animated Pokemon on supported FireRed/LeafGreen Pokemon presentation screens." },
+      description = "Use Kanto in Motion animated Pokemon on supported Gen 3 Pokemon presentation screens." },
     { key = "menuIcons", label = "POKEMON ICONS", type = "toggle", default = true,
-      description = "Use Kanto in Motion HD-derived Pokemon icons in FireRed/LeafGreen party, box, Pokedex and other native icon slots. OFF restores the game's native icons." },
+      description = "Use Kanto in Motion HD-derived Pokemon icons in supported Gen 3 party, storage, Pokedex, naming and other native icon slots. OFF restores the game or provider's native icons." },
     { key = "animate", label = "ANIMATION", type = "toggle", default = true,
       description = "Animate Kanto in Motion Pokemon. OFF holds the first frame." },
+    { key = "battleUiWip", label = "MODERN BATTLE UI", type = "toggle", default = true,
+      description = "Replace the native FireRed/LeafGreen/Emerald lower battle dialogue, command and move surface while keeping the native HP/status HUD and battle logic." },
+    { key = "battleUiSize", label = "BATTLE UI SIZE", type = "choice", default = "100", choices = {
+      { "60%", "60" }, { "65%", "65" }, { "70%", "70" }, { "75%", "75" },
+      { "80%", "80" }, { "85%", "85" }, { "90%", "90" }, { "95%", "95" }, { "100%", "100" },
+    }, description = "Adjust the Gen 3 Modern lower battle-panel footprint while keeping it bottom-anchored." },
+    { key = "battleUiOpacity", label = "BATTLE UI OPACITY", type = "choice", default = "100", choices = {
+      { "25%", "25" }, { "30%", "30" }, { "35%", "35" }, { "40%", "40" }, { "45%", "45" },
+      { "50%", "50" }, { "55%", "55" }, { "60%", "60" }, { "65%", "65" }, { "70%", "70" },
+      { "75%", "75" }, { "80%", "80" }, { "85%", "85" }, { "90%", "90" }, { "95%", "95" }, { "100%", "100" },
+    }, description = "Adjust only the Gen 3 Modern lower battle-panel background opacity." },
+    { key = "battleTextScale", label = "BATTLE TEXT SIZE", type = "choice", default = "100", choices = {
+      { "50%", "50" }, { "75%", "75" }, { "100%", "100" }, { "125%", "125" },
+      { "150%", "150" }, { "175%", "175" }, { "200%", "200" },
+    }, description = "Scale Gen 3 Modern battle command, move and message text from 50% to 200%. 100% is the neutral/default size and remains independent of the native HP/status HUD." },
+    { key = "battleMoveLayout", label = "MOVE LAYOUT", type = "choice", default = "grid", choices = {
+      { "GRID", "grid" }, { "VERTICAL", "vertical" },
+    }, description = "GRID uses a 2x2 move selector. VERTICAL lists the four moves top-to-bottom." },
+    { key = "battleMoveInfo", label = "MOVE INFO", type = "toggle", default = true,
+      description = "Show the selected Gen 3 move's type, PP, power and accuracy beside the move list." },
     { key = "battleSprites", label = "BATTLE SPRITES", type = "toggle", default = true,
-      description = "Use Kanto in Motion animated Pokemon in FireRed/LeafGreen battles while keeping the native FRLG battle UI and move animations." },
+      description = "Use Kanto in Motion animated Pokemon in supported Gen 3 battles while keeping Game3 battle logic, state and move behavior native." },
+    { key = "hdBattleBackgrounds", label = "HD BATTLE BACKGROUNDS", type = "toggle", default = true,
+      description = "Use Kanto in Motion's location-aware HD Kanto battle backgrounds in FireRed/LeafGreen/Emerald. Game3 keeps its native battler positions so the native HUD and move animations stay aligned. OFF restores the native Game3 battle background." },
     { key = "battleShadowQuality", label = "PKMN SHADOWS", type = "choice",
       default = "medium", choices = {
         { "OFF", "off" }, { "LOW", "low" }, { "MEDIUM", "medium" },
@@ -31,8 +141,6 @@ return function(mod)
         { "110%", "110" }, { "120%", "120" }, { "130%", "130" },
         { "140%", "140" }, { "150%", "150" },
       }, description = "Adjust Kanto in Motion battle shadow darkness without changing Pokemon size or position. 100% matches the Gen 1 calibrated reference." },
-    { key = "hdBattleBackgrounds", label = "HD BATTLE BACKGROUNDS", type = "toggle", default = true,
-      description = "Use Kanto in Motion's location-aware HD Kanto battle backgrounds in FireRed/LeafGreen. FRLG keeps its native battler positions so the native HUD and move animations stay aligned. OFF restores the native FRLG battle background." },
   }
   mod._kantoInMotionOptionSchema = schema
   mod.options:define(schema)
@@ -111,6 +219,12 @@ return function(mod)
   -- Form indices are 1=A, 2=B ... 26=Z, 27=!, 28=?.
   local unownForms = loadTable("data/hd_unown_forms.lua", true)
   mod._kimHdUnownForms = unownForms
+
+  -- Deoxys has one National-Dex entry (#386) but four Gen 3 game-specific
+  -- appearances.  The supplemental sprite source labels 682/683/684 are
+  -- asset-source form IDs only; they are never exposed as Pokédex species.
+  local deoxysForms = loadTable("data/hd_deoxys_forms.lua", true)
+  mod._kimHdDeoxysForms = deoxysForms
 
   local okP, Pokemon = pcall(require, "src.core.game3.pokemon")
   if not okP or type(Pokemon) ~= "table" then
@@ -209,6 +323,29 @@ return function(mod)
     return nil
   end
 
+  local function deoxysFormForGame()
+    local okV, GameVersion = pcall(require, "src.core.GameVersion")
+    local id = okV and GameVersion and type(GameVersion.get) == "function" and GameVersion.get() or nil
+    if id == "firered" then return "attack" end
+    if id == "leafgreen" then return "defense" end
+    if id == "emerald" then return "speed" end
+    -- Ruby/Sapphire use Normal Form. Keep Normal as the safe fallback for
+    -- future Gen 3 profiles instead of turning source IDs into species IDs.
+    return "normal"
+  end
+
+  local function deoxysRecord(side, shiny, personality)
+    local row = deoxysForms and deoxysForms[deoxysFormForGame()]
+    local sideData = type(row) == "table" and row[side] or nil
+    local colorData = type(sideData) == "table"
+      and sideData[shiny and "shiny" or "normal"] or nil
+    local rec = chooseVariant(colorData, 386, personality)
+    if type(rec) == "table" and type(rec.image) == "string" then
+      return rec, 386
+    end
+    return nil
+  end
+
   local function recordFor(species, side, shiny, personality, form)
     if not enabledForCurrentSurface(side) then return nil end
 
@@ -227,15 +364,21 @@ return function(mod)
       end
       return nil
     end
+    local dex = nationalDex(species)
+    if dex == 386 then
+      -- One Pokédex entry, game-specific Gen 3 form:
+      -- FireRed=Attack, LeafGreen=Defense, Emerald=Speed, R/S=Normal.
+      -- Never interpret sprite-source IDs 682-684 as Pokédex entries.
+      return deoxysRecord(side, shiny, personality)
+    end
+
     -- FRLG has native special presentation for Castform's weather forms.
     -- Until KIM has form-specific HD assets, fail open instead of showing the
     -- wrong base form. Unown forms are handled above; this guard primarily
     -- preserves Castform form state and personality-generated Spinda spots.
     if tonumber(form or 0) ~= 0 then return nil end
-    local dex = nationalDex(species)
     if not dex or dex < 1 or dex > 386 then return nil end
     if dex == 327 then return nil end -- Spinda personality spots
-    if dex == 386 then return nil end -- FR/LG use version-dependent Deoxys forms
     local row = byDex[dex]
     local sideData = type(row) == "table" and row[side] or nil
     local colorData = type(sideData) == "table"
@@ -608,6 +751,191 @@ return function(mod)
     if ok and handle then return handle end
     return nil
   end
+
+  -- Public read bridge for presentation code that needs metadata for the
+  -- expanded National roster.  This is intentionally inert unless 1025Dex
+  -- is actually installed and active.  Consumers get a copied record from
+  -- 1025Dex's supported statsByDex API; KIM never reads its private data files.
+  local completeDexRecordCache = {}
+  local function completeDexRecord(nat)
+    local handle = completeDexHandle()
+    if not handle then return nil, false end
+    nat = tonumber(nat)
+    if not nat or nat < 1 or nat > 1025 then return nil, true end
+
+    local cached = completeDexRecordCache[nat]
+    if cached ~= nil then return cached ~= false and cached or nil, true end
+
+    local exports = handle.exports
+    local ask = exports and exports.statsByDex
+    if type(ask) ~= "function" then return nil, true end
+    local ok, record = pcall(ask, nat)
+    if not ok or type(record) ~= "table" then
+      -- Do not cache a transient miss: 1025Dex may still be finishing its
+      -- registry/API setup during a hot reload.
+      return nil, true
+    end
+
+    -- 1025Dex registers the description text into the shared Game3 text
+    -- table.  Resolve that public engine copy once so the Modern Pokedex does
+    -- not need to know anything about 1025Dex's generated text payload.
+    local entry = record.dexEntry
+    local textId = type(entry) == "table" and entry.text or nil
+    if type(textId) == "string" then
+      local okR, Runtime = pcall(require, "src.core.game3.runtime")
+      local game = okR and Runtime and (Runtime._game or (Runtime.getGame and Runtime.getGame())) or nil
+      local value = game and game.data and game.data.text and game.data.text[textId]
+      if type(value) == "string" then record._kimDexDescription = value end
+    end
+
+    completeDexRecordCache[nat] = record
+    return record, true
+  end
+  mod._kantoInMotion1025DexRecord = completeDexRecord
+  mod._kantoInMotion1025DexActive = function() return completeDexHandle() ~= nil end
+
+  -- Direct read-only bridge to 1025Dex's currently installed Gen 3 front-pic
+  -- provider.  KIM is the outer Pokemon.frontPic wrapper, so asking
+  -- Pokemon.frontPic again from a Modern Pokedex screen can recurse back into
+  -- KIM.  Keep the captured upstream provider available instead, but only for
+  -- National #387-1025 and only while 1025Dex is active.
+  mod._kantoInMotion1025DexFrontPic = function(species, personality, shiny)
+    if not completeDexHandle() then return nil, false end
+    local dex = nationalDex(species)
+    if not dex or dex < 387 or dex > 1025 then return nil, true end
+    local fn = upstreamFront
+    if type(fn) ~= "function" then return nil, true end
+    local ok, pic = pcall(callFrontProvider, fn, species, nil, shiny == true,
+      tonumber(personality) or 0)
+    if ok and type(pic) == "table" and pic.image then return pic, true end
+    return nil, true
+  end
+
+  -- 1025Dex's public stats API carries genderRate for the expanded roster,
+  -- but its Game3 registration intentionally keeps that large extras payload
+  -- out of Pokemon.speciesMeta().  Expose one read-only compatibility helper
+  -- for KIM's presentation layers. Native Game3 gender always wins; this only
+  -- answers when the engine reports unknown for National #387-1025.
+  local completeDexGenderCache = {}
+
+  local function completeDexGender(monOrSpecies, personality)
+    local mon = type(monOrSpecies) == "table" and monOrSpecies or nil
+    local species = mon and ((Pokemon.speciesOf and Pokemon.speciesOf(mon))
+      or mon.species or mon.speciesId) or monOrSpecies
+    personality = tonumber(personality) or tonumber(mon and mon.personality) or 0
+
+    if mon and (mon.gender == "M" or mon.gender == "F") then return mon.gender end
+    if type(Pokemon.gender) == "function" then
+      local ok, native = pcall(Pokemon.gender, species, personality)
+      if ok and (native == "M" or native == "F") then return native end
+    end
+
+    local dex = nationalDex(species)
+    local speciesKey = type(species) == "string" and species or nil
+    if not dex and not speciesKey then return nil end
+    if dex and (dex < 387 or dex > 1025) then return nil end
+
+    local key = dex or speciesKey
+    local rate = completeDexGenderCache[key]
+    if rate == nil then
+      local handle = completeDexHandle()
+      local exports = handle and handle.exports
+      local record
+      if dex and exports and type(exports.statsByDex) == "function" then
+        local ok, value = pcall(exports.statsByDex, dex)
+        if ok and type(value) == "table" then record = value end
+      elseif speciesKey and exports and type(exports.statsBySpecies) == "function" then
+        local ok, value = pcall(exports.statsBySpecies, speciesKey)
+        if ok and type(value) == "table" then record = value end
+      end
+      if not record then return nil end -- API may still be coming online; retry later.
+      if not dex then
+        local rdex = tonumber(record.baseDex or record.dex)
+        if not rdex or rdex < 387 or rdex > 1025 then
+          completeDexGenderCache[key] = false
+          return nil
+        end
+      end
+      rate = tonumber(record.genderRate)
+      if rate == nil then
+        completeDexGenderCache[key] = false
+        return nil
+      end
+      completeDexGenderCache[key] = rate
+    elseif rate == false then
+      return nil
+    end
+
+    -- 1025Dex uses PokeAPI's genderRate: -1 genderless, otherwise female
+    -- eighths (0=male-only, 1=12.5% F, 4=50% F, 7=87.5% F, 8=female-only).
+    rate = tonumber(rate)
+    if not rate or rate < 0 then return nil end
+    if rate <= 0 then return "M" end
+    if rate >= 8 then return "F" end
+    local ratio = math.max(1, math.min(254, math.floor((rate * 255) / 8)))
+    return ratio > (personality % 256) and "F" or "M"
+  end
+
+  mod._kantoInMotion1025DexGender = completeDexGender
+
+  -- 1025Dex encounter-area compatibility ----------------------------------
+  --
+  -- 1025Dex v1.2.x owns its expanded encounter policy and exposes the live
+  -- per-map pool through exports.dexnavEncounters(mapId).  Do not read or
+  -- duplicate its private encounter tables: ask that public API which maps
+  -- currently contain a species so the Modern Pokedex follows WILD GENS and
+  -- postgame unlocks automatically.
+  --
+  -- The export is map -> pool, while a Pokedex page needs species -> maps.
+  -- Build that inverse lazily and cache it by game/species/WILD GENS choice.
+  -- The scan only happens when an AREA page actually asks for it.
+  local completeDexAreaCache = {}
+  local function completeDexWildMaps(species)
+    local handle = completeDexHandle()
+    local exports = handle and handle.exports
+    local query = exports and exports.dexnavEncounters
+    if type(query) ~= "function" then return nil, false end
+
+    species = tonumber(species)
+    if not species then return {}, true end
+
+    local okR, Runtime = pcall(require, "src.core.game3.runtime")
+    local session = okR and Runtime and Runtime.getSession and Runtime.getSession() or nil
+    local game = okR and Runtime and (Runtime._game or (Runtime.getGame and Runtime.getGame())) or nil
+    local maps = game and game.data and game.data.maps
+    if type(maps) ~= "table" then return {}, true end
+
+    local engine = session and (session.engineOptions or session.options) or nil
+    local choice = type(engine) == "table" and engine.fireredGenEncounterPool or nil
+    local version = "game3"
+    local okV, GV = pcall(require, "src.core.GameVersion")
+    if okV and GV and type(GV.get) == "function" then
+      local ok, v = pcall(GV.get); if ok and v then version = tostring(v) end
+    end
+    local key = table.concat({ version, tostring(species), tostring(choice or "default") }, ":")
+    local cached = completeDexAreaCache[key]
+    if cached then return cached, true end
+
+    local out, seen = {}, {}
+    for mapId in pairs(maps) do
+      local ok, record = pcall(query, mapId)
+      if ok and type(record) == "table" then
+        local found = false
+        for _, terrain in ipairs({ "land", "water" }) do
+          local area = record[terrain]
+          for _, slot in ipairs(type(area) == "table" and area.slots or {}) do
+            if tonumber(slot.species) == species then found = true; break end
+          end
+          if found then break end
+        end
+        if found and not seen[mapId] then seen[mapId] = true; out[#out + 1] = mapId end
+      end
+    end
+    table.sort(out)
+    completeDexAreaCache[key] = out
+    return out, true
+  end
+  mod._kantoInMotion1025DexWildMaps = completeDexWildMaps
 
   local function install1025DexProviderSplit(reason)
     if not completeDexHandle() then return false end
@@ -1824,6 +2152,86 @@ return function(mod)
     return #entries > 0 and { kind = "pokedex", entries = entries } or nil
   end
 
+  -- R/S/E's native Pokedex is a separate renderer from FR/LG.  When KIM's
+  -- Modern Pokemon screens are OFF but MENU SPRITES remain ON, the RSE Pokedex
+  -- still rasterizes Pokemon.frontPic() into its 240x160 surface and caches
+  -- that single frame in s.monSprites.  That makes the HD art look pixelated
+  -- after presentation scaling and also freezes the animation.  Capture the
+  -- live native sprite geometry, blank only those 64x64 raster sprites, and
+  -- replay the original KIM atlas frame at final window resolution.
+  local function nativeRsePokedexHdEnabled()
+    if mod.options and type(mod.options.get) == "function" then
+      local ok, on = pcall(mod.options.get, mod.options, "enabled")
+      if ok and on == false then return false end
+    end
+
+    local style = mod._kantoInMotionGen3Ui
+    if style and type(style.presenterEnabled) == "function" then
+      local ok, on = pcall(style.presenterEnabled, "pokemon")
+      if ok and on == true then return false end
+    else
+      local modern, pokemonUi = true, true
+      if mod.options and type(mod.options.get) == "function" then
+        local okM, mv = pcall(mod.options.get, mod.options, "gen3IntegratedModernUi")
+        if okM and mv ~= nil then modern = mv ~= false end
+        local okP, pv = pcall(mod.options.get, mod.options, "gen3PokemonUi")
+        if okP and pv ~= nil then pokemonUi = pv ~= false end
+      end
+      if modern and pokemonUi then return false end
+    end
+    return true
+  end
+
+  local function rseDexPersonality(s, species)
+    local personality = 0
+    local okDex, Dex = pcall(require, "src.core.game3.dex")
+    if okDex and Dex and type(Dex.defaultPersonality) == "function" then
+      local ok, v = pcall(Dex.defaultPersonality, s and s.dex or nil, species)
+      if ok and tonumber(v) then personality = tonumber(v) end
+    end
+    return personality
+  end
+
+  local function rsePokedexPreviewState(RseDex, s)
+    if not nativeRsePokedexHdEnabled() then return nil end
+    if not (RseDex and type(s) == "table" and s.shown and type(s.monSprites) == "table") then
+      return nil
+    end
+
+    local entries = {}
+    local page = tonumber(s.page)
+    local caughtPage = RseDex.PAGE and tonumber(RseDex.PAGE.CAUGHT) or 8
+    for i = 0, 3 do
+      local spr = s.monSprites[i]
+      if spr and not spr.invisible and spr.img and tonumber(spr.dexNum) then
+        local nat = tonumber(spr.dexNum)
+        local species = type(RseDex.speciesOf) == "function" and RseDex.speciesOf(nat) or nat
+        species = tonumber(species)
+        if species and species > 0 then
+          local personality = rseDexPersonality(s, species)
+          if page == caughtPage and s.caught and spr == s.caught.mon then
+            personality = tonumber(s.caught.personality) or personality
+          end
+          local picSpecies = type(Pokemon.picSpecies) == "function"
+            and Pokemon.picSpecies(species, personality) or species
+          local shiny = page == caughtPage and s.caught and spr == s.caught.mon
+            and s.caught.shiny == true or false
+          local rec = previewRec(picSpecies, shiny, personality)
+          if rec then
+            local cx = (tonumber(spr.x) or 0) + (tonumber(spr.x2) or 0)
+            local cy = (tonumber(spr.y) or 0) + (tonumber(spr.y2) or 0)
+            addPreviewEntry(entries, rec, cx - 32, cy - 32, 64, 64, false)
+            local e = entries[#entries]
+            e.nativeSprite = spr
+            e.spriteScaleY = math.max(0, tonumber(spr.scaleY) or 1)
+          end
+        end
+      end
+    end
+
+    return #entries > 0 and { kind = "rse_native_pokedex", entries = entries } or nil
+  end
+
   local function monPicPreviewState(MonPic)
     if not (MonPic and MonPic.active) then return nil end
     local species = tonumber(MonPic.species)
@@ -1909,12 +2317,16 @@ return function(mod)
       scale = math.min(scale, maxPhysicalScale / presentationScale)
     end
 
+    local spriteScaleY = tonumber(entry.spriteScaleY) or 1
+    if spriteScaleY < 0 then spriteScaleY = 0 end
     local drawW = source.width * scale
-    local drawH = source.height * scale
+    local drawH = source.height * scale * spriteScaleY
     local dx = (tonumber(entry.x) or 0) + (boxW - drawW) * 0.5
 
-    -- These FRLG preview boxes are display windows, not ground-contact battle
-    -- slots.  Center the HD art vertically instead of bottom-aligning it.
+    -- These preview boxes are display windows, not ground-contact battle
+    -- slots. Center the HD art vertically. R/S/E's native list carousel also
+    -- vertically squashes the selected/adjacent Pokemon while scrolling, so
+    -- preserve that live transform without rasterizing the sprite first.
     local dy = (tonumber(entry.y) or 0) + (boxH - drawH) * 0.5
 
     love.graphics.push("all")
@@ -1936,14 +2348,14 @@ return function(mod)
         source.image, quad,
         originX + (dx + drawW) * ux,
         originY + dy * uy,
-        0, -scale * ux, scale * uy
+        0, -scale * ux, scale * spriteScaleY * uy
       )
     else
       love.graphics.draw(
         source.image, quad,
         originX + dx * ux,
         originY + dy * uy,
-        0, scale * ux, scale * uy
+        0, scale * ux, scale * spriteScaleY * uy
       )
     end
 
@@ -1954,6 +2366,169 @@ return function(mod)
     love.graphics.pop()
     return true
   end
+
+  -- Public final-window preview bridge for KIM-owned Gen 3 Modern UI.
+  -- Party rows use HD menu icons, but the large selected-Pokemon card should
+  -- show the same full animated HD front art used by Summary/Pokedex previews.
+  -- Coordinates passed here are already OS-window/final-resolution pixels, so
+  -- this path deliberately bypasses Game3's native 64x64/32x32 raster surfaces.
+  mod._kantoInMotionGen3HdAnimatedPreviewDraw = function(mon, x, y, w, h)
+    if type(mon) ~= "table" then return false end
+    if Pokemon.isEgg and Pokemon.isEgg(mon) then return false end
+
+    x, y = tonumber(x) or 0, tonumber(y) or 0
+    w, h = tonumber(w) or 0, tonumber(h) or 0
+    if w <= 0 or h <= 0 then return false end
+
+    local personality = tonumber(mon.personality) or 0
+    local species = Pokemon.monPicSpecies and Pokemon.monPicSpecies(mon)
+      or (Pokemon.speciesOf and Pokemon.speciesOf(mon))
+      or mon.species
+    local shiny = Pokemon.isShiny and Pokemon.isShiny(mon) or false
+    local rec = previewRec(species, shiny, personality)
+    if not rec then return false end
+
+    local source = sourceFor(rec)
+    if not source then return false end
+    local quad = sourceQuad(source, frameFor(rec))
+    if not quad then return false end
+
+    -- The authored HD sheets were calibrated to fill a native 64x64 preview
+    -- without clipping. Reproduce that relationship in the modern card by
+    -- fitting the complete atlas cell to roughly 90% of the available box.
+    local scale = math.min((w * 0.90) / math.max(1, source.width),
+      (h * 0.90) / math.max(1, source.height))
+    if scale <= 0 then return false end
+    local drawW, drawH = source.width * scale, source.height * scale
+    local dx = x + (w - drawW) * 0.5
+    local dy = y + (h - drawH) * 0.5
+
+    love.graphics.push("all")
+    love.graphics.setShader()
+    love.graphics.setBlendMode("alpha")
+    love.graphics.setScissor(x, y, w, h)
+    love.graphics.setColor(1, 1, 1, 1)
+    if source.image.setFilter then
+      pcall(source.image.setFilter, source.image, "linear", "linear")
+    end
+    love.graphics.draw(source.image, quad, dx, dy, 0, scale, scale)
+    if source.image.setFilter then
+      pcall(source.image.setFilter, source.image, "nearest", "nearest")
+    end
+    love.graphics.setScissor()
+    love.graphics.pop()
+    return true
+  end
+
+
+  -- Species-based companion for the Modern Pokédex.  It uses the same HD
+  -- atlas/frame path as Summary/Party previews but accepts a Dex species id
+  -- directly, so the Pokédex never has to invent a party-mon structure.
+  mod._kantoInMotionGen3HdDexPreviewDraw = function(species, personality, x, y, w, h)
+    species = tonumber(species)
+    if not species then return false end
+    personality = tonumber(personality) or 0
+    x, y = tonumber(x) or 0, tonumber(y) or 0
+    w, h = tonumber(w) or 0, tonumber(h) or 0
+    if w <= 0 or h <= 0 then return false end
+
+    local picSpecies = type(Pokemon.picSpecies) == "function"
+      and Pokemon.picSpecies(species, personality) or species
+    local shiny = type(Pokemon.isShiny) == "function"
+      and Pokemon.isShiny({ personality = personality, otId = 8, otSecretId = 0 })
+      or false
+    local rec = previewRec(picSpecies, shiny, personality)
+    if not rec then return false end
+    local source = sourceFor(rec)
+    if not source then return false end
+    local quad = sourceQuad(source, frameFor(rec))
+    if not quad then return false end
+
+    local scale = math.min((w * 0.90) / math.max(1, source.width),
+      (h * 0.90) / math.max(1, source.height))
+    if scale <= 0 then return false end
+    local drawW, drawH = source.width * scale, source.height * scale
+    local dx = x + (w - drawW) * 0.5
+    local dy = y + (h - drawH) * 0.5
+
+    love.graphics.push("all")
+    love.graphics.setShader()
+    love.graphics.setBlendMode("alpha")
+    love.graphics.setScissor(x, y, w, h)
+    love.graphics.setColor(1, 1, 1, 1)
+    if source.image.setFilter then pcall(source.image.setFilter, source.image, "linear", "linear") end
+    love.graphics.draw(source.image, quad, dx, dy, 0, scale, scale)
+    if source.image.setFilter then pcall(source.image.setFilter, source.image, "nearest", "nearest") end
+    love.graphics.setScissor()
+    love.graphics.pop()
+    return true
+  end
+
+  -- R/S/E Modern Pokédex companion that draws into the existing Game3
+  -- render.hud graphics scope without adding another Love2D push/pop level.
+  -- This is intentionally separate from the FR/LG path so the confirmed-good
+  -- FR/LG preview behavior remains untouched.
+  mod._kantoInMotionGen3HdDexPreviewDrawNoPush = function(species, personality, x, y, w, h)
+    species = tonumber(species)
+    if not species then return false end
+    personality = tonumber(personality) or 0
+    x, y = tonumber(x) or 0, tonumber(y) or 0
+    w, h = tonumber(w) or 0, tonumber(h) or 0
+    if w <= 0 or h <= 0 then return false end
+
+    local picSpecies = type(Pokemon.picSpecies) == "function"
+      and Pokemon.picSpecies(species, personality) or species
+    local shiny = type(Pokemon.isShiny) == "function"
+      and Pokemon.isShiny({ personality = personality, otId = 8, otSecretId = 0 })
+      or false
+    local rec = previewRec(picSpecies, shiny, personality)
+    if not rec then return false end
+    local source = sourceFor(rec)
+    if not source then return false end
+    local quad = sourceQuad(source, frameFor(rec))
+    if not quad then return false end
+
+    local scale = math.min((w * 0.90) / math.max(1, source.width),
+      (h * 0.90) / math.max(1, source.height))
+    if scale <= 0 then return false end
+    local drawW, drawH = source.width * scale, source.height * scale
+    local dx = x + (w - drawW) * 0.5
+    local dy = y + (h - drawH) * 0.5
+
+    -- Save only the states this helper actually changes.  Do not touch the
+    -- transform/canvas and do not consume the finite Love2D graphics stack.
+    local oldShader = love.graphics.getShader and love.graphics.getShader() or nil
+    local oldBlend, oldAlpha = love.graphics.getBlendMode()
+    local oldR, oldG, oldB, oldA = love.graphics.getColor()
+    local oldSX, oldSY, oldSW, oldSH = love.graphics.getScissor()
+    local oldMin, oldMag, oldAniso
+    if source.image.setFilter and source.image.getFilter then
+      oldMin, oldMag, oldAniso = source.image:getFilter()
+    end
+
+    local ok, err = pcall(function()
+      love.graphics.setShader()
+      love.graphics.setBlendMode("alpha")
+      love.graphics.setScissor(x, y, w, h)
+      love.graphics.setColor(1, 1, 1, 1)
+      if source.image.setFilter then pcall(source.image.setFilter, source.image, "linear", "linear") end
+      love.graphics.draw(source.image, quad, dx, dy, 0, scale, scale)
+    end)
+
+    if source.image.setFilter and oldMin and oldMag then
+      pcall(source.image.setFilter, source.image, oldMin, oldMag, oldAniso or 1)
+    elseif source.image.setFilter then
+      pcall(source.image.setFilter, source.image, "nearest", "nearest")
+    end
+    if oldSX ~= nil then love.graphics.setScissor(oldSX, oldSY, oldSW, oldSH) else love.graphics.setScissor() end
+    love.graphics.setBlendMode(oldBlend, oldAlpha)
+    love.graphics.setShader(oldShader)
+    love.graphics.setColor(oldR, oldG, oldB, oldA)
+
+    if not ok then return false end
+    return true
+  end
+
 
   local function installHdPreviewDrawBridges()
     local blank = battlePlaceholder()
@@ -1992,6 +2567,31 @@ return function(mod)
 
         local ok, err = pcall(nativeDraw, ...)
         Pokemon.dexFrontPic = nativeDexFrontPic
+        if state then pendingHdPreview = state end
+        if not ok then error(err, 0) end
+      end
+    end
+
+    local okRseDex, RseDex = pcall(require, "src.ui.game3.rse.pokedex")
+    if okRseDex and RseDex and type(RseDex.draw) == "function"
+        and not RseDex._kantoInMotionHdNativePreviewDraw then
+      local nativeDraw = RseDex.draw
+      RseDex._kantoInMotionHdNativePreviewDraw = nativeDraw
+      RseDex.draw = function(s, ...)
+        local state = rsePokedexPreviewState(RseDex, s)
+        local saved = {}
+        if state and blank and blank.image then
+          for _, entry in ipairs(state.entries or {}) do
+            local spr = entry.nativeSprite
+            if spr and spr.img then
+              saved[#saved + 1] = { spr = spr, img = spr.img }
+              spr.img = blank.image
+            end
+          end
+        end
+
+        local ok, err = pcall(nativeDraw, s, ...)
+        for _, row in ipairs(saved) do row.spr.img = row.img end
         if state then pendingHdPreview = state end
         if not ok then error(err, 0) end
       end
@@ -2205,6 +2805,304 @@ return function(mod)
       love.graphics.setColor(1, 1, 1, 1)
       love.graphics.pop()
     end, 9500)
+  end
+
+  -- Gen 3 Modern UI is presentation-only. Game3 remains authoritative for
+  -- battle input/state; this adapter redraws the lower command/move/message
+  -- surface at final window resolution after the native Game3 frame exists.
+  do
+    local source, readErr = mod:read("lib/gen3_modern_battle_ui.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_modern_battle_ui.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, installErr = pcall(installer, mod)
+          if not okInstall and mod.log and mod.log.error then
+            mod.log:error("Gen 3 Modern Battle UI install failed: %s", tostring(installErr))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("Gen 3 Modern Battle UI could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("Gen 3 Modern Battle UI could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("Gen 3 Modern Battle UI missing: %s", tostring(readErr))
+    end
+  end
+
+  -- Shared Gen 3 appearance/settings bridge. Loaded after the battle presenter
+  -- publishes the common theme table and before any non-battle presenter.
+  do
+    local source, readErr = mod:read("lib/gen3_modern_style.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_modern_style.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, installErr = pcall(installer, mod)
+          if not okInstall and mod.log and mod.log.error then
+            mod.log:error("Gen 3 Modern style install failed: %s", tostring(installErr))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("Gen 3 Modern style could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("Gen 3 Modern style could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("Gen 3 Modern style missing: %s", tostring(readErr))
+    end
+  end
+
+  -- Gen 3 boot/main-menu Modern UI. The title/intro/new-game scenes remain
+  -- source-owned; KIM replaces only the normal CONTINUE / NEW GAME / OPTION /
+  -- EXIT menu presentation at final window resolution.
+  do
+    local source, readErr = mod:read("lib/gen3_modern_boot_ui.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_modern_boot_ui.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, installErr = pcall(installer, mod)
+          if not okInstall and mod.log and mod.log.error then
+            mod.log:error("Gen 3 Modern boot/main-menu UI install failed: %s", tostring(installErr))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("Gen 3 Modern boot/main-menu UI could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("Gen 3 Modern boot/main-menu UI could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("Gen 3 Modern boot/main-menu UI missing: %s", tostring(readErr))
+    end
+  end
+
+  -- Gen 3 Party/Bag Modern UI foundation.  The native modules keep all input
+  -- and state ownership; this layer only redraws their live state at final
+  -- window resolution.
+  do
+    local source, readErr = mod:read("lib/gen3_modern_core_menus.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_modern_core_menus.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, installErr = pcall(installer, mod)
+          if not okInstall and mod.log and mod.log.error then
+            mod.log:error("Gen 3 Modern core menus install failed: %s", tostring(installErr))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("Gen 3 Modern core menus could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("Gen 3 Modern core menus could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("Gen 3 Modern core menus missing: %s", tostring(readErr))
+    end
+  end
+
+  -- Gen 3 Trainer Card Modern UI. Game3 keeps all Trainer Card data,
+  -- front/back flip state, A/B behavior, fades and callbacks; KIM replaces
+  -- only the native FRLG/Ruby/Sapphire/Emerald card presentation.
+  do
+    local source, readErr = mod:read("lib/gen3_modern_trainer_card_ui.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_modern_trainer_card_ui.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, installErr = pcall(installer, mod)
+          if not okInstall and mod.log and mod.log.error then
+            mod.log:error("Gen 3 Modern Trainer Card UI install failed: %s", tostring(installErr))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("Gen 3 Modern Trainer Card UI could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("Gen 3 Modern Trainer Card UI could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("Gen 3 Modern Trainer Card UI missing: %s", tostring(readErr))
+    end
+  end
+
+  -- Gen 3 PC / Pokémon Storage Modern UI. Game3 keeps authoritative PC and
+  -- storage state/input; KIM replaces only the presentation for the PC hub and
+  -- standard box/party storage views.
+  do
+    local source, readErr = mod:read("lib/gen3_modern_storage_ui.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_modern_storage_ui.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, installErr = pcall(installer, mod)
+          if not okInstall and mod.log and mod.log.error then
+            mod.log:error("Gen 3 Modern Storage UI install failed: %s", tostring(installErr))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("Gen 3 Modern Storage UI could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("Gen 3 Modern Storage UI could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("Gen 3 Modern Storage UI missing: %s", tostring(readErr))
+    end
+  end
+
+  -- Gen 3 Pokémon Summary Modern UI. Game3 retains all Summary state/input
+  -- ownership; KIM suppresses only the native FRLG/Emerald Summary pixels and
+  -- redraws the same live state in a separate Modern UI window.
+  do
+    local source, readErr = mod:read("lib/gen3_modern_summary_ui.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_modern_summary_ui.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, installErr = pcall(installer, mod)
+          if not okInstall and mod.log and mod.log.error then
+            mod.log:error("Gen 3 Modern Summary UI install failed: %s", tostring(installErr))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("Gen 3 Modern Summary UI could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("Gen 3 Modern Summary UI could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("Gen 3 Modern Summary UI missing: %s", tostring(readErr))
+    end
+  end
+
+  -- Gen 3 Options Modern UI. The native FRLG/RSE option modules retain all
+  -- rows, grouping, input and persistence; KIM replaces presentation only.
+  do
+    local source, readErr = mod:read("lib/gen3_modern_options_ui.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_modern_options_ui.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, installErr = pcall(installer, mod)
+          if not okInstall and mod.log and mod.log.error then
+            mod.log:error("Gen 3 Modern Options UI install failed: %s", tostring(installErr))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("Gen 3 Modern Options UI could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("Gen 3 Modern Options UI could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("Gen 3 Modern Options UI missing: %s", tostring(readErr))
+    end
+  end
+
+  -- Gen 3 Modern field dialogue, choices and Poké Mart presentation.
+  -- Game3 keeps all typewriter/input/callback and shop transaction state.
+  do
+    local source, readErr = mod:read("lib/gen3_modern_dialog_ui.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_modern_dialog_ui.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, installErr = pcall(installer, mod)
+          if not okInstall and mod.log and mod.log.error then
+            mod.log:error("Gen 3 Modern dialogue UI install failed: %s", tostring(installErr))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("Gen 3 Modern dialogue UI could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("Gen 3 Modern dialogue UI could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("Gen 3 Modern dialogue UI missing: %s", tostring(readErr))
+    end
+  end
+
+  -- Gen 3 Pokédex Modern UI. Game3 keeps all Pokédex state/input/navigation;
+  -- KIM replaces only the final presentation while the screen is open.
+  do
+    local source, readErr = mod:read("lib/gen3_modern_pokedex_ui.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_modern_pokedex_ui.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, installErr = pcall(installer, mod)
+          if not okInstall and mod.log and mod.log.error then
+            mod.log:error("Gen 3 Modern Pokedex UI install failed: %s", tostring(installErr))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("Gen 3 Modern Pokedex UI could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("Gen 3 Modern Pokedex UI could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("Gen 3 Modern Pokedex UI missing: %s", tostring(readErr))
+    end
+  end
+
+  -- Ruby/Sapphire/Emerald use a separate Pokedex implementation from FR/LG.
+  -- Install the RSE presentation adapter as well so Emerald receives the same
+  -- Modern UI/HD preview path instead of falling through to the native pixels.
+  do
+    local source, readErr = mod:read("lib/gen3_modern_pokedex_rse_ui.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_modern_pokedex_rse_ui.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, installErr = pcall(installer, mod)
+          if not okInstall and mod.log and mod.log.error then
+            mod.log:error("Gen 3 RSE Modern Pokedex UI install failed: %s", tostring(installErr))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("Gen 3 RSE Modern Pokedex UI could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("Gen 3 RSE Modern Pokedex UI could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("Gen 3 RSE Modern Pokedex UI missing: %s", tostring(readErr))
+    end
+  end
+
+  -- Gen 3 1025Dex save-safety guard. If an expanded species remains in a
+  -- party after 1025Dex is disabled/removed, quarantine only the temporary
+  -- battle-party copy so it cannot become an active battler or crash missing
+  -- species/art lookups. The saved Pokemon remains untouched and becomes
+  -- usable again automatically when an expanded-dex provider is restored.
+  do
+    local source, readErr = mod:read("lib/gen3_1025dex_party_guard.lua")
+    if source then
+      local loader, compileErr = load(source, "@" .. mod.path .. "/lib/gen3_1025dex_party_guard.lua")
+      if loader then
+        local okLoad, installer = pcall(loader)
+        if okLoad and type(installer) == "function" then
+          local okInstall, installErr = pcall(installer, mod)
+          if not okInstall and mod.log and mod.log.error then
+            mod.log:error("Gen 3 1025Dex party guard install failed: %s", tostring(installErr))
+          end
+        elseif mod.log and mod.log.error then
+          mod.log:error("Gen 3 1025Dex party guard could not load: %s", tostring(installer))
+        end
+      elseif mod.log and mod.log.error then
+        mod.log:error("Gen 3 1025Dex party guard could not compile: %s", tostring(compileErr))
+      end
+    elseif mod.log and mod.log.error then
+      mod.log:error("Gen 3 1025Dex party guard missing: %s", tostring(readErr))
+    end
   end
 
   -- Install the shared #001-386 HD menu-icon provider after the FRLG

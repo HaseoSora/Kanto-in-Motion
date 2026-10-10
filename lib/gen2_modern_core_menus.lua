@@ -363,29 +363,6 @@ return function(mod)
     color(c.divider,nil,true); G.rectangle("fill",x+16*scale,y+h-86*scale,w-32*scale,1)
     fittedText(descText,23*scale,x+18*scale,y+h-66*scale,w-36*scale,"left",c.muted)
 
-    -- Gen 1 parity: optional compact party quick-view beside the Start Menu.
-    if opt("startMenuQuickView",true)~=false then
-      local party=s.game and s.game.party
-      if type(party)=="table" and #party>0 then
-        local gap=14*scale
-        local qw=math.min(310*scale,math.max(0,x-sx-gap-16*scale))
-        if qw>150*scale then
-          local qh=math.min(h,74*scale+math.min(#party,6)*48*scale)
-          local qx=x-gap-qw; local qy=y+(h-qh)/2
-          panel(qx,qy,qw,qh,c,.90)
-          text("PARTY",small,qx+14*scale,qy+12*scale,qw-28*scale,"left",c.accent)
-          for i=1,math.min(#party,6) do
-            local mon=party[i] or {}
-            local name=mon.name or mon.nickname or mon.species or ("POKéMON "..i)
-            local level=mon.level and ("Lv"..tostring(mon.level)) or ""
-            local yy=qy+50*scale+(i-1)*48*scale
-            text(name,small,qx+14*scale,yy,qw*.64,"left",c.text)
-            text(level,small,qx+qw*.66,yy,qw*.27,"right",c.muted)
-          end
-        end
-      end
-    end
-
     if s.phase=="confirm" or s.phase=="confirmContest" then
       modal(x,y,w,h,c,s.phase=="confirm" and "Return to the title screen?" or "End the Contest?",
         {"YES","NO"},tonumber(s.confirmChoice) or 2,body,small)

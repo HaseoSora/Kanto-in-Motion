@@ -1,4 +1,4 @@
-# Kanto in Motion v1.6.6
+# Kanto in Motion v1.7.0
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -6,9 +6,23 @@ It supports:
 
 - **Pokémon Red / Blue / Yellow** — National Dex #001–151
 - **Pokémon Gold / Silver / Crystal** — National Dex #001–251
-- **Pokémon FireRed / LeafGreen / Emerald** — National Dex #001–386
+- **Pokémon FireRed / LeafGreen / Ruby / Sapphire / Emerald** — National Dex #001–386
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
+
+## What’s new in v1.7.0
+
+v1.7.0 is the first release centered on Kanto in Motion's expanded **Gen 3 Modern UI** for FireRed/LeafGreen and Ruby/Sapphire/Emerald, with additional 1025Dex safety and compatibility work. Gen1Recomp still owns Game3 gameplay, battle rules, scripts, input, saves, and state; KIM replaces supported presentation layers only.
+
+- **Gen 3 Modern UI expansion:** KIM now presents the Game3 main menu, Start Menu, Bag, Party, Summary/Status, Pokédex, Pokémon Storage/Pokébox, Options, Kanto in Motion settings, common dialogue/choices, naming screens, catch nickname flow, Trainer Card, and supported battle lower-panel surfaces through the active Modern UI theme.
+- **Modern Trainer Card:** FireRed/LeafGreen and Hoenn Trainer Cards use KIM's theme/font/frame/scale/opacity presentation while preserving source-owned card data, badge/star logic, A/B controls, and front/back flip behavior. The card opens as a floating window over the live overworld like KIM's other Modern UI menus.
+- **Modern Gen 3 naming:** the Pokémon/player naming keyboard, nickname prompt, action controls, gender symbols, HD preview icon path, and controller navigation are modernized while the native naming state remains authoritative.
+- **Pokédex readability pass:** raw Game3 formatting tokens such as `{UNK_SPACER}` are sanitized from Modern UI output, and long Pokédex descriptions wrap/fit inside the description panel instead of being clipped.
+- **Gen 3 main-menu polish:** the Modern main menu now supports round-robin vertical navigation, so UP from the first row wraps to the last row and DOWN from the last row wraps back to the first.
+- **HD icon/storage polish:** final-resolution HD icon rendering is used across the expanded Gen 3 menu surfaces, including naming and storage, with corrected 1025Dex gender fallback in the Pokébox information panel.
+- **1025Dex battle presentation bridge:** when 1025Dex is active, KIM keeps its own HD presentation for National Dex #001–386 and cooperates with the expanded provider for post-Gen3 species while preserving KIM grounding/shadow presentation where supported.
+- **1025Dex disabled/removed safety:** saved post-Gen3 party Pokémon are quarantined only in the temporary battle-party copy when no compatible expanded-dex provider is active. They behave as unavailable/fainted for lead/switch selection instead of crashing on missing species data, while the real saved Pokémon remains untouched and becomes usable again when 1025Dex is restored.
+- **Existing multi-generation work retained:** Gen 1, Gen 2, external HD asset caching, Unown/Deoxys form routing, Battle Art/PotatoVoxel compatibility, Dex Radar compatibility, mobile fixes, and all v1.6.x presentation work remain included.
 
 ## What’s new in v1.6.6
 
@@ -134,31 +148,23 @@ v1.6.0 is a major presentation, compatibility, and distribution update across al
 - Final-window rendering for crisp HD menus and Pokémon art
 - Shared external HD cache use on desktop and mobile, including Johto #152–251
 
-### FireRed / LeafGreen
+### FireRed / LeafGreen / Ruby / Sapphire / Emerald
 
-- HD animated Pokémon through National Dex **#386**
+- HD animated Pokémon through National Dex **#386**, with optional 1025Dex cooperation for post-Gen3 species
 - HD animated **Unown A-Z + ! + ?** form presentation using native Gen 3 personality/form selection
-- Native FR/LG HUD, commands, dialogs, and move animations
-- HD animated battle Pokémon
-- HD Summary / Pokédex / scripted Pokémon previews
-- HD party, storage, and menu icons
-- Optional HD battle backgrounds
-- Pokémon shadows
-- Final-resolution HD rendering for cleaner menu and battle presentation
-- Desktop and mobile portrait/landscape support
-- Mobile **SCREEN POS** support
-- Native sprite fallback when KIM HD battle artwork is unavailable
-- Conditional **KIM ASSETS** Start Menu access when the shared HD pack is missing or incomplete; the entry hides automatically once the cache is healthy
-- In-battle Party/Summary compatibility for final-resolution HD menu Pokémon/icons
-
-### Emerald
-
-- HD animated **Unown A-Z + ! + ?** form presentation using native Gen 3 personality/form selection
-- HD/3D KIM battle Pokémon presentation with Emerald-specific native-frame suppression during the entrance/cry sequence
-- Small KIM-owned hop replaces the native alternate 2D cry animation while preserving Emerald's cry audio and timing
-- Final-resolution animated HD starter confirmation preview for Treecko, Torchic, and Mudkip
-- Native Emerald starter scene, cursor, text, Yes/No prompt, and Game3 state/logic remain source-owned
-- Conditional **KIM ASSETS** Start Menu access for Emerald when the shared HD pack is missing/incomplete; healthy caches keep the Start Menu clean
+- HD Deoxys form routing for Normal, Attack, Defense, and Speed forms where the source game/provider supplies those forms
+- Integrated **Gen 3 Modern UI** for the main menu, Start Menu, Bag, Party, Summary/Status, Pokédex, Storage/Pokébox, Options/KIM settings, dialogue/choices, naming, Trainer Card, and supported battle UI surfaces
+- Modern lower battle dialogue/command/move presentation while Game3 keeps the native HP/status HUD and battle logic
+- Final-resolution HD menu Pokémon/icons to avoid enlarging low-resolution Game3 copies
+- HD animated battle Pokémon, optional location-aware HD battle backgrounds, and Pokémon shadows
+- Modern Pokédex description wrapping/token cleanup and modern catch/nickname flow
+- Modern Trainer Card presentation that floats over the live overworld and preserves native card data/flip behavior
+- Round-robin navigation on the Gen 3 Modern title/main menu
+- Conditional **KIM ASSETS** Start Menu access when the shared external HD pack is missing or incomplete; the entry hides automatically once the cache is healthy
+- Desktop and mobile presentation support, including FR/LG portrait/landscape handling and existing SCREEN POS behavior
+- Optional **1025Dex** compatibility for post-Gen3 battle sprites, gender presentation, and safe handling of saved expanded species when the provider is later disabled or removed
+- Emerald-specific suppression of the native alternate 2D cry/entrance battler frame when KIM owns battle presentation, with the KIM hop/cry timing preserved
+- Final-resolution animated HD Emerald starter confirmation previews while the original starter scene, cursor, prompts, and game logic remain native
 
 ## HD Pokémon icons
 
@@ -166,7 +172,7 @@ Kanto in Motion includes HD Rescaled Pokémon icons for **National Dex #001–38
 
 - R/B/Y uses KIM's established icon path.
 - G/S/C renders the HD icons at final window resolution instead of magnifying the native 16×16 icon canvas.
-- FR/LG renders the HD icons at final window resolution and aligns them to the native Game3/OAM menu geometry.
+- Gen 3 renders KIM HD icons at final window resolution across supported Party, Storage, Pokédex, naming, and related menu surfaces instead of enlarging the native Game3 icon canvas.
 - `POKEMON ICONS = OFF` restores the native game icons or yields to a compatible icon provider.
 - Icon animation follows the main `ANIMATION` setting.
 - Separate shiny menu-icon artwork is not included yet; shiny Pokémon currently use the normal HD menu icon.
@@ -256,7 +262,6 @@ These controls are grouped under **KANTO IN MOTION → UI SETTINGS**. They mirro
 | **TEXT / LINE OPACITY** | 0%–100% in 5% steps | 100% | Adjusts text, labels, borders, dividers, and accent opacity. |
 | **HIDE ORIGINAL UI** | ON / OFF | ON | Hides the native Gen 2 UI where KIM supplies the complete Modern UI presentation. |
 | **START MENU FAST JUMP** | ON / OFF | ON | Lets left/right directional presses jump five rows in the Gen 2 Start Menu. |
-| **START MENU PARTY VIEW** | ON / OFF | OFF | Shows a compact party summary beside the Start Menu. |
 | **SIDE MENU INSET** | 0 / 10 / 20 / 30 / 40 / 50 | 0 | Moves the floating Start Menu inward on wide displays. |
 | **MINIMAL UI** | ON / OFF | OFF | Uses tighter spacing and less secondary detail. |
 | **DIALOGUE UI** | ON / OFF | ON | Enables Modern UI for Gen 2 text boxes, choices, quantities, and confirmation prompts. |
@@ -267,7 +272,7 @@ These controls are grouped under **KANTO IN MOTION → UI SETTINGS**. They mirro
 | **MODERN BATTLE UI** | ON / OFF | ON | Replaces only the native lower battle dialogue/command/move surface; the native Gen 2 HP/status HUD and battle logic remain unchanged. |
 | **BATTLE UI SIZE** | 60%–100% in 5% steps | 100% | Adjusts the Gen 2 Modern lower battle-panel footprint while keeping it bottom-anchored. 100% is the calibrated neutral size and matches the physical footprint that 95% used in earlier releases. |
 | **BATTLE UI OPACITY** | 25%–100% in 5% steps | 100% | Adjusts only the Gen 2 Modern lower battle-panel background opacity. |
-| **BATTLE TEXT SIZE** | 100%–400% in 25% steps | 150% | Scales Gen 2 Modern battle command, move, and message text independently of the native HP/status HUD. |
+| **BATTLE TEXT SIZE** | 50%–200% in 25% steps | 100% | Scales Gen 2 Modern battle command, move, and message text independently of the native HP/status HUD. |
 | **MOVE LAYOUT** | GRID / VERTICAL | GRID | GRID uses a 2×2 move selector. VERTICAL lists the four moves top-to-bottom. |
 | **MOVE INFO** | ON / OFF | OFF | Shows the selected Gen 2 move's type, PP, power, and accuracy beside the move list. |
 
@@ -295,20 +300,72 @@ With **MODERN UI = ON**, KIM currently presents:
 - supported level-up/stat and battle prompt presentation
 - battle commands, move selection, and battle messages when **MODERN BATTLE UI = ON**
 
-### FireRed / LeafGreen settings
+### FireRed / LeafGreen / Ruby / Sapphire / Emerald settings
 
-FireRed / LeafGreen keep Gen1Recomp's native Game3 UI, HUD, commands, dialogs, and move-animation system while KIM supplies HD Pokémon presentation.
+Gen 3 keeps **Game3 gameplay/state ownership native** while KIM supplies the optional Modern UI and HD presentation layers. Open **OPTIONS → KANTO IN MOTION**. Appearance controls are grouped under **UI SETTINGS**, and battle presentation controls are grouped under **BATTLE SETTINGS**.
+
+#### Main Kanto in Motion settings
 
 | Setting | Choices | Default | What it does |
 | --- | --- | --- | --- |
-| **MENU SPRITES** | ON / OFF | ON | Uses KIM animated Pokémon on supported FR/LG menu, Summary, Pokédex, and scripted presentation screens. |
-| **POKEMON ICONS** | ON / OFF | ON | Uses KIM HD Pokémon icons in party, storage, Pokédex, and other native icon slots. OFF restores the game's native icons. |
-| **ANIMATION** | ON / OFF | ON | Enables animated KIM Pokémon. OFF holds supported animated Pokémon on the first frame. |
-| **BATTLE SPRITES** | ON / OFF | ON | Uses KIM HD animated Pokémon in FR/LG battles while keeping the native FR/LG HUD, commands, dialogs, and move animations. |
-| **PKMN SHADOWS** | OFF / LOW / MEDIUM / HIGH / ULTRA | MEDIUM | Controls ground-contact shadow quality for KIM HD battle Pokémon. Shadows follow battlers during send-out/slide movement. |
-| **SHADOW OPACITY** | 50%–150% in 10% steps | 100% | Adjusts FR/LG battle shadow darkness without changing Pokémon size or position. |
-| **HD BATTLE BACKGROUNDS** | ON / OFF | ON | Uses KIM's location-aware HD Kanto battle backgrounds while preserving FR/LG's native battler/HUD geometry. OFF restores the native FR/LG battle background. |
-| **ASSET MANAGER** | START MENU → KIM ASSETS | — | Game3 shows **KIM ASSETS** only while the shared external HD battle pack is missing or incomplete. Use it to download/recover the pack; once the cache validates as healthy, the Start Menu entry hides automatically. |
+| **MODERN UI** | ON / OFF | ON | Master switch for KIM's Gen 3 Modern UI presentation. OFF yields supported menus/dialogue/battle presentation back to native Game3. |
+| **UI SETTINGS** | OPEN | — | Opens the Gen 3 Modern UI appearance/behavior controls listed below. |
+| **MENU SPRITES** | ON / OFF | ON | Uses KIM animated Pokémon on supported Gen 3 menu, Summary, Pokédex, naming, and scripted presentation screens. |
+| **POKEMON ICONS** | ON / OFF | ON | Uses KIM HD-derived icons in supported Party, Storage/Pokébox, Pokédex, naming, and other Game3 icon slots. OFF restores the native game/provider icon path. |
+| **ANIMATION** | ON / OFF | ON | Animates supported KIM Pokémon. OFF holds KIM artwork on the first frame. |
+| **BATTLE SETTINGS** | OPEN | — | Opens the Gen 3 Modern Battle UI, HD battle art/background, and shadow controls listed below. |
+| **KIM ASSETS** | START MENU entry when needed | — | Appears only while the shared external HD asset pack is missing/incomplete. Use it to download or recover the pack; it hides again once the cache validates. |
+
+#### Gen 3 — UI SETTINGS
+
+| Setting | Choices | Default | What it does |
+| --- | --- | --- | --- |
+| **UI THEME** | GEN1 MODERN / CLASSIC MONO / CRIMSON / CRIMSON GLASS / MODERN GLASS / POCKET GREEN / MIDNIGHT / MIDNIGHT GLASS / FROST / LIGHT / DARK | GEN1 MODERN | Chooses the palette used across Gen 3 Modern UI. |
+| **UI SCALE** | AUTO; 75%–150% in 5% steps; 175%–400% in 25% steps | 100% | Scales non-battle Modern UI panels/control spacing. Battle UI has its own size control. |
+| **FONT SCALE** | AUTO; 80%–200% in 5% steps | 100% | Scales Modern UI text independently of panel size. |
+| **PIXEL ART FONT** | ON / OFF | OFF | Uses the Plain Pixel font where available; OFF uses the normal scalable system font. |
+| **UI FRAME STYLE** | THEME / PIXEL / SOFT / PLAIN | PIXEL | Chooses the Modern UI panel border treatment. |
+| **PIXEL FRAME** | FRAME 1 / FRAME 2 / FRAME 3 | FRAME 2 | Chooses the authored PNG frame used when PIXEL framing is active. |
+| **PIXEL FRAME SCALE** | 1X / 2X / 3X / 4X | 2X | Scales the pixel-frame artwork by a whole-number multiplier. |
+| **UI DENSITY** | AUTO / COMPACT / COMFORTABLE | AUTO | Adjusts panel spacing and row height. |
+| **LAYOUT STYLE** | ADAPTIVE / FLOATING / FULL SCREEN | ADAPTIVE | Chooses adaptive/floating cards or a larger full-screen presentation where supported. |
+| **PANEL OPACITY** | 0%–100% in 5% steps | 100% | Adjusts panel-background opacity independently from text and borders. |
+| **TEXT / LINE OPACITY** | 0%–100% in 5% steps | 100% | Adjusts text, labels, borders, dividers, and accent opacity. |
+| **MINIMAL UI** | ON / OFF | OFF | Uses tighter spacing and less secondary detail. |
+| **HIDE ORIGINAL UI** | ON / OFF | ON | Hides native Game3 menu pixels where KIM supplies a complete Modern UI replacement. |
+| **MENU UI** | ON / OFF | ON | Enables Modern UI for supported Gen 3 menu screens such as Start, Bag, Options, main menu, naming, and Trainer Card. |
+| **POKEMON SCREENS** | ON / OFF | ON | Enables Modern UI for Party, Summary/Status, Pokédex, Storage/Pokébox, and supported Pokémon screens. |
+| **MOD MANAGER UI** | ON / OFF | ON | Enables Modern UI presentation for Kanto in Motion's own settings screens. |
+| **START MENU FAST JUMP** | ON / OFF | ON | Lets left/right directional presses jump five rows in the Gen 3 Start Menu. |
+| **SIDE MENU INSET** | 0 / 10 / 20 / 30 / 40 / 50 | 50 | Moves the floating Start Menu between the right edge and KIM's centered Gen 3 position. |
+| **DIALOGUE UI** | ON / OFF | ON | Enables Modern UI for supported Gen 3 dialogue, choices, quantities, confirmations, and catch/nickname prompts. |
+| **DIALOGUE UI SCALE** | 50% / 75% / 100% / 125% / 150% / 175% / 200% | 100% | Scales the Modern dialogue/choice panel footprint independently from text size. |
+| **DIALOGUE TEXT SCALE** | INHERIT / 110% / 125% / 150% / 175% / 200% | INHERIT | Boosts supported dialogue and confirmation text separately from general font scale. |
+
+The Gen 3 UI Settings page includes **RESET TO DEFAULT** for restoring the controls in that section.
+
+#### Gen 3 — BATTLE SETTINGS
+
+| Setting | Choices | Default | What it does |
+| --- | --- | --- | --- |
+| **MODERN BATTLE UI** | ON / OFF | ON | Replaces the lower Game3 battle dialogue/command/move surface while keeping the native HP/status HUD, battle state, and move logic. |
+| **BATTLE UI SIZE** | 60%–100% in 5% steps | 100% | Adjusts the Modern lower battle-panel footprint while keeping it bottom-anchored. |
+| **BATTLE UI OPACITY** | 25%–100% in 5% steps | 100% | Adjusts only the Modern lower battle-panel background opacity. |
+| **BATTLE TEXT SIZE** | 50% / 75% / 100% / 125% / 150% / 175% / 200% | 100% | Scales Gen 3 Modern battle command, move, and message text independently of the native HP/status HUD. |
+| **MOVE LAYOUT** | GRID / VERTICAL | GRID | GRID uses a 2×2 move selector; VERTICAL lists the four moves top-to-bottom. |
+| **MOVE INFO** | ON / OFF | ON | Shows the selected move's type, PP, power, and accuracy beside the move list. |
+| **BATTLE SPRITES** | ON / OFF | ON | Uses KIM animated Pokémon for National Dex #001–386 in supported Game3 battles. Compatible expanded-dex providers can supply post-Gen3 species. |
+| **HD BATTLE BACKGROUNDS** | ON / OFF | ON | Uses KIM's supported location-aware HD Game3 battle backgrounds while keeping native battler/HUD geometry aligned. |
+| **PKMN SHADOWS** | OFF / LOW / MEDIUM / HIGH / ULTRA | MEDIUM | Controls KIM ground-contact shadow quality for supported HD battle Pokémon. |
+| **SHADOW OPACITY** | 50%–150% in 10% steps | 100% | Adjusts battle-shadow darkness without changing Pokémon size or position. |
+
+The Gen 3 Battle Settings page also includes **RESET TO DEFAULT**.
+
+#### Gen 3 Modern UI coverage
+
+With **MODERN UI = ON**, KIM currently presents the supported Gen 3 main/title menu layer, Start Menu, Bag, Party, Summary/Status, Pokédex, Storage/Pokébox, native Options plus KIM settings, common dialogue/choices/confirmations, nickname/name-entry keyboard, caught-Pokémon nickname flow, Trainer Card, and lower battle dialogue/command/move surfaces. Game3 remains authoritative for game logic, menu state, scripts, saving, battle state, and input semantics.
+
+The optional **1025Dex** bridge remains conditional: when the provider is active, its post-Gen3 species can participate normally; if the provider is disabled or removed while those Pokémon remain in a save, KIM temporarily marks only those battle-copy slots unavailable so they cannot become an invalid lead/switch target. The original saved Pokémon data is not deleted or permanently fainted.
 
 ## Mobile support
 

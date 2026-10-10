@@ -67,9 +67,39 @@ return function(mod)
     species = species or (type(mon) == "table" and mon.species or nil)
     local data = game and game.data
     local def = data and data.pokemon and species ~= nil and data.pokemon[species] or nil
-    local dex = type(mon) == "table" and tonumber(mon.nationalDex or mon.dex or mon.speciesId) or nil
+
+    -- Gen 3 party Pokemon store the ROM's INTERNAL SPECIES id.  Those ids are
+    -- no longer identical to National Dex numbers once the Hoenn species
+    -- range starts (for example Torchic is internal 280 but National #255).
+    -- v48-v51 treated mon.speciesId as a National Dex id, so Torchic loaded
+    -- icon 280 (Ralts) in the Modern Party even though Game3's native icon was
+    -- correct.  Resolve through Game3's authoritative species mapping first.
+    local dex = type(mon) == "table" and tonumber(mon.nationalDex or mon.dex) or nil
+    if generation == 3 and not dex then
+      local okP, Game3Pokemon = pcall(require, "src.core.game3.pokemon")
+      if okP and type(Game3Pokemon) == "table" then
+        local internal
+        if type(Game3Pokemon.speciesOf) == "function" then
+          local okS, value = pcall(Game3Pokemon.speciesOf, mon)
+          if okS then internal = tonumber(value) end
+        end
+        if not internal then internal = tonumber(species) end
+        if internal and type(Game3Pokemon.national) == "function" then
+          local okN, value = pcall(Game3Pokemon.national, internal)
+          if okN then dex = tonumber(value) end
+        end
+      end
+    end
+
+    -- Gen 1/2 use species ids that already line up with the supported National
+    -- Dex range, so preserve the established path there.
+    if not dex and generation ~= 3 and type(mon) == "table" then
+      dex = tonumber(mon.speciesId)
+    end
     dex = dex or (type(def) == "table" and tonumber(def.nationalDex or def.dex))
-    if not dex and type(species) == "number" then dex = tonumber(species) end
+    if not dex and generation ~= 3 and type(species) == "number" then
+      dex = tonumber(species)
+    end
     if validDex(dex) then return dex end
     return nil
   end
