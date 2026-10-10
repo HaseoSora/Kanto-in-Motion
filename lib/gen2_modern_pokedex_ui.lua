@@ -1,4 +1,4 @@
--- Kanto in Motion v1.7.1 - Gen 2 Modern Pokedex UI v36 -- native actions + area map
+-- Kanto in Motion v1.7.2 - Gen 2 Modern Pokedex UI v36 -- native actions + area map
 --
 -- The Pokédex data model and presentation conversion below are the exact
 -- Gen2 Clean UI 0.4.1 adapter/presenter supplied by the user, vendored into

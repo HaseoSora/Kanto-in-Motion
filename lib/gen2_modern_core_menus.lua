@@ -1,4 +1,4 @@
--- Kanto in Motion v1.7.1 - Gen 2 Modern Core Menus v47 -- PC icon/gender follow-up
+-- Kanto in Motion v1.7.2 - Gen 2 Modern Core Menus v48 -- Trainer Card / Fly region / generic field menus
 --
 -- Modern overlay presentation for the native Gen 2 Start Menu, Pack,
 -- Pokegear, Trainer Card, Save Menu, Options Menu and KIM Mod Settings. Their original objects remain authoritative for
@@ -12,6 +12,7 @@ return function(mod)
   local okTitle,Gen2TitleState=pcall(require,"src.ui.gen2.TitleState")
   local okPack,PackMenu=pcall(require,"src.ui.gen2.PackMenu")
   local okGear,Pokegear=pcall(require,"src.ui.gen2.Pokegear")
+  local okFieldMoves,FieldMoves=pcall(require,"src.world.gen2.FieldMoves")
   local okCard,TrainerCard=pcall(require,"src.ui.gen2.TrainerCard")
   local okCenterPc,CenterPcMenu=pcall(require,"src.ui.gen2.CenterPcMenu")
   local okPc,PcMenu=pcall(require,"src.ui.gen2.PcMenu")
@@ -22,6 +23,8 @@ return function(mod)
   local okSaveMenu,SaveMenu=pcall(require,"src.ui.gen2.SaveMenu")
   local okOptions,OptionsMenu=pcall(require,"src.ui.gen2.OptionsMenu")
   local okListMenu,ListMenu=pcall(require,"src.ui.ListMenu")
+  local okGenericMenu,GenericMenu=pcall(require,"src.ui.Menu")
+  if mod.ui and mod.ui.Menu then GenericMenu=mod.ui.Menu; okGenericMenu=true end
   local okSaveCore,SaveCore=pcall(require,"src.core.gen2.Save")
   local okTyper,Typer=pcall(require,"src.ui.gen2.Typer")
   local okStrings,Strings=pcall(require,"src.core.Strings")
@@ -236,6 +239,39 @@ return function(mod)
   end
   makeTransparent(PackMenu,"menu"); makeTransparent(Pokegear,"menu"); makeTransparent(TrainerCard,"pokemon")
   makeTransparent(SaveMenu,"menu"); makeTransparent(OptionsMenu,"menu")
+
+  -- Gen1Recomp's Gen 2 Fly picker currently ignores LEFT/RIGHT even though the
+  -- Modern Fly map presents the two-region control.  Keep the native fly list,
+  -- visited-spawn gates and onFly callback authoritative, but let either
+  -- horizontal direction switch between Johto and Kanto when the other region
+  -- actually has an unlocked Fly destination.
+  if Pokegear and type(Pokegear.update)=="function"
+      and okFieldMoves and FieldMoves and type(FieldMoves.flyPoints)=="function"
+      and not Pokegear.__kimFlyRegionSwitchV149 then
+    local oldGearUpdate=Pokegear.update
+    Pokegear.update=function(self,...)
+      local input=self and self.game and self.game.input
+      if presenterEnabled("menu") and hideOriginal() and self and self.fly and input then
+        local left=input:wasPressed("left")
+        local right=(not left) and input:wasPressed("right")
+        if left or right then
+          local current=tostring(self.flyRegion or "johto"):lower()
+          local wanted=(current=="kanto") and "johto" or "kanto"
+          local ok,points,shown=pcall(FieldMoves.flyPoints,self.save,self.landmarks,wanted)
+          if ok and type(points)=="table" and #points>0 and shown==wanted then
+            self.fly=points
+            self.flyRegion=shown
+            -- Match the native FlyMap defaults used by Pokegear.new(): Johto
+            -- begins at its first visited point; Kanto begins at the end of its
+            -- region list (Indigo side of the table).
+            self.flyIndex=(shown=="kanto") and #points or 1
+          end
+        end
+      end
+      return oldGearUpdate(self,...)
+    end
+    Pokegear.__kimFlyRegionSwitchV149=true
+  end
   if okCenterPc then makeTransparent(CenterPcMenu,"menu") end
   if okPc then makeTransparent(PcMenu,"menu") end
   if okBoxPc then makeTransparent(BoxMenu,"pokemon") end
@@ -299,6 +335,14 @@ return function(mod)
     if okEvolution and isClass(s,EvolutionAnim) then return "evolution" end
     if isClass(s,SaveMenu) then return "save" end
     if isClass(s,OptionsMenu) then return "options" end
+    -- Third-party Gen 2 helpers such as Quality of Life build their small
+    -- field-action/water choices with the engine-owned generic Menu class.
+    -- Treat that source object as the controller and replace only its pixels;
+    -- no changes to the other mod or its callbacks/items are required.
+    if okGenericMenu and GenericMenu and isClass(s,GenericMenu)
+        and s.game and s.game.data and s.game.data.gen2MenuGfx then
+      return "genericmenu"
+    end
     if isDexRadarState(s) then return "dexradar" end
     if type(s)=="table" and rawget(s,"_kimModernSettings") then
       return "kimsettings"
@@ -1063,15 +1107,174 @@ return function(mod)
     VOLCANO="assets/trainer_card/badges/07_volcano.png",
     EARTH="assets/trainer_card/badges/08_earth.png",
   }
+  local KANTO_BADGE_FRAMES={
+    BOULDER=27, CASCADE=25, THUNDER=28, RAINBOW=28,
+    SOUL=26, MARSH=29, VOLCANO=30, EARTH=19,
+  }
+  local JOHTO_TRAINER_SPRITES={
+    ZEPHYR="assets/generated/battle/trainers/falkner.png",
+    HIVE="assets/generated/battle/trainers/bugsy.png",
+    PLAIN="assets/generated/battle/trainers/whitney.png",
+    FOG="assets/generated/battle/trainers/morty.png",
+    STORM="assets/generated/battle/trainers/chuck.png",
+    MINERAL="assets/generated/battle/trainers/jasmine.png",
+    GLACIER="assets/generated/battle/trainers/pryce.png",
+    RISING="assets/generated/battle/trainers/clair.png",
+  }
+  local KANTO_TRAINER_SPRITES={
+    BOULDER="assets/generated/battle/trainers/brock.png",
+    CASCADE="assets/generated/battle/trainers/misty.png",
+    THUNDER="assets/generated/battle/trainers/lt_surge.png",
+    RAINBOW="assets/generated/battle/trainers/erika.png",
+    SOUL="assets/generated/battle/trainers/janine.png",
+    MARSH="assets/generated/battle/trainers/sabrina.png",
+    VOLCANO="assets/generated/battle/trainers/blaine.png",
+    EARTH="assets/generated/battle/trainers/blue.png",
+  }
+  -- Four-colour trainer palettes.  These generated battle trainer PNGs are the
+  -- native Gen 2 line art on white paper; remapping them here keeps the page 2
+  -- and page 3 card art colourful without having to keep fragile white-border
+  -- masking rules for individual leaders.
+  local TRAINER_CARD_PALETTES={
+    -- Each sprite uses four shades: light accent, skin/light cloth, main colour,
+    -- and dark outline.  These are tuned closer to the coloured trainer sheets.
+    ZEPHYR={{0.93,0.95,0.99,1},{0.95,0.83,0.68,1},{0.35,0.57,0.90,1},{0.06,0.10,0.22,1}},
+    HIVE={{0.95,0.96,0.70,1},{0.92,0.82,0.63,1},{0.47,0.78,0.26,1},{0.08,0.12,0.05,1}},
+    PLAIN={{0.99,0.95,0.98,1},{0.95,0.84,0.72,1},{0.91,0.47,0.63,1},{0.18,0.08,0.16,1}},
+    FOG={{0.94,0.91,0.98,1},{0.93,0.82,0.72,1},{0.62,0.49,0.84,1},{0.09,0.07,0.16,1}},
+    STORM={{0.99,0.95,0.88,1},{0.95,0.81,0.63,1},{0.90,0.49,0.12,1},{0.12,0.06,0.03,1}},
+    MINERAL={{0.98,0.97,0.83,1},{0.94,0.84,0.72,1},{0.80,0.59,0.22,1},{0.15,0.08,0.03,1}},
+    GLACIER={{0.99,0.99,0.99,1},{0.96,0.83,0.86,1},{0.76,0.36,0.41,1},{0.11,0.05,0.05,1}},
+    RISING={{0.97,0.94,0.99,1},{0.96,0.84,0.73,1},{0.35,0.44,0.98,1},{0.08,0.05,0.20,1}},
+    BOULDER={{0.86,0.92,0.98,1},{0.93,0.82,0.67,1},{0.47,0.63,0.86,1},{0.08,0.12,0.18,1}},
+    CASCADE={{0.96,0.92,0.83,1},{0.96,0.80,0.70,1},{0.95,0.45,0.16,1},{0.08,0.11,0.15,1}},
+    THUNDER={{0.99,0.96,0.66,1},{0.93,0.78,0.55,1},{0.24,0.43,0.82,1},{0.08,0.08,0.10,1}},
+    RAINBOW={{0.94,0.98,0.92,1},{0.97,0.86,0.78,1},{0.46,0.76,0.37,1},{0.10,0.08,0.05,1}},
+    SOUL={{0.99,0.79,0.90,1},{0.95,0.84,0.72,1},{0.69,0.30,0.70,1},{0.09,0.05,0.11,1}},
+    MARSH={{0.98,0.93,0.75,1},{0.96,0.84,0.72,1},{0.86,0.40,0.58,1},{0.10,0.05,0.09,1}},
+    VOLCANO={{0.99,0.99,0.99,1},{0.99,0.94,0.78,1},{0.87,0.49,0.18,1},{0.11,0.07,0.04,1}},
+    EARTH={{0.97,0.96,0.97,1},{0.95,0.83,0.72,1},{0.45,0.34,0.85,1},{0.09,0.07,0.16,1}},
+  }
   local trainerCardImageCache={}
+
+  local trainerCardProcessedImageCache={}
   local function loadTrainerCardImage(path)
     if type(path)~="string" or path=="" then return nil end
     if trainerCardImageCache[path]~=nil then return trainerCardImageCache[path] or nil end
-    local ok,img=pcall(G.newImage,path)
+    local ok,img=false,nil
+    if mod and mod.assets and type(mod.assets.image)=="function" then
+      ok,img=pcall(mod.assets.image,mod.assets,path)
+    end
+    if (not ok or not img) and G and type(G.newImage)=="function" then
+      ok,img=pcall(G.newImage,path)
+    end
     if not ok then img=nil end
     if img and img.setFilter then pcall(img.setFilter,img,"nearest","nearest") end
     trainerCardImageCache[path]=img or false
     return img
+  end
+  local function imageDataForDrawable(img)
+    if not img then return nil end
+    if type(img.newImageData)=="function" then
+      local ok,data=pcall(img.newImageData,img)
+      if ok and data then return data end
+    end
+    if not (G and type(G.newCanvas)=="function" and type(img.getDimensions)=="function") then return nil end
+    local okSize,iw,ih=pcall(img.getDimensions,img)
+    if not okSize or not iw or not ih or iw<1 or ih<1 then return nil end
+    local okCanvas,canvas=pcall(G.newCanvas,iw,ih,{dpiscale=1})
+    if not okCanvas or not canvas then okCanvas,canvas=pcall(G.newCanvas,iw,ih) end
+    if not okCanvas or not canvas then return nil end
+    local previous=type(G.getCanvas)=="function" and G.getCanvas() or nil
+    local pushed=pcall(G.push,"all")
+    if not pushed then pcall(G.push) end
+    local okDraw=pcall(function()
+      G.setCanvas(canvas)
+      if G.origin then G.origin() end
+      G.clear(0,0,0,0)
+      if G.setShader then G.setShader() end
+      if G.setBlendMode then G.setBlendMode("alpha") end
+      G.setColor(1,1,1,1)
+      G.draw(img,0,0)
+    end)
+    if previous then pcall(G.setCanvas,previous) else pcall(G.setCanvas) end
+    pcall(G.pop)
+    if not okDraw or type(canvas.newImageData)~="function" then return nil end
+    local okRead,data=pcall(canvas.newImageData,canvas)
+    return okRead and data or nil
+  end
+  local function byte(v)
+    v=tonumber(v) or 0
+    if v<=1.000001 then v=v*255 end
+    return math.max(0,math.min(255,math.floor(v+0.5)))
+  end
+  local function floodTransparentBorder(data)
+    if not data or type(data.getDimensions)~="function" or type(data.getPixel)~="function"
+        or type(data.setPixel)~="function" then return false end
+    local w,h=data:getDimensions()
+    if not w or not h or w<1 or h<1 then return false end
+    local seen={}
+    local xs,ys={},{}
+    local head=1
+    local function key(x,y) return y*w+x end
+    local function isWhite(x,y)
+      local r,g,b,a=data:getPixel(x,y)
+      if byte(a)==0 then return false end
+      return byte(r)>=248 and byte(g)>=248 and byte(b)>=248
+    end
+    local function add(x,y)
+      if x<0 or y<0 or x>=w or y>=h then return end
+      local k=key(x,y)
+      if seen[k] or not isWhite(x,y) then return end
+      seen[k]=true; xs[#xs+1]=x; ys[#ys+1]=y
+    end
+    for x=0,w-1 do add(x,0); add(x,h-1) end
+    for y=1,h-2 do add(0,y); add(w-1,y) end
+    while head<=#xs do
+      local x,y=xs[head],ys[head]; head=head+1
+      data:setPixel(x,y,0,0,0,0)
+      add(x-1,y); add(x+1,y); add(x,y-1); add(x,y+1)
+    end
+    return true
+  end
+  local function colorizedTrainerSprite(path,paletteKey)
+    local cacheKey=(path or "").."|"..tostring(paletteKey or "")
+    if trainerCardProcessedImageCache[cacheKey]~=nil then
+      return trainerCardProcessedImageCache[cacheKey] or nil
+    end
+    local img=loadTrainerCardImage(path)
+    if not img then trainerCardProcessedImageCache[cacheKey]=false; return nil end
+    local palette=TRAINER_CARD_PALETTES[paletteKey]
+    if not palette or not (love and love.image and type(G.newImage)=="function") then
+      trainerCardProcessedImageCache[cacheKey]=img; return img
+    end
+    local data=imageDataForDrawable(img)
+    if not data then trainerCardProcessedImageCache[cacheKey]=img; return img end
+    floodTransparentBorder(data)
+    local w,h=data:getDimensions()
+    for y=0,h-1 do
+      for x=0,w-1 do
+        local r,g,b,a=data:getPixel(x,y)
+        if byte(a)>0 then
+          local lum=0.299*byte(r)+0.587*byte(g)+0.114*byte(b)
+          local idx=(lum>=192 and 1) or (lum>=128 and 2) or (lum>=64 and 3) or 4
+          local c=palette[idx] or palette[#palette]
+          data:setPixel(x,y,c[1],c[2],c[3],a)
+        end
+      end
+    end
+    local okNew,newImg=pcall(G.newImage,data)
+    if not okNew or not newImg then trainerCardProcessedImageCache[cacheKey]=img; return img end
+    if newImg.setFilter then pcall(newImg.setFilter,newImg,"nearest","nearest") end
+    trainerCardProcessedImageCache[cacheKey]=newImg
+    return newImg
+  end
+  local function trainerSpriteForPage(page,name)
+    if page==2 then
+      return colorizedTrainerSprite(JOHTO_TRAINER_SPRITES[name],name)
+    else
+      return colorizedTrainerSprite(KANTO_TRAINER_SPRITES[name],name)
+    end
   end
   local function drawImageFit(img,x,y,w,h)
     if not img then return false end
@@ -1121,6 +1324,35 @@ return function(mod)
     return true
   end
 
+  local kantoBadgeSheetCache={}
+  local function drawKantoBadgeSprite(s,name,x,y,size)
+    local path=KANTO_BADGE_ART[name]
+    local frames=tonumber(KANTO_BADGE_FRAMES[name]) or 1
+    local img=loadTrainerCardImage(path)
+    if not img then return false end
+    if frames<=1 then return drawImageFit(img,x,y,size,size) end
+    local cacheKey=path.."|"..tostring(frames)
+    local cached=kantoBadgeSheetCache[cacheKey]
+    if not cached then
+      local iw,ih=img:getDimensions()
+      if not iw or not ih or iw<=0 or ih<=0 then return false end
+      local fh=ih/frames
+      local quads={}
+      if type(G.newQuad)=="function" then
+        for fi=0,frames-1 do quads[#quads+1]=G.newQuad(0,fi*fh,iw,fh,iw,ih) end
+      end
+      cached={img=img, iw=iw, fh=fh, quads=quads}
+      kantoBadgeSheetCache[cacheKey]=cached
+    end
+    local frame=math.floor((tonumber(s.frames) or 0)/56)%frames + 1
+    local q=cached.quads and cached.quads[frame]
+    if not q then return drawImageFit(img,x,y,size,size) end
+    local fit=math.min(size/cached.iw,size/cached.fh)
+    local dw,dh=cached.iw*fit,cached.fh*fit
+    G.setColor(1,1,1,1)
+    G.draw(cached.img,q,x+(size-dw)/2,y+(size-dh)/2,0,fit,fit)
+    return true
+  end
   local function drawOwnedBadge(s,nativeCard,page,name,i,x,y,size)
     if page==2 then
       -- Draw straight from BadgeGFX.  Cropping the already-composited native
@@ -1129,10 +1361,9 @@ return function(mod)
       -- from.  The extracted badge sheet already has transparent shade 0.
       return drawJohtoBadgeSprite(s,name,x,y,size)
     else
-      local img=loadTrainerCardImage(KANTO_BADGE_ART[name])
-      if img then return drawImageFit(img,x,y,size,size) end
+      -- Kanto uses the animated Gen 1 badge sprite sheets.
+      return drawKantoBadgeSprite(s,name,x,y,size)
     end
-    return false
   end
   local function badgeOwned(tbl,name,i) return type(tbl)=="table" and (tbl[name]==true or tbl[i]==true) end
   local function drawCard(s)
@@ -1182,36 +1413,26 @@ return function(mod)
         local yes=badgeOwned(owned,name,i)
         local cardH=78*scale
         color(yes and c.selected or c.raised); G.rectangle("fill",bx,by,colW-14*scale,cardH,6,6)
-        -- Reuse the game's native Gym Leader portraits, but strip the card's
-        -- white paper around them and give the artwork more room than v130.
-        local faceCol=(i-1)%4
-        local faceRow=math.floor((i-1)/4)
-        -- Each native leader record is ten tiles: the first 8x8 tile on
-        -- the top-left is the little numbered marker, while the actual leader
-        -- portrait occupies the 3x3 block to its right/below.  Crop only the 24x24 portrait block for the Gym Leader art. Draw the
-        -- small number tile separately with its own transparency pass so the
-        -- numbers keep no white box while the portrait keeps its 1 px white-hair protection.
-        local cropX=24+faceCol*32
-        local cropY=80+faceRow*24
-        local numX=cropX-8
-        local numY=cropY
         local artW=112*scale
         local artH=68*scale
-        local numSize=18*scale
-        local numDrawX=bx+6*scale
-        local numDrawY=by+9*scale
-        drawTransparentCardCrop(nativeCard,"leader_num_"..page.."_"..i,numX,numY,8,8,
-          numDrawX,numDrawY,numSize,numSize)
-        local portraitX=numDrawX+numSize+4*scale
-        local portraitW=math.max(24*scale,artW-(portraitX-bx)-4*scale)
-        drawTransparentCardCrop(nativeCard,"leader_"..page.."_"..i,cropX,cropY,24,24,
-          portraitX,by+5*scale,portraitW,artH)
-        local tx=bx+artW+14*scale
-        local tw=colW-artW-34*scale
+        local tx
+        local tw
         local badgeSize=42*scale
         local cardInnerW=(colW-14*scale)
         local badgeX=bx+cardInnerW-badgeSize-10*scale
         local badgeY=by+18*scale
+        do
+          local spriteX=bx+8*scale
+          local spriteY=by+4*scale
+          local spriteW=96*scale
+          local spriteH=70*scale
+          local sprite=trainerSpriteForPage(page,name)
+          if not drawImageFit(sprite,spriteX,spriteY,spriteW,spriteH) then
+            fittedText(name,20*scale,spriteX,by+28*scale,spriteW,"center",yes and c.text or c.muted)
+          end
+          tx=bx+108*scale
+          tw=colW-108*scale-26*scale
+        end
         local nameW=math.max(24*scale,badgeX-tx-8*scale)
         fittedText(name,22*scale,tx,by+12*scale,nameW,"left",yes and c.text or c.muted)
         if yes then
@@ -1340,7 +1561,7 @@ return function(mod)
     end
     local footerY=y+h-58*scale
     local leftText="B RETURN"
-    local rightText="CARD"
+    local rightText=s.fly and "REGION" or "CARD"
     local arrowSize=math.max(10*scale,footerFont:getHeight()*.5)
     local gap=18*scale
     local groupW=footerFont:getWidth(leftText)+gap+arrowSize*2.35+gap+footerFont:getWidth(rightText)
@@ -2365,9 +2586,70 @@ return function(mod)
     end
   end
 
+  local function genericMenuTitle(s)
+    local hasField=false
+    local hasSurf=false
+    local hasRod=false
+    for _,row in ipairs(type(s.items)=="table" and s.items or {}) do
+      local label=normalizeUiText(type(row)=="table" and row.label or row):upper()
+      if label=="FLY" or label=="TELEPORT" or label=="FLASH" or label=="DIG" then
+        hasField=true
+      end
+      if label=="SURF" then hasSurf=true end
+      if label:match("^USE .-ROD$") or label:find("ROD",1,true) then hasRod=true end
+    end
+    if hasSurf and hasRod then return "WATER ACTION" end
+    if hasField then return "FIELD MOVES" end
+    local title=normalizeUiText(s.title or "")
+    if title~="" then return title end
+    return "MENU"
+  end
+
+  local function drawGenericMenu(s)
+    local c=theme(); local sx,sy,sw,sh=playfield()
+    local scale=uiScale(sw,sh)
+    local rows={}
+    local items=type(s.items)=="table" and s.items or {}
+    local first=math.max(1,(tonumber(s.scroll) or 0)+1)
+    local visible=tonumber(s.maxVisible) or #items
+    visible=math.max(1,math.min(visible,#items-first+1))
+    for i=first,math.min(#items,first+visible-1) do
+      local row=items[i]
+      rows[#rows+1]=normalizeUiText(type(row)=="table" and row.label or row)
+    end
+    local selected=(tonumber(s.index) or 1)-first+1
+    selected=math.max(1,math.min(math.max(1,#rows),selected))
+    local title=genericMenuTitle(s)
+    local titleFont=font(30*scale)
+    local rowFont=font(23*scale)
+    local footerFont=font(18*scale)
+    local rh=math.max(44*scale,rowFont:getHeight()+18*scale)
+    local widest=0
+    for _,label in ipairs(rows) do widest=math.max(widest,rowFont:getWidth(label)) end
+    local w=math.min(sw*.62,math.max(390*scale,widest+100*scale))
+    local h=70*scale+#rows*rh+52*scale
+    h=math.min(sh*.76,h)
+    local x=sx+(sw-w)/2
+    local y=sy+(sh-h)/2
+    panel(x,y,w,h,c,.96)
+    text(title,titleFont,x+22*scale,y+16*scale,w-44*scale,"left",c.text)
+    local listY=y+60*scale
+    for i,label in ipairs(rows) do
+      local yy=listY+(i-1)*rh
+      local barY,barH=centeredRowRect(yy,rh,3*scale)
+      if i==selected then
+        color(c.selected); G.rectangle("fill",x+14*scale,barY,w-28*scale,barH,6*scale,6*scale)
+      end
+      fittedText(label,23*scale,x+30*scale,centeredTextY(barY,barH,rowFont),
+        w-60*scale,"left",i==selected and c.text or c.muted)
+    end
+    fittedText("A SELECT    B BACK",18*scale,x+22*scale,y+h-34*scale,w-44*scale,"left",c.muted)
+  end
+
   local renderers={
     titlemenu=drawTitleMainMenu,start=drawStart,pack=drawPack,gear=drawGear,card=drawCard,
     centerpc=drawCenterPc,pc=drawPcMenuModern,boxpc=drawBoxPcModern,evolution=drawGen2Evolution,
+    genericmenu=drawGenericMenu,
     save=drawSave,options=drawOptions,modoptions=drawModOptions,
     kimsettings=drawKimSettings,dexradar=drawDexRadar,
   }

@@ -1,4 +1,4 @@
--- Kanto in Motion v1.7.1 - Gen 2 Modern Party UI v33
+-- Kanto in Motion v1.7.2 - Gen 2 Modern Party UI v33
 --
 -- The native PartyMenu remains the complete input/state owner. KIM makes the
 -- state transparent, hides only its native render, then draws a final-window

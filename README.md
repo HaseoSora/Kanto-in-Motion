@@ -1,4 +1,4 @@
-# Kanto in Motion v1.7.1
+# Kanto in Motion v1.7.2
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -9,6 +9,17 @@ It supports:
 - **Pokémon FireRed / LeafGreen / Ruby / Sapphire / Emerald** — National Dex #001–386
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
+
+## What’s new in v1.7.2
+
+v1.7.2 continues the **Gen 2 Modern UI expansion**, focusing on the Trainer Card, regional Fly map behavior, and presentation compatibility with field-action helper mods. KIM still leaves game progression, badge ownership, Fly destinations, field-move callbacks, and third-party mod logic to their original owners.
+
+- **Expanded Gen 2 Trainer Card:** the card now uses its third page for the **Kanto Gym Leaders**, while page 2 remains the Johto Gym page.
+- **Full Gym Leader battle sprites:** both Johto and Kanto Trainer Card pages use the larger generated battle-trainer sprites instead of the smaller native face crops. Outer white paper is removed transparently and the sprites use richer Crystal-style colour palettes for a closer match to the game’s coloured trainer artwork.
+- **Animated Johto + Kanto badges:** Johto continues to use the native animated Gen 2 badge graphics. Earned Kanto badges now use KIM’s existing **Gen 1 Trainer Card animated badge sprite sheets**, including their full frame sequences rather than a static emblem.
+- **Johto / Kanto Fly-map switching:** the Gen 2 Fly picker now supports **LEFT / RIGHT** region switching between Johto and Kanto when Kanto Fly destinations are available. The destination list and map update together while preserving Gen1Recomp’s visited-flypoint rules.
+- **Modern Gen 2 field-action submenus:** generic Gen 2 menus used by compatible helper mods can now inherit KIM Modern UI presentation. This includes Quality of Life’s held-START field actions and water interaction choices such as **FLY / TELEPORT / FLASH / DIG**, Fishing Rod choices, **SURF**, and **CANCEL**. KIM does not modify the Quality of Life mod; its rows, callbacks, and behavior remain authoritative.
+- **Existing v1.7.1 work retained:** Gen 2 PC/storage Modern UI, modern Gen 2/Gen 3 evolution presentation, the Gen 2 Party/Pokédex/Trainer Card improvements, HD icon fixes, battle-sprite tuning, and the full v1.7.0 Gen 3 Modern UI remain included.
 
 ## What’s new in v1.7.1
 
@@ -434,7 +445,7 @@ External compatibility mod packages are not bundled. v1.6.0 directly vendors onl
 
 ### Installation / first launch
 
-1. Install **Kanto in Motion v1.7.1** and enable it in Gen1Recomp.
+1. Install **Kanto in Motion v1.7.2** and enable it in Gen1Recomp.
 2. On Red/Blue/Yellow and Gold/Silver/Crystal, KIM opens the **HD ASSET MANAGER** when the external HD battle pack is not already cached. On FireRed/LeafGreen/Emerald, the native Start Menu shows **KIM ASSETS** only while the shared pack is missing or incomplete; healthy caches hide the entry automatically.
 3. Choose **A — DOWNLOAD** to download the official asset ZIP once, or **B — USE VANILLA / LATER** to continue without it.
 4. After a successful install, the HD assets remain in Gen1Recomp's installation-scoped KIM cache and are reused by later KIM code updates.
