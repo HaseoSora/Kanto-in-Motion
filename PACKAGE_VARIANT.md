@@ -1,14 +1,16 @@
-# Kanto in Motion v1.7.0 — Public Release
+# Kanto in Motion v1.7.1 — Public Release
 
-This is the public v1.7.0 package.
+This is the public v1.7.1 package.
 
 ## Highlights
 
-- Expanded Gen 3 Modern UI for FireRed/LeafGreen and Ruby/Sapphire/Emerald.
-- Modern Gen 3 main menu, Start Menu, Bag, Party, Summary/Status, Pokédex, Storage/Pokébox, Options/KIM settings, dialogue/choices, naming screens, catch nickname flow, Trainer Card, and supported lower battle UI surfaces.
-- Gen 3 Trainer Card now opens as a floating Modern UI window over the live overworld.
-- Gen 3 Pokédex formatting cleanup and full-description fitting.
-- Final-resolution HD icon improvements across naming/storage and corrected 1025Dex storage gender fallback.
-- Gen 3 main-menu round-robin navigation.
-- 1025Dex disabled/removed battle guard: saved post-Gen3 Pokémon remain intact but are treated as unavailable in the temporary battle party when their expanded species provider is missing.
-- All prior Gen 1/Gen 2, external-asset, Battle Art/PotatoVoxel, Dex Radar, Unown/Deoxys, and mobile compatibility work remains included.
+- More compact Gen 2 Modern Party screen with the complete ATK / DEF / SPEED / SP.ATK / SP.DEF stat block.
+- Gen 2 Pokédex now keeps the native PAGE / AREA / CRY / PRINT actions and uses the game’s real AREA nest map/markers.
+- Restored Gen 2 Start Menu `MODS` access while KIM Modern UI is enabled.
+- Major Gen 2 Trainer Card presentation upgrade with native player/Gym Leader artwork, larger leader portraits, transparent portrait backgrounds, native number markers, and real earned badge emblems.
+- Floating Modern UI for the Gen 2 Pokémon Center PC, Bill’s PC, and Pokémon storage screens over the live overworld.
+- Floating Modern evolution presentation for Gen 2 and Gen 3 while native evolution logic remains authoritative.
+- Gen 2 species-specific battle-sprite tuning, beginning with corrected Pidgeotto size/height.
+- Gen 2 HD icon reliability fixes, including corrected Quilava #156 / Typhlosion #157 PNG assets and stronger post-evolution icon lookup.
+- Gen 2 Modern PC gender-symbol correction and save-serialization hardening.
+- All Kanto in Motion v1.7.0 features and prior compatibility work remain included.

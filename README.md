@@ -1,4 +1,4 @@
-# Kanto in Motion v1.7.0
+# Kanto in Motion v1.7.1
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -9,6 +9,21 @@ It supports:
 - **Pokémon FireRed / LeafGreen / Ruby / Sapphire / Emerald** — National Dex #001–386
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
+
+## What’s new in v1.7.1
+
+v1.7.1 is a focused **Gen 2 Modern UI and presentation-polish update**, with matching evolution presentation improvements carried into Gen 3. Native game logic, saves, inputs, battle rules, PC/storage behavior, evolution rules, and Pokédex state remain owned by Gen1Recomp; KIM changes supported presentation layers only.
+
+- **Gen 2 Party overhaul:** the Modern Party screen is more compact and now shows the complete five-stat block — ATK, DEF, SPEED, SP.ATK and SP.DEF — with cleaner spacing and fallbacks for older/imported records whose cached display stats are incomplete.
+- **Gen 2 Pokédex cleanup:** removes the unused EVO / MOVES tabs, keeping the native Gen 2 actions only. The AREA page now uses the game’s actual regional nest map and encounter markers instead of a text-only location list.
+- **Gen 2 Start Menu MODS access:** restores the native `MODS` entry so the full Gen1Recomp Mod Manager remains reachable while KIM Modern UI is enabled.
+- **Gen 2 Trainer Card upgrade:** reuses the native player and Gym Leader artwork inside KIM, removes the card-paper backgrounds, enlarges the Gym Leader portraits, preserves legitimate white sprite details, restores the native number markers, and shows the actual earned badge emblems at the far right of each leader row with a slower animation cycle.
+- **Gen 2 PC / storage Modern UI:** the Pokémon Center PC chooser, Bill’s PC menu, and Bill’s PC Pokémon storage screens now use KIM’s floating Modern UI over the live overworld while the native PC/storage state and actions remain authoritative.
+- **Modern evolution presentation:** Gen 2 evolution now opens as a floating Modern UI presentation over the overworld while keeping native timing, cancellation, cries, species changes, move learning, and callbacks. The same floating Modern evolution treatment is also applied to Gen 3 (FR/LG, R/S, Emerald).
+- **Gen 2 battle sprite tuning:** adds species-specific presentation tuning for HD battlers whose animation cells contain unusual transparent space. Pidgeotto is enlarged and raised so its flying animation reads at the intended size and height.
+- **Gen 2 HD icon reliability:** strengthens National-Dex icon resolution after evolution/imports, fixes procedural gender-symbol rendering in the Modern PC, and repairs the malformed PNG metadata that prevented the Quilava #156 and Typhlosion #157 HD menu icons from loading in stricter decoders.
+- **Gen 2 save hardening:** impossible transient LÖVE userdata values are stripped from the live Gen 2 save table before serialization so presentation/cache objects cannot cause a save hard error.
+- **Existing v1.7.0 work retained:** the expanded Gen 3 Modern UI, 1025Dex safeguards, external asset system, Battle Art/PotatoVoxel compatibility, Dex Radar integration, Unown/Deoxys form support, and prior Gen 1/Gen 2/mobile fixes remain included.
 
 ## What’s new in v1.7.0
 
@@ -235,7 +250,7 @@ Gold / Silver / Crystal retain their native gameplay and battle logic. KIM's Mod
 | **MENU SPRITES** | KIM HD / VANILLA | KIM HD | Chooses KIM's HD animated menu Pokémon or the native Gold/Silver/Crystal Pokémon artwork. This is independent from POKEMON ICONS and BATTLE SPRITES. |
 | **POKEMON ICONS** | ON / OFF | ON | Uses KIM's HD Pokémon icons in native G/S/C icon slots. OFF restores the game or another compatible icon provider. |
 | **ANIMATION** | ON / OFF | ON | Master animation control for supported KIM Pokémon/trainer presentation. OFF holds supported animated KIM artwork on its first frame. |
-| **MODERN UI** | ON / OFF | ON | Master switch for KIM's Gen 2 Modern UI across the title/main menu, Start/menu screens, Party, Pokédex, Pack, PokéGear, Trainer Card, Save, Options/KIM settings, dialogue, shops, choices, level-up messages, and supported battle UI surfaces. OFF yields those presentation surfaces to the native game. |
+| **MODERN UI** | ON / OFF | ON | Master switch for KIM's Gen 2 Modern UI across the title/main menu, Start/menu screens, Party, Pokédex, Pack, PokéGear, Trainer Card, PC/storage, evolution, Save, Options/KIM settings, dialogue, shops, choices, level-up messages, and supported battle UI surfaces. OFF yields those presentation surfaces to the native game. |
 | **UI SETTINGS** | OPEN | — | Opens the dedicated Gen 2 UI customization submenu described below. |
 | **ASSET MANAGER** | OPEN | — | Opens the HD Asset Manager for downloading, removing, re-downloading, checking, or reusing the external HD battle asset pack. |
 | **BATTLE SPRITES** | ON / OFF | ON | Uses KIM HD animated Pokémon in native G/S/C battles while retaining native Gen 2 battle logic and move animations. |
@@ -266,7 +281,7 @@ These controls are grouped under **KANTO IN MOTION → UI SETTINGS**. They mirro
 | **MINIMAL UI** | ON / OFF | OFF | Uses tighter spacing and less secondary detail. |
 | **DIALOGUE UI** | ON / OFF | ON | Enables Modern UI for Gen 2 text boxes, choices, quantities, and confirmation prompts. |
 | **MENU UI** | ON / OFF | ON | Enables Modern UI for the Gen 2 title/main menu, Start Menu, Pack, PokéGear, Save, and Options screens. |
-| **POKEMON SCREENS** | ON / OFF | ON | Enables Modern UI for Party, Pokédex, Trainer Card, and supported Pokémon screens. |
+| **POKEMON SCREENS** | ON / OFF | ON | Enables Modern UI for Party, Pokédex, Trainer Card, PC/storage, evolution, and supported Pokémon screens. |
 | **MOD MANAGER UI** | ON / OFF | ON | Enables Modern UI presentation for Kanto in Motion's own settings screens. |
 | **SPRITE ANIMATION** | ON / OFF | ON | Animates supported KIM menu/Party/Pokédex artwork without changing the selected MENU SPRITES source. |
 | **MODERN BATTLE UI** | ON / OFF | ON | Replaces only the native lower battle dialogue/command/move surface; the native Gen 2 HP/status HUD and battle logic remain unchanged. |
@@ -291,6 +306,8 @@ With **MODERN UI = ON**, KIM currently presents:
 - Pack
 - PokéGear, including native map/phone data presented through the KIM theme
 - Trainer Card
+- Pokémon Center PC chooser, Bill’s PC, and Bill’s PC Pokémon storage
+- Pokémon evolution presentation over the live overworld
 - Save Menu
 - native Options categories and submenus
 - Kanto in Motion's own settings and Battle submenu
@@ -363,7 +380,7 @@ The Gen 3 Battle Settings page also includes **RESET TO DEFAULT**.
 
 #### Gen 3 Modern UI coverage
 
-With **MODERN UI = ON**, KIM currently presents the supported Gen 3 main/title menu layer, Start Menu, Bag, Party, Summary/Status, Pokédex, Storage/Pokébox, native Options plus KIM settings, common dialogue/choices/confirmations, nickname/name-entry keyboard, caught-Pokémon nickname flow, Trainer Card, and lower battle dialogue/command/move surfaces. Game3 remains authoritative for game logic, menu state, scripts, saving, battle state, and input semantics.
+With **MODERN UI = ON**, KIM currently presents the supported Gen 3 main/title menu layer, Start Menu, Bag, Party, Summary/Status, Pokédex, Storage/Pokébox, native Options plus KIM settings, common dialogue/choices/confirmations, nickname/name-entry keyboard, caught-Pokémon nickname flow, Trainer Card, Pokémon evolution, and lower battle dialogue/command/move surfaces. Game3 remains authoritative for game logic, menu state, scripts, saving, battle state, and input semantics.
 
 The optional **1025Dex** bridge remains conditional: when the provider is active, its post-Gen3 species can participate normally; if the provider is disabled or removed while those Pokémon remain in a save, KIM temporarily marks only those battle-copy slots unavailable so they cannot become an invalid lead/switch target. The original saved Pokémon data is not deleted or permanently fainted.
 
@@ -417,7 +434,7 @@ External compatibility mod packages are not bundled. v1.6.0 directly vendors onl
 
 ### Installation / first launch
 
-1. Install **Kanto in Motion v1.6.5** and enable it in Gen1Recomp.
+1. Install **Kanto in Motion v1.7.1** and enable it in Gen1Recomp.
 2. On Red/Blue/Yellow and Gold/Silver/Crystal, KIM opens the **HD ASSET MANAGER** when the external HD battle pack is not already cached. On FireRed/LeafGreen/Emerald, the native Start Menu shows **KIM ASSETS** only while the shared pack is missing or incomplete; healthy caches hide the entry automatically.
 3. Choose **A — DOWNLOAD** to download the official asset ZIP once, or **B — USE VANILLA / LATER** to continue without it.
 4. After a successful install, the HD assets remain in Gen1Recomp's installation-scoped KIM cache and are reused by later KIM code updates.

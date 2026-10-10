@@ -1,4 +1,4 @@
--- Kanto in Motion v1.7.0 - Gen 2 Modern Summary UI v2
+-- Kanto in Motion v1.7.1 - Gen 2 Modern Summary UI v2
 --
 -- Presentation-only adapter for Gold/Silver/Crystal SummaryMenu. The native
 -- SummaryMenu remains the authoritative state/input owner (page changes,

@@ -1,4 +1,4 @@
--- Kanto in Motion v1.6.4 - Gen 2 Modern Core Menus v34 -- responsive text/footer layout
+-- Kanto in Motion v1.7.1 - Gen 2 Modern Core Menus v47 -- PC icon/gender follow-up
 --
 -- Modern overlay presentation for the native Gen 2 Start Menu, Pack,
 -- Pokegear, Trainer Card, Save Menu, Options Menu and KIM Mod Settings. Their original objects remain authoritative for
@@ -6,12 +6,19 @@
 return function(mod)
   local G=love.graphics
   local okChrome,Chrome=pcall(require,"src.ui.gen2.Chrome")
+  local okGbcPalette,GbcPalette=pcall(require,"src.render.GbcPalette")
   local okStart,StartMenu=pcall(require,"src.ui.gen2.StartMenu")
   local okMain,MainMenu=pcall(require,"src.ui.gen2.MainMenu")
   local okTitle,Gen2TitleState=pcall(require,"src.ui.gen2.TitleState")
   local okPack,PackMenu=pcall(require,"src.ui.gen2.PackMenu")
   local okGear,Pokegear=pcall(require,"src.ui.gen2.Pokegear")
   local okCard,TrainerCard=pcall(require,"src.ui.gen2.TrainerCard")
+  local okCenterPc,CenterPcMenu=pcall(require,"src.ui.gen2.CenterPcMenu")
+  local okPc,PcMenu=pcall(require,"src.ui.gen2.PcMenu")
+  local okBoxPc,BoxMenu=pcall(require,"src.ui.gen2.BoxMenu")
+  local okEvolution,EvolutionAnim=pcall(require,"src.ui.gen2.EvolutionAnim")
+  local okBoxes,Boxes=pcall(require,"src.core.gen2.Boxes")
+  local okGen2Mon,Gen2Mon=pcall(require,"src.battle.gen2.Mon")
   local okSaveMenu,SaveMenu=pcall(require,"src.ui.gen2.SaveMenu")
   local okOptions,OptionsMenu=pcall(require,"src.ui.gen2.OptionsMenu")
   local okListMenu,ListMenu=pcall(require,"src.ui.ListMenu")
@@ -21,6 +28,39 @@ return function(mod)
   local okManager,ManagerState=pcall(require,"src.mods.ManagerState")
   if not (okStart and okPack and okGear and okCard and okSaveMenu and okOptions) then
     return false
+  end
+
+  -- A save can never legally contain LOVE userdata: SaveSerializer only
+  -- accepts Lua scalars/tables.  If a presentation/cache object ever leaks
+  -- into the live Gen 2 save, discard only that impossible value before the
+  -- engine serializes it so saving cannot hard-error.  Ordinary save data is
+  -- left untouched.
+  if okSaveCore and SaveCore and type(SaveCore.save)=="function"
+      and not SaveCore.__kimGen2UserdataSaveGuard then
+    local oldSave=SaveCore.save
+    local function stripUserdata(root)
+      if type(root)~="table" then return end
+      local seen={}
+      local function walk(t)
+        if seen[t] then return end
+        seen[t]=true
+        local remove={}
+        for k,v in pairs(t) do
+          if type(k)=="userdata" or type(v)=="userdata" then
+            remove[#remove+1]=k
+          elseif type(v)=="table" then
+            walk(v)
+          end
+        end
+        for _,k in ipairs(remove) do t[k]=nil end
+      end
+      walk(root)
+    end
+    SaveCore.save=function(save,...)
+      stripUserdata(save)
+      return oldSave(save,...)
+    end
+    SaveCore.__kimGen2UserdataSaveGuard=true
   end
 
   local Style=mod._kantoInMotionGen2Ui
@@ -196,6 +236,27 @@ return function(mod)
   end
   makeTransparent(PackMenu,"menu"); makeTransparent(Pokegear,"menu"); makeTransparent(TrainerCard,"pokemon")
   makeTransparent(SaveMenu,"menu"); makeTransparent(OptionsMenu,"menu")
+  if okCenterPc then makeTransparent(CenterPcMenu,"menu") end
+  if okPc then makeTransparent(PcMenu,"menu") end
+  if okBoxPc then makeTransparent(BoxMenu,"pokemon") end
+  if okEvolution then makeTransparent(EvolutionAnim,"pokemon") end
+
+  -- PcMenu, BoxMenu and EvolutionAnim normally claim the full widescreen
+  -- surround.  Modern UI owns them as floating windows, so let Game2 fall
+  -- through to its ordinary overworld draw while the source state keeps all
+  -- input/state ownership.
+  local function floatingWidescreen(Class,kind,marker)
+    if not Class or type(Class.drawsWidescreen)~="function" or Class[marker] then return end
+    local old=Class.drawsWidescreen
+    Class.drawsWidescreen=function(self,...)
+      if presenterEnabled(kind) and hideOriginal() then return false end
+      return old(self,...)
+    end
+    Class[marker]=true
+  end
+  floatingWidescreen(PcMenu,"menu","__kimModernPcFloatingV142")
+  floatingWidescreen(BoxMenu,"pokemon","__kimModernBoxFloatingV142")
+  floatingWidescreen(EvolutionAnim,"pokemon","__kimModernEvolutionFloatingV142")
 
   -- The category pages created by OptionsMenu's local pushGroup() still use
   -- OptionsMenu:drawsWidescreen().  Disable that path only while KIM owns
@@ -232,6 +293,10 @@ return function(mod)
     if isClass(s,PackMenu) then return "pack" end
     if isClass(s,Pokegear) then return "gear" end
     if isClass(s,TrainerCard) then return "card" end
+    if okCenterPc and isClass(s,CenterPcMenu) then return "centerpc" end
+    if okPc and isClass(s,PcMenu) then return "pc" end
+    if okBoxPc and isClass(s,BoxMenu) then return "boxpc" end
+    if okEvolution and isClass(s,EvolutionAnim) then return "evolution" end
     if isClass(s,SaveMenu) then return "save" end
     if isClass(s,OptionsMenu) then return "options" end
     if isDexRadarState(s) then return "dexradar" end
@@ -776,8 +841,299 @@ return function(mod)
     end
   end
 
+  local trainerCardCanvas
+  local trainerCardQuads={}
+  local function captureNativeTrainerCard(s)
+    if type(s)~="table" or type(s.drawPanel)~="function" then return nil end
+    if not trainerCardCanvas then
+      local ok,canvas=pcall(G.newCanvas,160,144)
+      if not ok or not canvas then return nil end
+      trainerCardCanvas=canvas
+      if canvas.setFilter then pcall(canvas.setFilter,canvas,"nearest","nearest") end
+    end
+    local previous=type(G.getCanvas)=="function" and G.getCanvas() or nil
+    local pushed=pcall(G.push,"all")
+    if not pushed then pcall(G.push) end
+
+    -- Pages 2/3 normally composite the animated badge OAM directly over the
+    -- Gym Leader art. KIM crops the leader faces out of this native render, so
+    -- capturing that composite also bakes part of the old-position badge into
+    -- the portrait. Temporarily suppress only the native badge-sprite pass
+    -- while making KIM's private source canvas; the real TrainerCard state,
+    -- badge ownership and page logic are untouched.
+    local suppressBadges=(tonumber(s.page) or 1)>1
+    local oldBadgeDraw=rawget(s,"drawBadgeSprites")
+    if suppressBadges then s.drawBadgeSprites=function() end end
+
+    local ok=pcall(function()
+      G.setCanvas(trainerCardCanvas)
+      if G.origin then G.origin() end
+      G.clear(0,0,0,0)
+      G.setColor(1,1,1,1)
+      s:drawPanel()
+    end)
+
+    if suppressBadges then
+      if oldBadgeDraw~=nil then s.drawBadgeSprites=oldBadgeDraw
+      else s.drawBadgeSprites=nil end
+    end
+    if previous then pcall(G.setCanvas,previous) else pcall(G.setCanvas) end
+    pcall(G.pop)
+    return ok and trainerCardCanvas or nil
+  end
+  local function cardQuad(key,qx,qy,qw,qh)
+    if trainerCardQuads[key] then return trainerCardQuads[key] end
+    if type(G.newQuad)~="function" then return nil end
+    local ok,q=pcall(G.newQuad,qx,qy,qw,qh,160,144)
+    if ok then trainerCardQuads[key]=q; return q end
+    return nil
+  end
+  local function drawCardCrop(canvas,key,qx,qy,qw,qh,x,y,w,h)
+    if not canvas then return false end
+    local q=cardQuad(key,qx,qy,qw,qh)
+    if not q then return false end
+    local fit=math.min(w/qw,h/qh)
+    local dw,dh=qw*fit,qh*fit
+    G.setColor(1,1,1,1)
+    G.draw(canvas,q,x+(w-dw)/2,y+(h-dh)/2,0,fit,fit)
+    return true
+  end
+
+  -- The native Gen 2 Trainer Card art is authored against a white card
+  -- background, so simply cropping it into KIM leaves a white rectangle around
+  -- the player and leader portraits.  Remove only near-white pixels connected
+  -- to the crop edge.  This keeps white pixels enclosed by the sprite outline
+  -- (Chris/Kris clothing, eyes, highlights, etc.) instead of color-keying every
+  -- white pixel in the artwork.
+  local trainerCardTransparentCrops={}
+  local function transparentCardCrop(canvas,key,qx,qy,qw,qh)
+    local cached=trainerCardTransparentCrops[key]
+    if cached~=nil then return cached or nil end
+    if not (canvas and love and love.image and type(love.image.newImageData)=="function"
+        and type(canvas.newImageData)=="function" and type(G.newImage)=="function") then
+      trainerCardTransparentCrops[key]=false
+      return nil
+    end
+    local okSource,source=pcall(function() return canvas:newImageData() end)
+    if not okSource or not source then
+      trainerCardTransparentCrops[key]=false
+      return nil
+    end
+    local okOut,out=pcall(love.image.newImageData,qw,qh)
+    if not okOut or not out then
+      trainerCardTransparentCrops[key]=false
+      return nil
+    end
+    local okCopy=pcall(function()
+      for yy=0,qh-1 do
+        for xx=0,qw-1 do
+          local r,g,b,a=source:getPixel(qx+xx,qy+yy)
+          out:setPixel(xx,yy,r,g,b,a)
+        end
+      end
+    end)
+    if not okCopy then
+      trainerCardTransparentCrops[key]=false
+      return nil
+    end
+
+    local function nearWhite(xx,yy)
+      local r,g,b,a=out:getPixel(xx,yy)
+      return (a or 0)>.001 and (r or 0)>.93 and (g or 0)>.93 and (b or 0)>.93
+    end
+    local function opaqueNonWhite(xx,yy)
+      if xx<0 or yy<0 or xx>=qw or yy>=qh then return false end
+      local r,g,b,a=out:getPixel(xx,yy)
+      return (a or 0)>.001 and not ((r or 0)>.93 and (g or 0)>.93 and (b or 0)>.93)
+    end
+
+    -- Morty (FOG) and Pryce (GLACIER) have legitimate white hair that can
+    -- touch the source card paper.  Preserve that white without leaving the
+    -- broad halo used by v132: build a tight silhouette from the non-white
+    -- portrait pixels and allow only ONE source pixel of white padding around
+    -- it.  Row and column spans are both required, so empty card paper cannot
+    -- grow outward just because it shares the same white shade.
+    local protectWhite={}
+    local protectLeaderWhite=(key=="leader_2_4" or key=="leader_2_7")
+    if protectLeaderWhite then
+      local rowMin,rowMax,colMin,colMax={},{},{},{}
+      for yy=0,qh-1 do
+        for xx=0,qw-1 do
+          if opaqueNonWhite(xx,yy) then
+            rowMin[yy]=rowMin[yy] and math.min(rowMin[yy],xx) or xx
+            rowMax[yy]=rowMax[yy] and math.max(rowMax[yy],xx) or xx
+            colMin[xx]=colMin[xx] and math.min(colMin[xx],yy) or yy
+            colMax[xx]=colMax[xx] and math.max(colMax[xx],yy) or yy
+          end
+        end
+      end
+      local function rowSpan(yy)
+        local lo,hi
+        for sy=math.max(0,yy-1),math.min(qh-1,yy+1) do
+          if rowMin[sy]~=nil then
+            lo=lo and math.min(lo,rowMin[sy]) or rowMin[sy]
+            hi=hi and math.max(hi,rowMax[sy]) or rowMax[sy]
+          end
+        end
+        if lo==nil then return nil,nil end
+        return math.max(0,lo-1),math.min(qw-1,hi+1)
+      end
+      local function colSpan(xx)
+        local lo,hi
+        for sx=math.max(0,xx-1),math.min(qw-1,xx+1) do
+          if colMin[sx]~=nil then
+            lo=lo and math.min(lo,colMin[sx]) or colMin[sx]
+            hi=hi and math.max(hi,colMax[sx]) or colMax[sx]
+          end
+        end
+        if lo==nil then return nil,nil end
+        return math.max(0,lo-1),math.min(qh-1,hi+1)
+      end
+      for yy=0,qh-1 do
+        local rlo,rhi=rowSpan(yy)
+        if rlo~=nil then
+          for xx=rlo,rhi do
+            if nearWhite(xx,yy) then
+              local clo,chi=colSpan(xx)
+              if clo~=nil and yy>=clo and yy<=chi then
+                protectWhite[yy*qw+xx+1]=true
+              end
+            end
+          end
+        end
+      end
+    end
+
+    local seen={}
+    local xs,ys={},{}
+    local head=1
+    local function add(xx,yy)
+      if xx<0 or yy<0 or xx>=qw or yy>=qh then return end
+      local k=yy*qw+xx+1
+      if seen[k] or protectWhite[k] then return end
+      seen[k]=true
+      -- Gen 2 card paper is pure/near white after palette presentation.
+      if nearWhite(xx,yy) then
+        xs[#xs+1]=xx; ys[#ys+1]=yy
+      end
+    end
+    for xx=0,qw-1 do add(xx,0); add(xx,qh-1) end
+    for yy=1,qh-2 do add(0,yy); add(qw-1,yy) end
+    while head<=#xs do
+      local xx,yy=xs[head],ys[head]; head=head+1
+      out:setPixel(xx,yy,0,0,0,0)
+      add(xx-1,yy); add(xx+1,yy); add(xx,yy-1); add(xx,yy+1)
+    end
+
+    local okImg,img=pcall(G.newImage,out)
+    if not okImg or not img then
+      trainerCardTransparentCrops[key]=false
+      return nil
+    end
+    if img.setFilter then pcall(img.setFilter,img,"nearest","nearest") end
+    trainerCardTransparentCrops[key]=img
+    return img
+  end
+
+  local function drawTransparentCardCrop(canvas,key,qx,qy,qw,qh,x,y,w,h)
+    local img=transparentCardCrop(canvas,key,qx,qy,qw,qh)
+    if not img then return drawCardCrop(canvas,key,qx,qy,qw,qh,x,y,w,h) end
+    local iw,ih=img:getDimensions()
+    local fit=math.min(w/iw,h/ih)
+    local dw,dh=iw*fit,ih*fit
+    G.setColor(1,1,1,1)
+    G.draw(img,x+(w-dw)/2,y+(h-dh)/2,0,fit,fit)
+    return true
+  end
+
   local JOHTO={"ZEPHYR","HIVE","PLAIN","FOG","STORM","MINERAL","GLACIER","RISING"}
   local KANTO={"BOULDER","CASCADE","THUNDER","RAINBOW","SOUL","MARSH","VOLCANO","EARTH"}
+  -- Native badge OAM is not in the same order as the visible leader grid:
+  -- Mineral precedes Storm in the source table.
+  local JOHTO_BADGE_OAM={
+    ZEPHYR=1,HIVE=2,PLAIN=3,FOG=4,MINERAL=5,STORM=6,GLACIER=7,RISING=8,
+  }
+  local KANTO_BADGE_ART={
+    BOULDER="assets/trainer_card/badges/01_bolder.png",
+    CASCADE="assets/trainer_card/badges/02_cascade.png",
+    THUNDER="assets/trainer_card/badges/03_thunder.png",
+    RAINBOW="assets/trainer_card/badges/04_rainbow.png",
+    SOUL="assets/trainer_card/badges/05_soul.png",
+    MARSH="assets/trainer_card/badges/06_marsh.png",
+    VOLCANO="assets/trainer_card/badges/07_volcano.png",
+    EARTH="assets/trainer_card/badges/08_earth.png",
+  }
+  local trainerCardImageCache={}
+  local function loadTrainerCardImage(path)
+    if type(path)~="string" or path=="" then return nil end
+    if trainerCardImageCache[path]~=nil then return trainerCardImageCache[path] or nil end
+    local ok,img=pcall(G.newImage,path)
+    if not ok then img=nil end
+    if img and img.setFilter then pcall(img.setFilter,img,"nearest","nearest") end
+    trainerCardImageCache[path]=img or false
+    return img
+  end
+  local function drawImageFit(img,x,y,w,h)
+    if not img then return false end
+    local iw,ih=img:getDimensions()
+    if not iw or not ih or iw<=0 or ih<=0 then return false end
+    local fit=math.min(w/iw,h/ih)
+    local dw,dh=iw*fit,ih*fit
+    G.setColor(1,1,1,1)
+    G.draw(img,x+(w-dw)/2,y+(h-dh)/2,0,fit,fit)
+    return true
+  end
+  local function drawJohtoBadgeSprite(s,name,x,y,size)
+    local oi=JOHTO_BADGE_OAM[name]
+    local obj=oi and s.gfx and s.gfx.badgeOam and s.gfx.badgeOam[oi]
+    local sheet=s.badges
+    if not (obj and sheet and type(sheet.image)=="function" and type(sheet.quad)=="function") then
+      return false
+    end
+    local img=sheet:image()
+    if not img then return false end
+    local frame=math.floor((tonumber(s.frames) or 0)/32)%8
+    local tile=(obj.frames and obj.frames[frame+1]) or 0
+    local flip=tile>=0x80
+    local base=flip and (tile-0x80) or tile
+    local cell=size/2
+    local function body()
+      G.setColor(1,1,1,1)
+      for _,part in ipairs({{0,0,0},{1,0,1},{0,1,2},{1,1,3}}) do
+        local q=sheet:quad(base+part[3])
+        if q then
+          local dx=flip and (1-part[1]) or part[1]
+          if flip then
+            G.draw(img,q,x+(dx+1)*cell,y+part[2]*cell,0,-cell/8,cell/8)
+          else
+            G.draw(img,q,x+dx*cell,y+part[2]*cell,0,cell/8,cell/8)
+          end
+        end
+      end
+    end
+    if okGbcPalette and GbcPalette and s.gfx and s.gfx.badgePalette
+        and type(GbcPalette.with)=="function" then
+      local ok=pcall(GbcPalette.with,s.gfx.badgePalette,body)
+      if not ok then body() end
+    else
+      body()
+    end
+    return true
+  end
+
+  local function drawOwnedBadge(s,nativeCard,page,name,i,x,y,size)
+    if page==2 then
+      -- Draw straight from BadgeGFX.  Cropping the already-composited native
+      -- Trainer Card also captured whatever leader pixels happened to sit
+      -- underneath the badge OAM position, which is where the stray hair came
+      -- from.  The extracted badge sheet already has transparent shade 0.
+      return drawJohtoBadgeSprite(s,name,x,y,size)
+    else
+      local img=loadTrainerCardImage(KANTO_BADGE_ART[name])
+      if img then return drawImageFit(img,x,y,size,size) end
+    end
+    return false
+  end
   local function badgeOwned(tbl,name,i) return type(tbl)=="table" and (tbl[name]==true or tbl[i]==true) end
   local function drawCard(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
@@ -793,6 +1149,7 @@ return function(mod)
     text("TRAINER CARD",big,x+24*scale,y+20*scale,w*.55,"left",c.text)
     text(("PAGE %d / %d"):format(page,pageCount),pageFont,x+w*.56,y+22*scale,w*.38,"right",c.accent)
     local contentY=y+96*scale
+    local nativeCard=captureNativeTrainerCard(s)
     if page==1 then
       local pd=save.pokedex or {}; local pt=save.playTime or {}
       local rows={
@@ -802,10 +1159,18 @@ return function(mod)
         {"POKéDEX",tostring((function() local n=0 for _,v in pairs(pd.caught or {}) do if v then n=n+1 end end return n end)())},
         {"PLAY TIME",("%d:%02d"):format(pt.hours or 0,pt.minutes or 0)},
       }
+      local portraitX=x+w*.70
+      local portraitY=contentY-8*scale
+      local portraitW=w*.24
+      local portraitH=250*scale
+      panel(portraitX,portraitY,portraitW,portraitH,c,.58)
+      -- Native Trainer Card portrait is the 5x7 tile block at (14,1).
+      drawTransparentCardCrop(nativeCard,"portrait_"..tostring(s.female==true),112,8,40,56,
+        portraitX+12*scale,portraitY+12*scale,portraitW-24*scale,portraitH-24*scale)
       for i,r in ipairs(rows) do
         local yy=contentY+(i-1)*68*scale
-        text(r[1],body,x+45*scale,yy,w*.35,"left",c.muted)
-        text(r[2],body,x+w*.48,yy,w*.42,"right",c.text)
+        text(r[1],body,x+45*scale,yy,w*.28,"left",c.muted)
+        text(r[2],body,x+w*.34,yy,w*.29,"right",c.text)
       end
     else
       local names=page==2 and JOHTO or KANTO
@@ -813,11 +1178,51 @@ return function(mod)
       local colW=(w-80*scale)/2
       for i,name in ipairs(names) do
         local col=(i-1)%2; local row=math.floor((i-1)/2)
-        local bx=x+40*scale+col*colW; local by=contentY+row*88*scale
+        local bx=x+40*scale+col*colW; local by=contentY+row*94*scale
         local yes=badgeOwned(owned,name,i)
-        color(yes and c.selected or c.raised); G.rectangle("fill",bx,by,colW-14*scale,66*scale,6,6)
-        text(name,body,bx+12*scale,by+17*scale,colW-28*scale,"left",yes and c.text or c.muted)
-        text(yes and "EARNED" or "----",small,bx+12*scale,by+43*scale,colW-28*scale,"right",yes and c.accent or c.muted)
+        local cardH=78*scale
+        color(yes and c.selected or c.raised); G.rectangle("fill",bx,by,colW-14*scale,cardH,6,6)
+        -- Reuse the game's native Gym Leader portraits, but strip the card's
+        -- white paper around them and give the artwork more room than v130.
+        local faceCol=(i-1)%4
+        local faceRow=math.floor((i-1)/4)
+        -- Each native leader record is ten tiles: the first 8x8 tile on
+        -- the top-left is the little numbered marker, while the actual leader
+        -- portrait occupies the 3x3 block to its right/below.  Crop only the 24x24 portrait block for the Gym Leader art. Draw the
+        -- small number tile separately with its own transparency pass so the
+        -- numbers keep no white box while the portrait keeps its 1 px white-hair protection.
+        local cropX=24+faceCol*32
+        local cropY=80+faceRow*24
+        local numX=cropX-8
+        local numY=cropY
+        local artW=112*scale
+        local artH=68*scale
+        local numSize=18*scale
+        local numDrawX=bx+6*scale
+        local numDrawY=by+9*scale
+        drawTransparentCardCrop(nativeCard,"leader_num_"..page.."_"..i,numX,numY,8,8,
+          numDrawX,numDrawY,numSize,numSize)
+        local portraitX=numDrawX+numSize+4*scale
+        local portraitW=math.max(24*scale,artW-(portraitX-bx)-4*scale)
+        drawTransparentCardCrop(nativeCard,"leader_"..page.."_"..i,cropX,cropY,24,24,
+          portraitX,by+5*scale,portraitW,artH)
+        local tx=bx+artW+14*scale
+        local tw=colW-artW-34*scale
+        local badgeSize=42*scale
+        local cardInnerW=(colW-14*scale)
+        local badgeX=bx+cardInnerW-badgeSize-10*scale
+        local badgeY=by+18*scale
+        local nameW=math.max(24*scale,badgeX-tx-8*scale)
+        fittedText(name,22*scale,tx,by+12*scale,nameW,"left",yes and c.text or c.muted)
+        if yes then
+          -- Show the actual earned badge emblem instead of the word EARNED.
+          -- Johto comes from the native animated badge OAM; Kanto reuses KIM's
+          -- existing high-resolution badge emblems.
+          drawOwnedBadge(s,nativeCard,page,name,i,
+            badgeX,badgeY,badgeSize)
+        else
+          text("----",small,badgeX,by+44*scale,badgeSize,"center",c.muted)
+        end
       end
     end
     local footerY=y+h-54*scale
@@ -1637,6 +2042,314 @@ return function(mod)
     if last<#rows then drawVerticalArrow(x+w-52*scale,listBottom-34*scale,math.max(12*scale,body:getHeight()*.65),"down",c.accent) end
   end
 
+
+  ---------------------------------------------------------------------------
+  -- Gen 2 PC / Storage + Evolution Modern UI
+
+  local pcImageCache={}
+  local function pcLoadImage(path)
+    if type(path)~="string" or path=="" then return nil end
+    if pcImageCache[path]~=nil then return pcImageCache[path] or nil end
+    local ok,img=false,nil
+    if mod.assets and type(mod.assets.image)=="function" then
+      ok,img=pcall(mod.assets.image,mod.assets,path)
+    end
+    if (not ok or not img) and type(G.newImage)=="function" then
+      ok,img=pcall(G.newImage,path)
+    end
+    if not ok or not img then pcImageCache[path]=false; return nil end
+    if img.setFilter then pcall(img.setFilter,img,"linear","linear") end
+    pcImageCache[path]=img
+    return img
+  end
+  local function pcHdIcon(game,mon)
+    if type(mon)~="table" then return nil end
+    local provider=mod._kantoInMotionHdMenuIconForModernUi
+    if type(provider)=="function" then
+      local ok,path=pcall(provider,game,mon)
+      local img=ok and pcLoadImage(path) or nil
+      if img then return img end
+    end
+
+    -- Hard fallback for a live Gen 2 storage record.  The shared provider is
+    -- normally authoritative, but evolved/legacy records can lack the helper
+    -- id it was handed.  The actual species row is still enough to find the
+    -- National Dex asset, so do not leave an empty slot in Modern PC UI.
+    local data=game and game.data
+    local def=data and data.pokemon and mon.species and data.pokemon[mon.species]
+    local dex=def and tonumber(def.nationalDex or def.dex or def.index) or nil
+    if not (dex and dex>=1 and dex<=386) then
+      local key=tostring(mon.species or mon.name or ""):upper():gsub("[^A-Z0-9]+","_"):gsub("_+","_")
+      local johto={CYNDAQUIL=155,QUILAVA=156,TYPHLOSION=157}
+      dex=johto[key]
+    end
+    if not (dex and dex>=1 and dex<=386) then return nil end
+    local stem=string.format("%03d",math.floor(dex))
+    if mon.shiny==true then
+      local img=pcLoadImage("assets/menu_icons/hd/shiny/"..stem..".png")
+      if img then return img end
+    end
+    return pcLoadImage("assets/menu_icons/hd/normal/"..stem..".png")
+  end
+  local function pcFullSprite(mon)
+    if type(mon)~="table" or not (mod.exports and type(mod.exports.getSprite)=="function") then return nil end
+    local ok,img=pcall(mod.exports.getSprite,mon.species,{generation="hd",mon=mon,side="front"})
+    return ok and img or nil
+  end
+  local function drawFitImage(img,x,y,w,h,maxScale)
+    if not img or type(img.getDimensions)~="function" then return false end
+    local iw,ih=img:getDimensions(); iw,ih=math.max(1,iw or 1),math.max(1,ih or 1)
+    local sc=math.min(w/iw,h/ih,tonumber(maxScale) or math.huge)
+    color({1,1,1,1}); G.draw(img,x+(w-iw*sc)/2,y+(h-ih*sc)/2,0,sc,sc)
+    return true
+  end
+  local function pcMonName(s,mon)
+    if type(mon)~="table" then return "POKéMON" end
+    local def=s and s.game and s.game.data and s.game.data.pokemon and s.game.data.pokemon[mon.species]
+    return tostring(mon.nickname or mon.name or (def and def.name) or mon.species or "POKéMON")
+  end
+  local function pcGender(s,mon)
+    if type(mon)~="table" then return nil end
+    local g=mon.gender
+    if g=="M" or g=="male" or g==0 then return "male" end
+    if g=="F" or g=="female" or g==1 then return "female" end
+    if okGen2Mon and Gen2Mon and type(Gen2Mon.gender)=="function" and type(mon.dvs)=="table" then
+      local def=s and s.game and s.game.data and s.game.data.pokemon and s.game.data.pokemon[mon.species]
+      if def then
+        local ok,v=pcall(Gen2Mon.gender,def,mon.dvs,{species=mon.species,level=mon.level})
+        if ok and (v=="male" or v=="female") then return v end
+      end
+    end
+    return nil
+  end
+  local function pcGenderSymbol(cx,cy,size,g,c)
+    size=math.max(7,tonumber(size) or 10)
+    color(c,nil,true); G.setLineWidth(math.max(1,size*.12))
+    local r=size*.22
+    if g=="male" then
+      local ox,oy=cx-size*.10,cy+size*.08
+      G.circle("line",ox,oy,r)
+      local ex,ey=cx+size*.34,cy-size*.34
+      G.line(ox+r*.72,oy-r*.72,ex,ey)
+      G.line(ex-size*.18,ey,ex,ey,ex,ey+size*.18)
+    elseif g=="female" then
+      local ox,oy=cx,cy-size*.12
+      G.circle("line",ox,oy,r)
+      local stemTop=oy+r; local stemBottom=cy+size*.34
+      G.line(ox,stemTop,ox,stemBottom)
+      G.line(ox-size*.18,cy+size*.16,ox+size*.18,cy+size*.16)
+    end
+  end
+  local function drawPcHeader(x,y,w,scale,c,title,subtitle)
+    local tf=font(34*scale); local sf=font(18*scale)
+    text(title or "PC",tf,x+20*scale,y+14*scale,w-40*scale,"left",c.text)
+    if subtitle and subtitle~="" then
+      text(subtitle,sf,x+20*scale,y+52*scale,w-40*scale,"left",c.muted)
+    end
+  end
+  local function drawPcRows(x,y,w,h,rows,selected,scale,c)
+    local f=font(24*scale); local small=font(18*scale)
+    local n=math.max(1,#rows); local rh=math.min(58*scale,h/n)
+    for i,row in ipairs(rows) do
+      local yy=y+(i-1)*rh
+      local sel=i==selected
+      if sel then color(c.selected,.96); G.rectangle("fill",x,yy,w,rh-4*scale,5,5) end
+      local label=type(row)=="table" and (row.label or row.text or row.name) or row
+      text(normalizeUiText(label),f,x+15*scale,yy+(rh-f:getHeight())*.45,w-30*scale,"left",sel and c.text or c.muted)
+      if type(row)=="table" and row.right then
+        text(tostring(row.right),small,x+w*.62,yy+(rh-small:getHeight())*.48,w*.34,"right",sel and c.text or c.muted)
+      end
+    end
+  end
+
+  local function drawCenterPc(s)
+    local c=theme(); local sx,sy,sw,sh=playfield(); local scale=uiScale(sw,sh)
+    local w=math.min(sw*.62,680*scale); local h=math.min(sh*.72,520*scale)
+    local x=sx+(sw-w)/2; local y=sy+(sh-h)/2; panel(x,y,w,h,c,.96)
+    drawPcHeader(x,y,w,scale,c,"PC","Access whose PC?")
+    local body=font(24*scale); local small=font(18*scale)
+    if s.message then
+      local lines
+      if okTyper and Typer and type(Typer.text)=="function" and type(s.message)=="table" then
+        local page=s.message.pages and s.message.pages[s.message.page or 1]
+        local ok,v=pcall(Typer.text,s,page); if ok then lines=v end
+      end
+      if type(lines)~="table" then
+        local page=type(s.message)=="table" and s.message.pages and s.message.pages[s.message.page or 1]
+        lines=type(page)=="table" and page or {tostring(page or "")}
+      end
+      text(table.concat(lines,"\n"),body,x+30*scale,y+110*scale,w-60*scale,"left",c.text)
+      text("A / B  continue",small,x+30*scale,y+h-48*scale,w-60*scale,"right",c.muted)
+      return
+    end
+    if s.confirm then
+      local prompt=type(s.confirm.prompt)=="table" and table.concat(s.confirm.prompt,"\n") or tostring(s.confirm.prompt or "")
+      text(prompt,body,x+30*scale,y+105*scale,w-60*scale,"left",c.text)
+      local labels={"YES","NO"}; local bw=(w-80*scale)/2
+      for i,label in ipairs(labels) do
+        local bx=x+30*scale+(i-1)*(bw+20*scale); local by=y+h-120*scale
+        color((s.confirm.choice or 1)==i and c.selected or c.raised)
+        G.rectangle("fill",bx,by,bw,58*scale,5,5)
+        text(label,body,bx,by+(58*scale-body:getHeight())*.45,bw,"center",c.text)
+      end
+      return
+    end
+    local rows={}
+    for _,e in ipairs(s.entries or {}) do rows[#rows+1]={label=e.label or e.id} end
+    drawPcRows(x+24*scale,y+92*scale,w-48*scale,h-150*scale,rows,s.index or 1,scale,c)
+    text("D-PAD  move    A  select    B  back",small,x+24*scale,y+h-40*scale,w-48*scale,"center",c.muted)
+  end
+
+  local function drawPcMenuModern(s)
+    local c=theme(); local sx,sy,sw,sh=playfield(); local scale=uiScale(sw,sh)
+    local w=math.min(sw*.64,720*scale); local h=math.min(sh*.78,570*scale)
+    local x=sx+(sw-w)/2; local y=sy+(sh-h)/2; panel(x,y,w,h,c,.96)
+    drawPcHeader(x,y,w,scale,c,"BILL'S PC","POKéMON Storage System")
+    local body=font(23*scale); local small=font(18*scale)
+    if s.message then
+      text(normalizeUiText(s.message),body,x+28*scale,y+115*scale,w-56*scale,"left",c.text)
+      text("A / B  continue",small,x+28*scale,y+h-44*scale,w-56*scale,"right",c.muted)
+      return
+    end
+    if s.picking then
+      local rows={}; local total=(okBoxes and Boxes and Boxes.NUM_BOXES) or 14
+      local first=math.max(1,math.min(total-5,(tonumber(s.pickIndex) or 1)-2))
+      for i=first,math.min(total,first+5) do
+        local name=(okBoxes and Boxes and type(Boxes.name)=="function") and Boxes.name(s.save,i) or ("BOX "..i)
+        local count=(okBoxes and Boxes and type(Boxes.count)=="function") and Boxes.count(s.save,i) or 0
+        local cap=(okBoxes and Boxes and Boxes.MONS_PER_BOX) or 20
+        rows[#rows+1]={label=name,right=("%d/%d"):format(count,cap),_index=i}
+      end
+      local sel=1
+      for i,r in ipairs(rows) do if r._index==(s.pickIndex or 1) then sel=i break end end
+      drawPcRows(x+28*scale,y+94*scale,w-56*scale,h-165*scale,rows,sel,scale,c)
+      if s.savePhase then
+        local mh=150*scale; local my=y+h-mh-18*scale
+        color(c.surface,.98); G.rectangle("fill",x+22*scale,my,w-44*scale,mh,7,7)
+        local prompt=type(s.savePrompt)=="function" and s:savePrompt() or {"Save before changing BOX?"}
+        if type(prompt)=="table" then prompt=table.concat(prompt,"\n") end
+        text(prompt,small,x+40*scale,my+20*scale,w-80*scale,"left",c.text)
+        if type(s.saveYesNoVisible)=="function" and s:saveYesNoVisible() then
+          text((s.saveChoice or 1)==1 and "> YES     NO" or "  YES   > NO",body,x+40*scale,my+85*scale,w-80*scale,"center",c.accent)
+        end
+      else
+        text("Which BOX?",small,x+28*scale,y+h-44*scale,w-56*scale,"left",c.muted)
+      end
+      return
+    end
+    local rows={}
+    for _,e in ipairs(s.entries or {}) do
+      local label=e.builtin and okStrings and Strings and Strings(e.label) or e.label or e.id
+      rows[#rows+1]={label=label}
+    end
+    drawPcRows(x+28*scale,y+94*scale,w-56*scale,h-160*scale,rows,s.index or 1,scale,c)
+    text("A  select    B  back",small,x+28*scale,y+h-42*scale,w-56*scale,"center",c.muted)
+  end
+
+  local function drawBoxPcModern(s)
+    local c=theme(); local sx,sy,sw,sh=playfield(); local scale=uiScale(sw,sh)
+    local w=math.min(sw*.78,980*scale); local h=math.min(sh*.82,620*scale)
+    local x=sx+(sw-w)/2; local y=sy+(sh-h)/2; panel(x,y,w,h,c,.96)
+    local title=type(s.title)=="function" and s:title() or "POKéMON STORAGE"
+    drawPcHeader(x,y,w,scale,c,normalizeUiText(title),normalizeUiText(type(s.prompt)=="function" and s:prompt() or "Choose a POKéMON."))
+    local body=font(22*scale); local small=font(17*scale); local tiny=font(15*scale)
+    local listX=x+22*scale; local listY=y+92*scale; local listW=w*.49; local listH=h-150*scale
+    local detailX=x+w*.52; local detailW=w*.45
+    color(c.divider,.65); G.rectangle("fill",x+w*.505,listY,1,listH)
+    local list=type(s.list)=="function" and s:list() or {}
+    local first=(tonumber(s.scroll) or 0)+1; local rows=6; local rh=listH/rows
+    for r=1,rows do
+      local i=first+r-1; local mon=list[i]; local yy=listY+(r-1)*rh
+      local isCancel=(not mon and type(s.total)=="function" and i==s:total())
+      if mon or isCancel then
+        local sel=i==(s.index or 1)
+        if sel then color(c.selected,.96); G.rectangle("fill",listX,yy,listW,rh-4*scale,5,5) end
+        if mon then
+          local icon=pcHdIcon(s.game,mon); local isz=math.min(42*scale,rh-8*scale)
+          if icon then drawFitImage(icon,listX+7*scale,yy+(rh-isz)/2,isz,isz,1.7) end
+          text(pcMonName(s,mon),body,listX+56*scale,yy+(rh-body:getHeight())*.42,listW-64*scale,"left",sel and c.text or c.muted)
+        else
+          text("CANCEL",body,listX+18*scale,yy+(rh-body:getHeight())*.42,listW-36*scale,"left",sel and c.text or c.muted)
+        end
+      end
+    end
+    local mon=type(s.selected)=="function" and s:selected() or nil
+    if mon then
+      local preview=pcFullSprite(mon)
+      local box=math.min(detailW*.48,150*scale)
+      if preview then drawFitImage(preview,detailX+(detailW-box)/2,listY+4*scale,box,box) end
+      local ty=listY+box+12*scale
+      text(pcMonName(s,mon),body,detailX,ty,detailW,"center",c.text); ty=ty+30*scale
+      local levelText=("Lv %d"):format(tonumber(mon.level) or 1)
+      text(levelText,small,detailX,ty,detailW*.48,"left",c.muted)
+      local gender=pcGender(s,mon)
+      if gender then
+        local symbolSize=small:getHeight()*.78
+        local gx=detailX+small:getWidth(levelText)+7*scale+symbolSize*.36
+        local gy=ty+small:getHeight()*.50
+        local gc=(gender=="male") and {0.28,0.66,1,1} or {1,0.40,0.66,1}
+        pcGenderSymbol(gx,gy,symbolSize,gender,gc)
+      end
+      local hp=tonumber(mon.hp) or 0; local maxHp=tonumber(mon.maxHp or (mon.stats and mon.stats.hp)) or hp
+      text(("HP %d/%d"):format(hp,maxHp),small,detailX+detailW*.48,ty,detailW*.52,"right",c.text); ty=ty+29*scale
+      for _,mv in ipairs(mon.moves or {}) do
+        local id=type(mv)=="table" and mv.id or mv
+        local def=s.game and s.game.data and s.game.data.moves and s.game.data.moves[id]
+        text(tostring((def and def.name) or id or ""),tiny,detailX+8*scale,ty,detailW-16*scale,"left",c.muted)
+        ty=ty+22*scale
+      end
+    end
+    if s.phase=="submenu" and type(s.submenuRows)=="function" then
+      local subs=s:submenuRows(); local mw=math.min(260*scale,w*.30); local mh=#subs*48*scale+28*scale
+      local mx=x+w-mw-24*scale; local my=y+105*scale
+      panel(mx,my,mw,mh,c,.99)
+      drawPcRows(mx+10*scale,my+12*scale,mw-20*scale,mh-24*scale,subs,s.submenuIndex or 1,scale,c)
+    end
+    if s.message then
+      local mw=w*.64; local mh=125*scale; local mx=x+(w-mw)/2; local my=y+h-mh-18*scale
+      panel(mx,my,mw,mh,c,.99); text(normalizeUiText(s.message),small,mx+22*scale,my+20*scale,mw-44*scale,"left",c.text)
+    else
+      text("A  select    B  back",small,x+24*scale,y+h-42*scale,w-48*scale,"center",c.muted)
+    end
+  end
+
+  local function gen2EvolutionSprite(s,species)
+    if not species or not (mod.exports and type(mod.exports.getSprite)=="function") then return nil end
+    local mon={}
+    if type(s.mon)=="table" then for k,v in pairs(s.mon) do mon[k]=v end end
+    mon.species=species
+    local ok,img=pcall(mod.exports.getSprite,species,{generation="hd",mon=mon,side="front"})
+    return ok and img or nil
+  end
+  local function drawGen2Evolution(s)
+    local c=theme(); local sx,sy,sw,sh=playfield(); local scale=uiScale(sw,sh)
+    local w=math.min(sw*.58,720*scale); local h=math.min(sh*.70,520*scale)
+    local x=sx+(sw-w)/2; local y=sy+(sh-h)/2; panel(x,y,w,h,c,.96)
+    drawPcHeader(x,y,w,scale,c,"EVOLUTION",s.force and "Evolution cannot be stopped" or "B  stop evolution")
+    local species=s.showNew and s.newSpecies or s.oldSpecies
+    if s.phase=="reveal" or s.phase=="picAnim" or s.phase=="congrats" or s.phase=="paragraph" or s.phase=="evolved" then
+      if not s.canceled then species=s.newSpecies end
+    end
+    local img=gen2EvolutionSprite(s,species)
+    local art=math.min(w*.48,h*.48)
+    if img and s.phase~="learn" then drawFitImage(img,x+(w-art)/2,y+92*scale,art,art) end
+    if type(s.balls)=="table" and #s.balls>0 then
+      color(c.accent,.9,true)
+      local cx=x+w/2; local cy=y+92*scale+art/2
+      for i,b in ipairs(s.balls) do
+        if i<=10 then G.circle("fill",cx+(tonumber(b.x) or 0)*scale*.7,cy+(tonumber(b.y) or 0)*scale*.7,math.max(2,3*scale)) end
+      end
+    end
+    local body=font(23*scale); local small=font(17*scale)
+    local msg=type(s.lines)=="table" and table.concat(s.lines,"\n") or ""
+    if msg~="" then
+      local my=y+h-145*scale; color(c.raised,.92); G.rectangle("fill",x+24*scale,my,w-48*scale,92*scale,6,6)
+      text(msg,body,x+42*scale,my+18*scale,w-84*scale,"left",c.text)
+    else
+      text("Evolution in progress…",small,x+30*scale,y+h-72*scale,w-60*scale,"center",c.muted)
+    end
+  end
+
   local function syncDexRadarOpacity(game)
     local states=game and game.stack and game.stack.states
     if type(states)~="table" then return end
@@ -1654,6 +2367,7 @@ return function(mod)
 
   local renderers={
     titlemenu=drawTitleMainMenu,start=drawStart,pack=drawPack,gear=drawGear,card=drawCard,
+    centerpc=drawCenterPc,pc=drawPcMenuModern,boxpc=drawBoxPcModern,evolution=drawGen2Evolution,
     save=drawSave,options=drawOptions,modoptions=drawModOptions,
     kimsettings=drawKimSettings,dexradar=drawDexRadar,
   }
@@ -1705,20 +2419,30 @@ return function(mod)
       if type(rows)~="table" then return rows end
       local out={}
       for _,row in ipairs(rows) do
-        local id=tostring(row and (row.value or row.id) or ""):lower()
-        local label=tostring(row and row.label or ""):upper()
-        if id~="mods" and label~="MODS" and not startRowIsMap(row) then
-          out[#out+1]=row
-        end
+        -- KIM removes only the redundant MAP row. Keep Gen1Recomp's MODS row
+        -- intact so the full Mod Manager remains reachable from the Start Menu.
+        if not startRowIsMap(row) then out[#out+1]=row end
       end
       return out
     end,100000)
     local function presenterForKind(kind)
-      if kind=="card" then return "pokemon" end
+      if kind=="card" or kind=="boxpc" or kind=="evolution" then return "pokemon" end
       if kind=="kimsettings" or kind=="modoptions" then return "manager" end
       return "menu"
     end
     mod.hooks:wrap("screen.render_visible",function(nextFn,state)
+      -- Evolution is presented as a floating Modern window over the live field.
+      -- Post-battle evolution is pushed above BattleState, so merely hiding the
+      -- EvolutionAnim pixels would otherwise leave the battle screen underneath.
+      -- While EvolutionAnim itself is the top state, hide the lower stack states
+      -- from this render pass as well; their update/state ownership is untouched.
+      local game=type(state)=="table" and state.game or nil
+      local stack=game and game.stack
+      local top=stack and type(stack.top)=="function" and stack:top() or nil
+      if top and top~=state and target(top)=="evolution"
+          and presenterEnabled("pokemon") and hideOriginal() then
+        return false
+      end
       local kind=target(state)
       if kind=="dexradar" and type(state)=="table" then
         if rawget(state,"_kimDexRadarOriginalOpaque")==nil then

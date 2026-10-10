@@ -363,6 +363,28 @@ return function(mod)
     return true
   end
 
+
+  -- Per-species Gen 2 battle presentation tuning.  The HD atlases all use
+  -- fixed animation cells, and some flying/wide animations leave much more
+  -- transparent space inside the cell than grounded sprites do.  Keep those
+  -- corrections here instead of changing the shared HD metadata, so Gen 1/3
+  -- sizing and menu previews are unaffected.
+  local GEN2_BATTLE_TUNING = {
+    -- Pidgeotto's front animation is very wide with a relatively small body,
+    -- so fitting the whole animation cell into Gen 2's 7x7 box makes the bird
+    -- look undersized and too low.
+    [17] = { frontScale = 1.38, frontY = -7 },
+  }
+
+  local function battleTuning(species, back)
+    local t = GEN2_BATTLE_TUNING[tonumber(species)]
+    if type(t) ~= "table" then return 1, 0, 0 end
+    local prefix = back and "back" or "front"
+    return tonumber(t[prefix .. "Scale"]) or 1,
+      tonumber(t[prefix .. "X"]) or 0,
+      tonumber(t[prefix .. "Y"]) or 0
+  end
+
   -- -----------------------------------------------------------------------
   -- LIVE SCREEN PATCHING
   -- -----------------------------------------------------------------------
@@ -441,6 +463,8 @@ return function(mod)
 
       local resizeTiles = anim and anim.size and PIC_RESIZE_TILES[anim.size]
       local scaleMul = resizeTiles and (resizeTiles / boxTiles) or 1
+      local speciesScale, speciesX, speciesY = battleTuning(mon.species, back)
+      scaleMul = scaleMul * speciesScale
 
       local slide = (anim and not self.liftedPass)
         and (tonumber(anim.slide) or 0) or 0
@@ -457,8 +481,8 @@ return function(mod)
       return drawRecordInBox(rec, boxX, boxY, box, box, {
         centerY = false,
         scaleMul = scaleMul,
-        offsetX = slide,
-        offsetY = sunk,
+        offsetX = slide + speciesX,
+        offsetY = sunk + speciesY,
       })
     end
 

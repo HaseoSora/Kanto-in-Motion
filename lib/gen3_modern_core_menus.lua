@@ -25,6 +25,7 @@ return function(mod)
   local okRomText, RomText = pcall(require, "src.core.game3.rom_text")
   local okStatGrowth, StatGrowth = pcall(require, "src.ui.game3.stat_growth")
   local okNaming, Naming = pcall(require, "src.ui.game3.naming")
+  local okEvolution, EvolutionScene = pcall(require, "src.ui.game3.evolution_scene")
   if not (okParty and type(PartyMenu) == "table" and okBag and type(BagMenu) == "table") then
     return false
   end
@@ -325,6 +326,44 @@ return function(mod)
     end
   end
 
+  local function evolutionModernSupported()
+    if not enabled("pokemon") or not (okEvolution and type(EvolutionScene)=="table") then return false end
+    local open=EvolutionScene.open==true
+    if type(EvolutionScene.isOpen)=="function" then
+      local ok,v=pcall(EvolutionScene.isOpen)
+      if ok then open=v==true end
+    end
+    return open and topLayerId()=="evolution_scene"
+  end
+
+  -- EvolutionScene is source-owned for timing, cries, cancellation, species
+  -- mutation and move learning.  KIM changes only how that live state is
+  -- presented and makes its Stack layer float over the field.
+  if okEvolution and type(EvolutionScene)=="table"
+      and not EvolutionScene.__kimGen3ModernEvolutionV142 then
+    local upstreamEvolutionStart=EvolutionScene.start
+    local upstreamEvolutionDraw=EvolutionScene.draw
+    if type(upstreamEvolutionStart)=="function" then
+      EvolutionScene.start=function(...)
+        local out={upstreamEvolutionStart(...)}
+        if out[1]~=false and enabled("pokemon") then
+          setFloatingLayer("evolution_scene",true)
+        end
+        return (table.unpack or unpack)(out)
+      end
+    end
+    if type(upstreamEvolutionDraw)=="function" then
+      EvolutionScene.draw=function(...)
+        if evolutionModernSupported()
+            and (not Style or not Style.hideOriginal or Style.hideOriginal()) then
+          return
+        end
+        return upstreamEvolutionDraw(...)
+      end
+    end
+    EvolutionScene.__kimGen3ModernEvolutionV142=true
+  end
+
   local function hpColor(hp,maxHp)
     local f=(tonumber(hp) or 0)/math.max(1,tonumber(maxHp) or 1)
     if f <= 0.20 then return {0.93,0.20,0.18,1} end
@@ -611,7 +650,7 @@ return function(mod)
         -- presentation, keep the parent Party pixels/OAM hidden as well so the
         -- live game remains the clean backdrop instead of exposing the native
         -- GBA Party screen underneath the floating Summary window.
-        if enabled("pokemon") and (not Style or not Style.hideOriginal or Style.hideOriginal()) and (partyModernSupported() or summaryOpen()) then
+        if enabled("pokemon") and (not Style or not Style.hideOriginal or Style.hideOriginal()) and (partyModernSupported() or summaryOpen() or evolutionModernSupported()) then
           suppressPartyOam(true)
           return
         end
@@ -659,7 +698,7 @@ return function(mod)
     local upstreamBagShow=BagMenu.show
     if type(upstreamBagDraw)=="function" then
       BagMenu.draw=function(...)
-        if enabled("menu") and (not Style or not Style.hideOriginal or Style.hideOriginal()) and bagModernSupported() then return end
+        if enabled("menu") and (not Style or not Style.hideOriginal or Style.hideOriginal()) and (bagModernSupported() or evolutionModernSupported()) then return end
         return upstreamBagDraw(...)
       end
     end
@@ -681,7 +720,7 @@ return function(mod)
     local upstreamRseBagDraw=RseBag.draw
     if type(upstreamRseBagDraw)=="function" then
       RseBag.draw=function(...)
-        if enabled("menu") and (not Style or not Style.hideOriginal or Style.hideOriginal()) and bagModernSupported() then return end
+        if enabled("menu") and (not Style or not Style.hideOriginal or Style.hideOriginal()) and (bagModernSupported() or evolutionModernSupported()) then return end
         return upstreamRseBagDraw(...)
       end
     end
@@ -1510,6 +1549,86 @@ return function(mod)
     return true
   end
 
+  local function evolutionSpeciesMon(species)
+    local src=EvolutionScene and EvolutionScene._mon
+    local mon={}
+    if type(src)=="table" then
+      for k,v in pairs(src) do mon[k]=v end
+    end
+    mon.species=species
+    mon.speciesId=species
+    return mon
+  end
+
+  local function drawEvolutionMon(game,species,x,y,w,h,scaleMul)
+    if not species then return false end
+    scaleMul=math.max(.05,math.min(1,tonumber(scaleMul) or 1))
+    local dw,dh=w*scaleMul,h*scaleMul
+    return drawMonPreview(game,evolutionSpeciesMon(species),
+      x+(w-dw)*.5,y+(h-dh)*.5,dw,dh)
+  end
+
+  local function drawEvolution(game,viewport,c)
+    if not evolutionModernSupported() then return false end
+    setFloatingLayer("evolution_scene",true)
+    local sx,sy,sw,sh=playfield(viewport)
+    local scale=uiScaleFactor()
+    local roomy=sw>=720 and sh>=460
+    local w=math.min(sw*.96,(roomy and 760 or 660)*scale)
+    local h=math.min(sh*.72,(roomy and 500 or 430)*scale)
+    local x=sx+(sw-w)*.5
+    -- Keep room for the shared Modern dialogue presenter along the bottom.
+    local y=sy+math.max(12*scale,(sh-h)*.16)
+    if Style and Style.panel then Style.panel(x,y,w,h,c,.96)
+    else card(x,y,w,h,c.surface,c.frame,math.max(6,7*scale)) end
+
+    local titleF=fontFor(math.max(15,29*scale))
+    local smallF=fontFor(math.max(10,15*scale))
+    text("EVOLUTION",titleF,x+24*scale,y+18*scale,w*.55,"left",c.text)
+    local canStop=EvolutionScene._canStop~=false
+    text(canStop and "B  stop evolution" or "Evolution cannot be stopped",
+      smallF,x+w*.48,y+27*scale,w*.46,"right",c.muted)
+    color(c.divider,.72,false)
+    G.rectangle("fill",x+22*scale,y+62*scale,w-44*scale,1)
+
+    local artTop=y+74*scale
+    local artH=math.max(80*scale,h-100*scale)
+    local artW=math.min(w*.54,artH)
+    local artX=x+(w-artW)*.5
+    local st=tostring(EvolutionScene._state or "")
+    local pre=EvolutionScene._preSpecies
+    local post=EvolutionScene._postSpecies
+
+    if st=="cycle" then
+      drawEvolutionMon(game,pre,artX,artTop,artW,artH,EvolutionScene._preScale or 1)
+      drawEvolutionMon(game,post,artX,artTop,artW,artH,EvolutionScene._postScale or .06)
+    elseif st=="flash_reveal" or st=="evo_cry" or st=="congrats" or st=="learn_moves" then
+      drawEvolutionMon(game,post,artX,artTop,artW,artH,1)
+    else
+      drawEvolutionMon(game,pre,artX,artTop,artW,artH,1)
+    end
+
+    -- Keep a lightweight version of the source sparkle motion around the HD
+    -- art.  Positions are remapped from the native 240x160 evolution canvas.
+    if type(EvolutionScene._particles)=="table" then
+      for i,p in ipairs(EvolutionScene._particles) do
+        if i>48 then break end
+        local px=artX+artW*.5+((tonumber(p.x) or 120)-120)*(artW/150)
+        local py=artTop+artH*.5+((tonumber(p.y) or 64)-64)*(artH/105)
+        local life=math.max(0,math.min(1,((tonumber(p.maxT) or 1)-(tonumber(p.t) or 0))/10))
+        color(c.accent,life,true)
+        G.circle("fill",px,py,math.max(1.5*scale,(tonumber(p.size) or 2)*scale*.7))
+      end
+    end
+
+    local flash=tonumber(EvolutionScene._flashAlpha) or 0
+    if flash>0 then
+      color({1,1,1,1},math.min(.72,flash*.72),false)
+      G.rectangle("fill",x+2,y+2,w-4,h-4,math.max(5,6*scale))
+    end
+    return true
+  end
+
   mod.hooks:wrap("render.hud",function(nextFn,game,viewport)
     nextFn(game,viewport)
     if not (enabled("menu") or enabled("pokemon")) then
@@ -1517,6 +1636,7 @@ return function(mod)
       setFloatingLayer("start",false)
       setFloatingLayer("party",false)
       setFloatingLayer("bag",false)
+      setFloatingLayer("evolution_scene",false)
       return
     end
     if PartyMenu.open and not partyModernSupported() then
@@ -1535,11 +1655,14 @@ return function(mod)
       setFloatingLayer("start",false)
     end
     if BagMenu.open and not bagModernSupported() then setFloatingLayer("bag",false) end
+    if evolutionModernSupported() then setFloatingLayer("evolution_scene",true)
+    elseif not (okEvolution and EvolutionScene and EvolutionScene.open) then setFloatingLayer("evolution_scene",false) end
     local c=theme()
     local owns=false
     G.push("all")
     G.origin(); G.setShader(); G.setBlendMode("alpha")
-    if namingModernSupported() then owns=drawNaming(game,viewport,c)
+    if evolutionModernSupported() then owns=drawEvolution(game,viewport,c)
+    elseif namingModernSupported() then owns=drawNaming(game,viewport,c)
     elseif statGrowthOpen() then owns=drawStatGrowth(viewport,c)
     elseif startModernSupported() then owns=drawStart(viewport,c)
     elseif partyModernSupported() then owns=drawParty(game,viewport,c)

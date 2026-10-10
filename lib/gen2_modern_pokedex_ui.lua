@@ -1,4 +1,4 @@
--- Kanto in Motion v1.7.0 - Gen 2 Modern Pokedex UI v35 -- Unown-only transparency fix
+-- Kanto in Motion v1.7.1 - Gen 2 Modern Pokedex UI v36 -- native actions + area map
 --
 -- The Pokédex data model and presentation conversion below are the exact
 -- Gen2 Clean UI 0.4.1 adapter/presenter supplied by the user, vendored into
@@ -13,7 +13,7 @@ return function(mod)
   local okChrome,Chrome=pcall(require,"src.ui.gen2.Chrome")
   local okGbcPalette,GbcPalette=pcall(require,"src.render.GbcPalette")
   if not (okDex and type(PokedexMenu)=="table") then return false end
-  if PokedexMenu.__kimModernPokedexV4 then return true end
+  if PokedexMenu.__kimModernPokedexV5 then return true end
 
   local FONT_PATH="assets/fonts/plainpixel/PlainPixel-Regular.ttf"
   local fonts={}
@@ -404,15 +404,15 @@ return function(mod)
     local source=prepared.sourceModel or {}
     local cur=source.current or {}
 
-    -- Use the exact tab metadata produced by the vendored Gen2 Clean UI
-    -- presenter. This fixes the highlight selecting the wrong tab.
-    local tabSpec=m.document and m.document.header
-      and m.document.header.right or nil
-    local tabs=tabSpec and tabSpec.values
-      or {"INFO","AREA","EVO","MOVES","CRY","PRINT"}
-    local active=tonumber(tabSpec and tabSpec.active) or 1
+    -- Gen 2's native entry screen has exactly four actions: PAGE, AREA,
+    -- CRY and PRNT.  The vendored Clean UI document advertised EVO/MOVES
+    -- placeholders that have no backing Gen 2 state or data, so do not expose
+    -- dead tabs in KIM.  Keep the Modern UI aligned with the actual game.
+    local tabs={"PAGE","AREA","CRY","PRINT"}
+    local active=tonumber(source.entry and source.entry.selectedAction) or 1
+    active=math.max(1,math.min(#tabs,active))
 
-    local tabsWidth=w*.58
+    local tabsWidth=w*.48
     local titleWidth=w-tabsWidth-12*scale
     local tabH=math.max(40*scale,small:getHeight()+12*scale)
     local headerH=math.max(big:getHeight(),tabH)+10*scale
@@ -475,9 +475,54 @@ return function(mod)
     local desc=table.concat(lines," "):gsub("(%a)%- (%a)","%1%2")
     text(desc,body,x+28*scale,descY,w-56*scale,"left",c.text)
 
-    fittedText("LEFT/RIGHT PAGE   A SELECT   B BACK",18*scale,
+    fittedText("LEFT/RIGHT ACTION   A SELECT   B BACK",18*scale,
       x,y+h-small:getHeight(),w,"left",c.muted)
   end
+
+  local areaCanvas
+  local function drawAreaMap(state,prepared,x,y,w,h,c,big,body,small,scale)
+    if type(state)~="table" or type(state.drawArea)~="function" then
+      return false
+    end
+    if not areaCanvas then
+      local ok,canvas=pcall(G.newCanvas,160,144)
+      if not ok or not canvas then return false end
+      areaCanvas=canvas
+      if areaCanvas.setFilter then pcall(areaCanvas.setFilter,areaCanvas,"nearest","nearest") end
+    end
+    local previous=type(G.getCanvas)=="function" and G.getCanvas() or nil
+    local pushed=pcall(G.push,"all")
+    if not pushed then pcall(G.push) end
+    local ok=pcall(function()
+      G.setCanvas(areaCanvas)
+      if G.origin then G.origin() end
+      G.clear(0,0,0,0)
+      G.setColor(1,1,1,1)
+      state:drawArea()
+    end)
+    if previous then pcall(G.setCanvas,previous) else pcall(G.setCanvas) end
+    pcall(G.pop)
+    if not ok then return false end
+
+    local source=prepared and prepared.sourceModel or {}
+    local area=source.area or {}
+    local title=(area.name or (source.current and source.current.name) or "POKéMON").." / HABITAT"
+    text(title,big,x,y,w,"left",c.text)
+    local footerH=small:getHeight()+14*scale
+    local mapTop=y+big:getHeight()+14*scale
+    local mapH=math.max(1,h-(mapTop-y)-footerH-8*scale)
+    panel(x,mapTop,w,mapH,c,.60)
+    local inset=14*scale
+    local availW,availH=w-inset*2,mapH-inset*2
+    local fit=math.min(availW/160,availH/144)
+    local dw,dh=160*fit,144*fit
+    color({1,1,1,1})
+    G.draw(areaCanvas,x+(w-dw)/2,mapTop+(mapH-dh)/2,0,fit,fit)
+    fittedText("LEFT/RIGHT REGION   A/B RETURN",18*scale,
+      x,y+h-small:getHeight(),w,"left",c.muted)
+    return true
+  end
+
   local function drawMenu(prepared,x,y,w,h,c,big,body,small,scale)
     local m=prepared.model; text(m.title or "POKéDEX",big,x,y,w,"left",c.text)
     local rows=m.rows or {}; local selected=tonumber(m.selected) or 1
@@ -512,6 +557,8 @@ return function(mod)
     local view=tostring(prepared.model.sourceView or prepared.sourceModel and prepared.sourceModel.view or "list")
     if view=="list" then drawList(prepared,vx,vy,vw,vh,c,big,body,small,scale)
     elseif view=="entry" then drawEntry(prepared,vx,vy,vw,vh,c,big,body,small,scale)
+    elseif view=="area" and drawAreaMap(state,prepared,vx,vy,vw,vh,c,big,body,small,scale) then
+      -- Native Gen 2 nest map rendered inside the Modern UI frame.
     else drawMenu(prepared,vx,vy,vw,vh,c,big,body,small,scale) end
   end
 
@@ -542,7 +589,7 @@ return function(mod)
       return unpack(result)
     end,100000)
   end
-  PokedexMenu.__kimModernPokedexV4=true
-  mod.exports.gen2ModernPokedex={apiVersion=4,source="Gen2 Clean UI 0.4.1 vendored adapter/presenter"}
+  PokedexMenu.__kimModernPokedexV5=true
+  mod.exports.gen2ModernPokedex={apiVersion=5,source="Gen2 Clean UI 0.4.1 vendored adapter/presenter + native Gen2 actions/map"}
   return true
 end

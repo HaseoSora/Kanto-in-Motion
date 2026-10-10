@@ -1,4 +1,4 @@
--- Kanto in Motion - Gen 3 Modern dialogue + shop presentation
+-- Kanto in Motion - Gen 3 Modern dialogue + shop presentation v142
 --
 -- Presentation only:
 --   * src.ui.game3.message keeps typewriter/page/sfx/input state.
@@ -19,6 +19,7 @@ return function(mod)
   local okRom, RomText = pcall(require, "src.core.game3.rom_text")
   local okFont, FrlgFont = pcall(require, "src.ui.game3.frlg_font")
   local okRseDecor, RseDecor = pcall(require, "src.core.game3.rse.decoration_inventory")
+  local okEvolution, EvolutionScene = pcall(require, "src.ui.game3.evolution_scene")
 
   if not (okMessage and okChoice and okShop and okStack) then return false end
 
@@ -210,12 +211,23 @@ return function(mod)
     return not (top and top.hideBelow)
   end
 
+  local function evolutionOpen()
+    if not (okEvolution and type(EvolutionScene)=="table") then return false end
+    local open=EvolutionScene.open==true
+    if type(EvolutionScene.isOpen)=="function" then
+      local ok,v=pcall(EvolutionScene.isOpen)
+      if ok then open=v==true end
+    end
+    return open
+  end
+
   local function supportedMessage()
     if not (Message and Message.isOpen and Message.isOpen()) then return false end
     local kind=Message.frameKind and Message.frameKind() or Message._frame or "dialogue"
-    -- Battle has its own Modern Battle UI; braille/sign retain their authored
-    -- source presentation.  This first pass owns ordinary field NPC dialogue.
-    return kind=="dialogue"
+    -- Ordinary battle text belongs to the Modern Battle UI.  Evolution is the
+    -- exception: its dedicated source scene uses the battle text printer even
+    -- though KIM presents the scene as a floating overworld window.
+    return kind=="dialogue" or (kind=="battle" and evolutionOpen())
   end
 
   local function revealedText(value,limit)
@@ -302,7 +314,8 @@ return function(mod)
   end
 
   local function drawChoice(viewport,c,msgRect)
-    if not (Choice.active and Choice.options and Choice.style~="battle") then return false end
+    if not (Choice.active and Choice.options
+        and (Choice.style~="battle" or evolutionOpen())) then return false end
     if not overworldDialogueAllowed() then return false end
     local sx,sy,sw,sh=playfield(viewport)
     local us=uiScale(sw,sh)
@@ -584,7 +597,8 @@ return function(mod)
   if type(Choice.draw)=="function" and not Choice.__kimGen3ModernDialogV93 then
     local upstream=Choice.draw
     Choice.draw=function(...)
-      if enabled() and hideOriginal() and Choice.active and Choice.style~="battle" then return end
+      if enabled() and hideOriginal() and Choice.active
+          and (Choice.style~="battle" or evolutionOpen()) then return end
       return upstream(...)
     end
     Choice.__kimGen3ModernDialogV93=true

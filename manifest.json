@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -41,6 +41,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen/Ruby/Sapphire/Emerald; v1.7.0 expands the Gen 3 Modern UI across menus, Pokemon screens, naming, Trainer Card and battle presentation, and adds safer 1025Dex compatibility when expanded species remain in a save after the provider is disabled or removed.",
+  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen/Ruby/Sapphire/Emerald; v1.7.1 expands Gen 2 Modern UI presentation with PC/storage and evolution screens, upgrades the Gen 2 Party, Pokedex and Trainer Card, improves Gen 2 HD icon reliability, and adds cross-generation Modern evolution presentation for Gen 2 and Gen 3.",
   "github": "HaseoSora/Kanto-in-Motion"
 }

@@ -1,4 +1,4 @@
--- Kanto in Motion v1.7.0 - Gen 2 Modern Party UI v30
+-- Kanto in Motion v1.7.1 - Gen 2 Modern Party UI v33
 --
 -- The native PartyMenu remains the complete input/state owner. KIM makes the
 -- state transparent, hides only its native render, then draws a final-window
@@ -11,10 +11,11 @@ return function(mod)
   local okGbc, GbcPalette = pcall(require, "src.render.GbcPalette")
   local okPalettes, Gen2Palettes = pcall(require, "src.world.gen2.Palettes")
   local okStats, Stats = pcall(require, "src.pokemon.Stats")
+  local okGen2Mon, Gen2Mon = pcall(require, "src.battle.gen2.Mon")
   if not (okParty and type(PartyMenu) == "table" and okChrome and Chrome) then
     return false
   end
-  if PartyMenu.__kimModernOverlayV2 then return true end
+  if PartyMenu.__kimModernOverlayV3 then return true end
 
   local FONT_PATH = "assets/fonts/plainpixel/PlainPixel-Regular.ttf"
   local fontCache, imageCache = {}, {}
@@ -156,6 +157,22 @@ return function(mod)
     end
   end
 
+  local function resolvedGender(self,mon)
+    if type(mon)~="table" then return nil end
+    local g=mon.gender
+    if g=="M" or g=="male" or g==0 then return "male" end
+    if g=="F" or g=="female" or g==1 then return "female" end
+    if okGen2Mon and Gen2Mon and type(Gen2Mon.gender)=="function" and type(mon.dvs)=="table" then
+      local def=self and self.game and self.game.data and self.game.data.pokemon
+        and self.game.data.pokemon[mon.species]
+      if def then
+        local ok,v=pcall(Gen2Mon.gender,def,mon.dvs,{species=mon.species,level=mon.level})
+        if ok and (v=="male" or v=="female") then return v end
+      end
+    end
+    return nil
+  end
+
   local function hpColor(hp,maxHp)
     local f=(tonumber(hp) or 0)/math.max(1,tonumber(maxHp) or 1)
     if f<=0.2 then return {0.93,0.20,0.18,1} end
@@ -285,8 +302,12 @@ return function(mod)
     local compact = sw >= 900 and sh >= 600
     local uiScale = Style and Style.uiScale and Style.uiScale(sw,sh) or 1
     local layout = Style and Style.layoutStyle and Style.layoutStyle() or "floating"
-    local pw = compact and math.min(1080*uiScale, sw * 0.68) or sw * 0.94
-    local ph = compact and math.min(690*uiScale, sh * 0.82)
+    -- Keep the six-slot party screen closer to the compact Gen 1 footprint.
+    -- The previous 1080x690 authored box left a large unused lower-right area
+    -- after the four moves were drawn.  The detail pane still has room for the
+    -- portrait, all five Gen 2 battle stats and four moves at this size.
+    local pw = compact and math.min(960*uiScale, sw * 0.62) or sw * 0.94
+    local ph = compact and math.min(470*uiScale, sh * 0.68)
       or math.min(sh * 0.84, pw * 0.78)
     local scale=compact and uiScale or math.max(0.78,math.min(1.2,pw/760))
     if layout=="full" then
@@ -353,8 +374,7 @@ return function(mod)
       local levelText=("Lv %d"):format(tonumber(selected.level) or 0)
       local levelY=py+30*scale
       drawText(levelText,smallFont,tx,levelY,140*scale,"left",colors.muted)
-      local gender=tostring(selected.gender or ""):lower()
-      if gender=="m" then gender="male" elseif gender=="f" then gender="female" end
+      local gender=resolvedGender(self,selected)
       if gender=="male" or gender=="female" then
         local symbolSize=smallFont:getHeight()*.78
         local gx=tx+smallFont:getWidth(levelText)+6*scale+symbolSize*.36
@@ -369,16 +389,64 @@ return function(mod)
       hpBar(tx,py+78*scale,detailW-(tx-detailX)-pad,7*scale,hp,maxHp,colors)
       drawText(("%d/%d"):format(hp,maxHp),smallFont,tx,py+89*scale,detailW-(tx-detailX)-pad,"left",colors.text)
 
+      -- Gen 2 has five non-HP battle stats.  Party records normally carry
+      -- attack/defense/speed/specialAttack/specialDefense, but imported or
+      -- older records can arrive with aliases or an incomplete cached block.
+      -- Resolve aliases first, then recompute from the native Gen 2 formula
+      -- without mutating the saved Pokémon so the detail pane never shows a
+      -- misleading dash for Speed / Sp. Atk / Sp. Def.
       local stats=selected.stats or {}
-      local sy2=py+portraitBox+22*scale
-      local left={"ATK "..tostring(stats.attack or "—"),"DEF "..tostring(stats.defense or "—")}
-      local right={"SPD "..tostring(stats.speed or "—"),"SPC "..tostring(stats.special or stats.spAttack or "—")}
-      drawText(left[1],smallFont,px,sy2,detailW*0.42,"left",colors.muted)
-      drawText(right[1],smallFont,px+detailW*0.50,sy2,detailW*0.42,"left",colors.muted)
-      drawText(left[2],smallFont,px,sy2+16*scale,detailW*0.42,"left",colors.muted)
-      drawText(right[2],smallFont,px+detailW*0.50,sy2+16*scale,detailW*0.42,"left",colors.muted)
+      local computed=nil
+      local function stat(...)
+        local keys={...}
+        for _,key in ipairs(keys) do
+          local v=stats[key]
+          if tonumber(v)~=nil then return tonumber(v) end
+        end
+        for _,key in ipairs(keys) do
+          local v=selected[key]
+          if tonumber(v)~=nil then return tonumber(v) end
+        end
+        if computed==nil and def and def.baseStats and selected.dvs then
+          local okMon,Gen2Mon=pcall(require,"src.battle.gen2.Mon")
+          if okMon and Gen2Mon and type(Gen2Mon.stats)=="function" then
+            local okCalc,value=pcall(Gen2Mon.stats,def.baseStats,selected.dvs,
+              tonumber(selected.level) or 1,selected.statExp)
+            computed=okCalc and type(value)=="table" and value or false
+          else
+            computed=false
+          end
+        end
+        if type(computed)=="table" then
+          for _,key in ipairs(keys) do
+            local v=computed[key]
+            if tonumber(v)~=nil then return tonumber(v) end
+          end
+        end
+        return "—"
+      end
 
-      local my=sy2+58*scale
+      local atk=stat("attack","atk")
+      local defStat=stat("defense","def")
+      local speed=stat("speed","spe")
+      local spAtk=stat("specialAttack","spAttack","spAtk","spa","special")
+      local spDef=stat("specialDefense","spDefense","spDef","spd","special")
+      local sy2=py+portraitBox+16*scale
+      -- Give the five Gen 2 battle stats room to breathe.  The compact Party
+      -- window still has plenty of horizontal and vertical space in the
+      -- detail pane, so keep two clearly separated columns and increase the
+      -- row pitch instead of packing the labels together.
+      local statLeft=detailW*0.38
+      local statRightX=px+detailW*0.58
+      local statRightW=detailW*0.34
+      local statStep=22*scale
+      drawText("ATK "..tostring(atk),smallFont,px,sy2,statLeft,"left",colors.muted)
+      drawText("SP.ATK "..tostring(spAtk),smallFont,statRightX,sy2,statRightW,"left",colors.muted)
+      drawText("DEF "..tostring(defStat),smallFont,px,sy2+statStep,statLeft,"left",colors.muted)
+      drawText("SP.DEF "..tostring(spDef),smallFont,statRightX,sy2+statStep,statRightW,"left",colors.muted)
+      drawText("SPEED "..tostring(speed),smallFont,px,sy2+statStep*2,statLeft,"left",colors.muted)
+
+      local my=sy2+statStep*3+6*scale
       for i,m in ipairs(selected.moves or {}) do
         if i>4 then break end
         local pp=tonumber(m.pp) or 0
@@ -466,6 +534,6 @@ return function(mod)
     end,100000)
   end
 
-  PartyMenu.__kimModernOverlayV2=true
+  PartyMenu.__kimModernOverlayV3=true
   return true
 end

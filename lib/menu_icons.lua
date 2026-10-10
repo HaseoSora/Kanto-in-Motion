@@ -43,6 +43,36 @@ return function(mod)
     return string.format("%03d", math.floor(tonumber(dex) or 0))
   end
 
+  local GEN2_JOHTO_DEX = {}
+  do
+    local names = {
+      "CHIKORITA","BAYLEEF","MEGANIUM","CYNDAQUIL","QUILAVA","TYPHLOSION",
+      "TOTODILE","CROCONAW","FERALIGATR","SENTRET","FURRET","HOOTHOOT",
+      "NOCTOWL","LEDYBA","LEDIAN","SPINARAK","ARIADOS","CROBAT","CHINCHOU",
+      "LANTURN","PICHU","CLEFFA","IGGLYBUFF","TOGEPI","TOGETIC","NATU","XATU",
+      "MAREEP","FLAAFFY","AMPHAROS","BELLOSSOM","MARILL","AZUMARILL","SUDOWOODO",
+      "POLITOED","HOPPIP","SKIPLOOM","JUMPLUFF","AIPOM","SUNKERN","SUNFLORA",
+      "YANMA","WOOPER","QUAGSIRE","ESPEON","UMBREON","MURKROW","SLOWKING",
+      "MISDREAVUS","UNOWN","WOBBUFFET","GIRAFARIG","PINECO","FORRETRESS",
+      "DUNSPARCE","GLIGAR","STEELIX","SNUBBULL","GRANBULL","QWILFISH","SCIZOR",
+      "SHUCKLE","HERACROSS","SNEASEL","TEDDIURSA","URSARING","SLUGMA","MAGCARGO",
+      "SWINUB","PILOSWINE","CORSOLA","REMORAID","OCTILLERY","DELIBIRD","MANTINE",
+      "SKARMORY","HOUNDOUR","HOUNDOOM","KINGDRA","PHANPY","DONPHAN","PORYGON2",
+      "STANTLER","SMEARGLE","TYROGUE","HITMONTOP","SMOOCHUM","ELEKID","MAGBY",
+      "MILTANK","BLISSEY","RAIKOU","ENTEI","SUICUNE","LARVITAR","PUPITAR",
+      "TYRANITAR","LUGIA","HO_OH","CELEBI",
+    }
+    for i,name in ipairs(names) do GEN2_JOHTO_DEX[name] = 151 + i end
+  end
+
+  local function gen2SpeciesKey(v)
+    if type(v) ~= "string" then return nil end
+    local key = v:upper():gsub("[^A-Z0-9]+", "_"):gsub("_+", "_")
+    key = key:gsub("^_", ""):gsub("_$", "")
+    if key == "HO_OH" or key == "HOOH" then return "HO_OH" end
+    return key
+  end
+
   local function monIsEgg(mon)
     if type(mon) ~= "table" then return false end
     return mon.isEgg == true or mon.egg == true or mon.species == "EGG"
@@ -91,14 +121,62 @@ return function(mod)
       end
     end
 
-    -- Gen 1/2 use species ids that already line up with the supported National
-    -- Dex range, so preserve the established path there.
-    if not dex and generation ~= 3 and type(mon) == "table" then
-      dex = tonumber(mon.speciesId)
+    -- Gen 2 should derive the icon from the CURRENT species record first.
+    -- Evolved/imported party records can carry stale or zero-valued helper ids
+    -- such as speciesId/dex from the pre-evolution record. Lua treats 0 as
+    -- truthy, so the old `dex = dex or def.dex` path could get stuck on 0 and
+    -- never reach QUILAVA's real #156 entry. Only accept a candidate after it
+    -- passes validDex(), and prefer the extracted species row (dex/index),
+    -- which is authoritative for G/S/C.
+    if generation == 2 then
+      local function take(v)
+        v = tonumber(v)
+        return validDex(v) and v or nil
+      end
+      dex = take(type(def) == "table" and (def.nationalDex or def.dex or def.index))
+
+      -- Evolution rebuilds the party record from the new species, but older
+      -- saves and compatibility paths can still carry stale helper dex fields.
+      -- Resolve the canonical Gen 2 species name before consulting those
+      -- helpers. This makes QUILAVA unambiguously National #156 even if a
+      -- leftover field still describes CYNDAQUIL (or is zero/missing).
+      if not dex then
+        local key = gen2SpeciesKey(species)
+        if not key and type(mon) == "table" then key = gen2SpeciesKey(mon.name) end
+        dex = take(key and GEN2_JOHTO_DEX[key])
+      end
+
+      if not dex and type(species) == "string" then
+        local order = data and data.constants and data.constants.speciesOrder
+        if type(order) == "table" then
+          for i, name in pairs(order) do
+            if name == species then
+              local candidate = take(i)
+              if candidate then dex = candidate break end
+            end
+          end
+        end
+      end
+
+      if not dex and type(mon) == "table" then
+        dex = take(mon.nationalDex) or take(mon.dex) or take(mon.speciesId)
+      end
+      if not dex then dex = take(species) end
+      return dex
     end
-    dex = dex or (type(def) == "table" and tonumber(def.nationalDex or def.dex))
+
+    -- Gen 1 uses species ids that already line up with National Dex numbers.
+    if not dex and generation ~= 3 and type(mon) == "table" then
+      local candidate = tonumber(mon.speciesId)
+      if validDex(candidate) then dex = candidate end
+    end
+    if not dex and type(def) == "table" then
+      local candidate = tonumber(def.nationalDex or def.dex or def.index)
+      if validDex(candidate) then dex = candidate end
+    end
     if not dex and generation ~= 3 and type(species) == "number" then
-      dex = tonumber(species)
+      local candidate = tonumber(species)
+      if validDex(candidate) then dex = candidate end
     end
     if validDex(dex) then return dex end
     return nil
