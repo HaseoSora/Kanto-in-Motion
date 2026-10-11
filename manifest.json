@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.7.3",
+  "version": "1.7.4",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -42,6 +42,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul. Supports Red/Blue/Yellow, Gold/Silver/Crystal, and FireRed/LeafGreen/Ruby/Sapphire/Emerald; v1.7.3 adds Gen 1 Crystal Animated Sprites compatibility and a KIM HD/VANILLA menu-sprite source selector, plus Gen 2 Trainer Card player-portrait and mobile layout fixes.",
+  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul for Gen1Recomp. v1.7.4 refines Gen 2 Gold/Silver/Crystal battle UI layouts, scaling, HD sprite presentation, Crystal trainer handling, and Gen 2/Gen 3 Modern UI pixel-frame borders.",
   "github": "HaseoSora/Kanto-in-Motion"
 }

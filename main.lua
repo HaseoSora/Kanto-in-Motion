@@ -609,9 +609,12 @@ return function(mod)
         description = "Animate supported KIM Pokémon artwork while preserving the selected menu sprite source." },
       { key = "battleUiWip", label = "MODERN BATTLE UI", type = "toggle",
         default = true, description = "Replace only the native Gen 2 lower battle dialogue/command/move surface; the HP/status HUD and battle logic remain native." },
+      { key = "battleWideUi", label = "BATTLE UI MODE", type = "choice",
+        default = "wide", choices = { { "OG", "og" }, { "WIDE", "wide" } },
+        description = "Choose the Gen 2 Modern lower battle-menu layout directly. OG uses the classic 160x144 surface; WIDE uses KIM's 304x144 widescreen surface. Portrait layout is unchanged." },
       { key = "battleUiSize", label = "BATTLE UI SIZE", type = "choice",
-        default = "100", choices = percentChoices(60, 100, 5),
-        description = "Adjust the Gen 2 Modern lower battle-panel footprint while keeping it bottom-anchored. 100% is KIM's calibrated neutral size." },
+        default = "100", choices = percentChoices(60, 150, 5),
+        description = "Adjust the Gen 2 Modern lower battle-panel footprint from 60% to 150% while keeping it bottom-anchored. 100% is KIM's calibrated neutral size." },
       { key = "battleUiOpacity", label = "BATTLE UI OPACITY", type = "choice",
         default = "100", choices = percentChoices(25, 100, 5),
         description = "Adjust only the Gen 2 Modern lower battle-panel background opacity." },
@@ -622,7 +625,7 @@ return function(mod)
         default = "grid", choices = { { "GRID", "grid" }, { "VERTICAL", "vertical" } },
         description = "GRID uses a 2x2 move selector. VERTICAL lists the four moves top-to-bottom." },
       { key = "battleMoveInfo", label = "MOVE INFO", type = "toggle",
-        default = false, description = "Show the selected Gen 2 move's type, PP, power and accuracy beside the move list." },
+        default = true, description = "Show the selected Gen 2 move's type, PP, power and accuracy. Portrait stacks the info below the move grid so move names keep their full width." },
     }
   end
 
@@ -5564,10 +5567,13 @@ return function(mod)
   -- methods directly so the selected Kanto in Motion atlas remains live.
   local function patchGen2Screens()
     if not IS_GEN2 then return end
-    if gen2CleanUiHandle() then
-      pcall(installStockGen2CleanUiBridge)
-      return
-    end
+    -- gen2_clean_ui may own Summary/Pokedex presentation, but it does not own
+    -- the native BattleState Pokemon draw. Keep KIM's direct-HD battle bridge
+    -- installed even when that UI mod is present, then yield the non-battle
+    -- screen patches below. This prevents a Clean UI load-order change from
+    -- silently restoring vanilla battle sprites while BATTLE SPRITES is ON.
+    local cleanUiPresent = gen2CleanUiHandle() ~= nil
+    if cleanUiPresent then pcall(installStockGen2CleanUiBridge) end
 
     local function modernUiEnabled()
       return integratedModernUiEnabled()
@@ -5621,6 +5627,45 @@ return function(mod)
     if okBattleState and type(BattleState) == "table"
         and type(BattleState.drawPic) == "function"
         and not BattleState._kantoInMotionGen2HdDrawPic then
+      -- Crystal's battle intro must keep the ROM CHRIS/KRIS BACK pic.  The
+      -- generic player.sprite seam is intentionally shared with other mods and
+      -- can legally hand BattleState a front-facing trainer image (for example
+      -- CAL), which is correct for menus but wrong for the Gen 2 send-out
+      -- sequence.  Restore the cache's dedicated Crystal backpic after the
+      -- native constructor has finished resolving hooks.  This is battle-only;
+      -- Trainer Card art remains independent.
+      if type(BattleState.new) == "function"
+          and not BattleState._kantoInMotionCrystalNativeBackpic then
+        local nativeBattleStateNew = BattleState.new
+        BattleState._kantoInMotionCrystalNativeBackpic = nativeBattleStateNew
+        BattleState.new = function(game, opts)
+          local self = nativeBattleStateNew(game, opts)
+          local save = self and self.save
+          local version = tostring(save and save.version or ""):lower()
+          if self and version == "crystal" and not self.tutorial then
+            local data = game and game.data or {}
+            local hud = data.gen2MenuGfx and data.gen2MenuGfx.battleHud
+            local female = save and save.player and save.player.gender == "female"
+            local path = hud and ((female and hud.playerBackFemale) or hud.playerBack)
+            if path then
+              local okAssets, Assets = pcall(require, "src.render.Assets")
+              if okAssets and Assets and type(Assets.image) == "function" then
+                local okImage, image = pcall(Assets.image, path)
+                if okImage and image then
+                  if type(image.setFilter) == "function" then
+                    pcall(image.setFilter, image, "nearest", "nearest")
+                  end
+                  self.playerBackImage = image
+                  self.playerBackPath = path
+                  self.playerBackTrueColor = false
+                end
+              end
+            end
+          end
+          return self
+        end
+      end
+
       local nativeDrawPic = BattleState.drawPic
       BattleState._kantoInMotionGen2HdDrawPic = nativeDrawPic
 
@@ -5985,6 +6030,10 @@ return function(mod)
         mod.log:info("Gen2 direct-HD BattleState.drawPic + HD motion bridge enabled")
       end
     end
+
+    -- A complete external Gen 2 Clean UI owns the non-battle Pokemon screens.
+    -- The battle bridge above is intentionally independent and remains active.
+    if cleanUiPresent then return end
 
     -- Stats screen: Gen2 SummaryMenu.new takes an opts table; hooking drawPic
     -- avoids constructor/signature assumptions and updates every animation frame.

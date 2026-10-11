@@ -1,4 +1,4 @@
--- Kanto in Motion v1.5.3 - Gen 2 Modern Battle UI adapter v28
+-- Kanto in Motion v1.7.3 - Gen 2 Modern Battle UI adapter v32
 --
 -- Presentation-only: Gold/Silver/Crystal keep their native BattleState,
 -- input, battle logic, HP/status HUD, trainers, child menus and move
@@ -185,6 +185,18 @@ return function(mod)
     return 160, 144
   end
 
+  local function mobileHost()
+    if type(mod._kantoInMotionNativeMobileHost) == "function" then
+      local ok, value = pcall(mod._kantoInMotionNativeMobileHost)
+      if ok then return value == true end
+    end
+    if love and love.system and type(love.system.getOS) == "function" then
+      local ok, name = pcall(love.system.getOS)
+      return ok and (name == "Android" or name == "iOS")
+    end
+    return false
+  end
+
   local UNSUPPORTED = {
     ["choose-forget"] = true,
     ["ask-nickname"] = true,
@@ -283,6 +295,22 @@ return function(mod)
       return f
     end
     return G.getFont()
+  end
+
+  local function fitBattleFont(basePx,value,maxW,maxH)
+    local px=math.max(7,tonumber(basePx) or 7)
+    value=tostring(value or "")
+    local f=fontFor(px)
+    while px>7 and ((maxW and f:getWidth(value)>maxW)
+        or (maxH and f:getHeight()>maxH)) do
+      local wr=maxW and (maxW/math.max(1,f:getWidth(value))) or 1
+      local hr=maxH and (maxH/math.max(1,f:getHeight())) or 1
+      local ratio=math.max(.62,math.min(.96,wr,hr))
+      local nextPx=math.max(7,math.min(px-1,px*ratio))
+      if nextPx>=px then nextPx=px-1 end
+      px=nextPx; f=fontFor(px)
+    end
+    return f
   end
 
   local function localized(text)
@@ -455,34 +483,40 @@ return function(mod)
     end
   end
 
-  local function drawCommands(state, x, y, w, h, bodyFont, captionFont, scale)
+  local function drawCommands(state, x, y, w, h, bodyFont, captionFont, scale, portrait)
     local pad = math.max(3, 3.5 * scale)
     local labels = commandLabels(state)
-    local messageW = math.max(w * 0.50, 45 * scale)
     local gap = math.max(2, 2 * scale)
-    local menuX = x + messageW + gap
-    local menuW = w - messageW - gap
-    drawMessage(state, x, y, messageW, h, bodyFont, captionFont, scale)
-
-    color(COLORS.divider,nil,true)
-    G.rectangle("fill", menuX - gap * 0.5, y + pad, math.max(1, scale * 0.45),
-      h - pad * 2)
+    local menuX,menuY,menuW,menuH=x,y,w,h
+    if hasMessage(state) then
+      if portrait then
+        local msgH=math.min(h*.28,bodyFont:getHeight()*2+pad*2)
+        drawMessage(state,x,y,w,msgH,bodyFont,captionFont,scale)
+        color(COLORS.divider,nil,true)
+        G.rectangle("fill",x+pad,y+msgH+gap*.25,w-pad*2,math.max(1,scale*.45))
+        menuY=y+msgH+gap; menuH=h-msgH-gap
+      else
+        local messageW = math.max(w * 0.32, 42 * scale)
+        menuX=x+messageW+gap; menuW=w-messageW-gap
+        drawMessage(state,x,y,messageW,h,bodyFont,captionFont,scale)
+        color(COLORS.divider,nil,true)
+        G.rectangle("fill",menuX-gap*.5,y+pad,math.max(1,scale*.45),h-pad*2)
+      end
+    end
 
     local cellGap = math.max(2, 2 * scale)
     local cellW = (menuW - cellGap) * 0.5
-    local cellH = (h - cellGap) * 0.5
+    local cellH = (menuH - cellGap) * 0.5
     local selected = tonumber(state.menuIndex) or 1
     for i = 1, 4 do
       local col = (i - 1) % 2
       local row = math.floor((i - 1) / 2)
       local cx = menuX + col * (cellW + cellGap)
-      local cy = y + row * (cellH + cellGap)
+      local cy = menuY + row * (cellH + cellGap)
       if i == selected then selectedCell(cx, cy, cellW, cellH, scale) end
-      local label = truncate(labels[i], bodyFont, cellW - pad * 2)
-      drawText(label, bodyFont, cx + pad,
-        cy + (cellH - bodyFont:getHeight()) * 0.5,
-        cellW - pad * 2, "center",
-        i == selected and COLORS.text or COLORS.muted)
+      local f=fitBattleFont((bodyFont:getHeight()/math.max(1,scale))*scale,labels[i],cellW-pad*2,cellH*.72)
+      drawText(labels[i],f,cx+pad,cy+(cellH-f:getHeight())*.5,
+        cellW-pad*2,"center",i==selected and COLORS.text or COLORS.muted)
     end
   end
 
@@ -493,86 +527,118 @@ return function(mod)
     drawDownArrow(x + w - pad - arrowSize*.45,
       y + h - pad - arrowSize,
       arrowSize, COLORS.accent)
-    local yy = y + pad + captionFont:getHeight() + scale
-    drawText(truncate(moveName(state, move), bodyFont, w - pad * 2),
-      bodyFont, x + pad, yy, w - pad * 2, "left", COLORS.text)
-    yy = yy + bodyFont:getHeight() + scale
+
+    -- Do not hard-truncate the selected move at larger BATTLE TEXT SIZE values.
+    -- Fit the complete name to the info column first, then fit each detail row
+    -- independently. This keeps 125-200% useful instead of turning names into
+    -- strings such as "HYDRO P..." or dropping the lower detail rows.
+    local name = moveName(state, move)
+    local nameFont = fitBattleFont(bodyFont:getHeight(), name,
+      w - pad * 2, math.max(8, h * .30))
+    local yy = y + pad
+    drawText(name, nameFont, x + pad, yy, w - pad * 2, "left", COLORS.text)
+    yy = yy + nameFont:getHeight() + math.max(1, scale * .55)
+
     local rows = {
       "TYPE  " .. typeName(state, move),
       ("PP    %d/%d"):format(tonumber(move and move.pp) or 0, maxPp(state, move)),
       "POW   " .. powerText(def),
       "ACC   " .. accuracyText(def),
     }
+    local available = math.max(1, y + h - pad - arrowSize * .35 - yy)
+    local rowH = available / #rows
     for _, row in ipairs(rows) do
-      if yy + captionFont:getHeight() > y + h - pad then break end
-      drawText(row, captionFont, x + pad, yy, w - pad * 2,
-        "left", COLORS.muted)
-      yy = yy + captionFont:getHeight() + scale * 0.25
+      local rf = fitBattleFont(captionFont:getHeight(), row,
+        w - pad * 2, math.max(6, rowH * .88))
+      drawText(row, rf, x + pad, yy, w - pad * 2, "left", COLORS.muted)
+      yy = yy + rowH
     end
   end
 
-  local function drawMoves(state, x, y, w, h, bodyFont, captionFont, scale)
+  local function drawMoveInfoCompact(state, move, x, y, w, h, bodyFont, captionFont, scale)
+    local pad=math.max(3,3*scale)
+    local def=moveDefinition(state,move)
+    local name=moveName(state,move)
+    local nf=fitBattleFont(bodyFont:getHeight(),name,w-pad*2,h*.38)
+    drawText(name,nf,x+pad,y+pad,w-pad*2,"left",COLORS.text)
+    local rows={
+      "TYPE "..typeName(state,move),
+      ("PP %d/%d"):format(tonumber(move and move.pp) or 0,maxPp(state,move)),
+      "POW "..powerText(def),
+      "ACC "..accuracyText(def),
+    }
+    local infoY=y+pad+nf:getHeight()+math.max(1,scale)
+    local cellW=(w-pad*2)/4
+    for i,row in ipairs(rows) do
+      local f=fitBattleFont(captionFont:getHeight(),row,cellW-math.max(2,2*scale),h-(infoY-y)-pad)
+      drawText(row,f,x+pad+(i-1)*cellW,infoY,cellW-math.max(2,2*scale),"center",COLORS.muted)
+    end
+  end
+
+  local function drawMoves(state, x, y, w, h, bodyFont, captionFont, scale, portrait)
     local moves = type(state.playerMoves) == "function" and state:playerMoves() or {}
     local selected = tonumber(state.moveIndex) or 1
     local layout = tostring(opt("battleMoveLayout", "grid")):lower()
-    local showInfo = opt("battleMoveInfo", false) == true
+    local showInfo = opt("battleMoveInfo", true) ~= false
     local gap = math.max(2, 2 * scale)
-    local listX, listW = x, w
+    local listX,listY,listW,listH=x,y,w,h
     if showInfo then
-      local infoW = math.max(w * 0.33, 47 * scale)
-      local dividerX = x + (w - infoW - gap) + gap * 0.25
-      listX = x
-      listW = w - infoW - gap
-      local infoX = x + w - infoW
-      color(COLORS.divider,nil,true)
-      G.rectangle("fill", dividerX, y + 3 * scale,
-        math.max(1, scale * 0.45), h - 6 * scale)
-      drawMoveInfo(state, moves[selected], infoX, y, infoW, h,
-        bodyFont, captionFont, scale)
+      if portrait then
+        local infoH=math.max(captionFont:getHeight()*2.4,h*.30)
+        infoH=math.min(infoH,h*.40)
+        listH=h-infoH-gap
+        local infoY=y+listH+gap
+        color(COLORS.divider,nil,true)
+        G.rectangle("fill",x+3*scale,infoY-gap*.5,w-6*scale,math.max(1,scale*.45))
+        drawMoveInfoCompact(state,moves[selected],x,infoY,w,infoH,bodyFont,captionFont,scale)
+      else
+        local infoW = math.max(w * 0.32, 58 * scale)
+        local dividerX = x + (w - infoW - gap) + gap * 0.25
+        listW = w - infoW - gap
+        local infoX = x + w - infoW
+        color(COLORS.divider,nil,true)
+        G.rectangle("fill",dividerX,y+3*scale,math.max(1,scale*.45),h-6*scale)
+        drawMoveInfo(state,moves[selected],infoX,y,infoW,h,bodyFont,captionFont,scale)
+      end
     end
 
     local pad = math.max(2, 2.5 * scale)
     if layout == "vertical" then
       local rowGap = math.max(1, scale)
-      local rowH = (h - rowGap * 3) / 4
+      local rowH = (listH - rowGap * 3) / 4
       for i = 1, 4 do
         local move = moves[i]
-        local cy = y + (i - 1) * (rowH + rowGap)
+        local cy = listY + (i - 1) * (rowH + rowGap)
         if i == selected then selectedCell(listX, cy, listW, rowH, scale) end
         local name = move and moveName(state, move) or "—"
-        drawText(truncate(name, bodyFont, listW - pad * 2),
-          bodyFont, listX + pad, cy + (rowH - bodyFont:getHeight()) * 0.5,
-          listW - pad * 2, "left",
-          i == selected and COLORS.text or COLORS.muted)
+        local pp = move and (("%d/%d"):format(tonumber(move.pp) or 0,maxPp(state,move))) or ""
+        local ppW=math.max(captionFont:getWidth(pp)+pad*2,listW*.24)
+        local nf=fitBattleFont(bodyFont:getHeight(),name,listW-ppW-pad*2,rowH*.70)
+        drawText(name,nf,listX+pad,cy+(rowH-nf:getHeight())*.5,listW-ppW-pad*2,"left",i==selected and COLORS.text or COLORS.muted)
         if move then
-          local pp = ("%d/%d"):format(tonumber(move.pp) or 0, maxPp(state, move))
-          drawText(pp, captionFont, listX + pad, cy + (rowH - captionFont:getHeight()) * 0.5,
-            listW - pad * 2, "right",
-            i == selected and COLORS.text or COLORS.muted)
+          local pf=fitBattleFont(captionFont:getHeight(),pp,ppW-pad,rowH*.60)
+          drawText(pp,pf,listX+listW-ppW,cy+(rowH-pf:getHeight())*.5,ppW-pad,"right",i==selected and COLORS.text or COLORS.muted)
         end
       end
     else
       local cellGap = math.max(2, 2 * scale)
       local cellW = (listW - cellGap) * 0.5
-      local cellH = (h - cellGap) * 0.5
+      local cellH = (listH - cellGap) * 0.5
       for i = 1, 4 do
         local move = moves[i]
         local col = (i - 1) % 2
         local row = math.floor((i - 1) / 2)
         local cx = listX + col * (cellW + cellGap)
-        local cy = y + row * (cellH + cellGap)
+        local cy = listY + row * (cellH + cellGap)
         if i == selected then selectedCell(cx, cy, cellW, cellH, scale) end
         local name = move and moveName(state, move) or "—"
-        drawText(truncate(name, bodyFont, cellW - pad * 2),
-          bodyFont, cx + pad, cy + math.max(scale, cellH * 0.14),
-          cellW - pad * 2, "left",
-          i == selected and COLORS.text or COLORS.muted)
+        local pp = move and (("PP %d/%d"):format(tonumber(move.pp) or 0,maxPp(state,move))) or ""
+        local nameMaxH=cellH-(move and captionFont:getHeight()+pad*2 or pad*2)
+        local nf=fitBattleFont(bodyFont:getHeight(),name,cellW-pad*2,math.max(8,nameMaxH))
+        drawText(name,nf,cx+pad,cy+math.max(scale,cellH*.12),cellW-pad*2,"left",i==selected and COLORS.text or COLORS.muted)
         if move then
-          local pp = ("PP %d/%d"):format(tonumber(move.pp) or 0, maxPp(state, move))
-          drawText(pp, captionFont, cx + pad,
-            cy + cellH - captionFont:getHeight() - math.max(scale, cellH * 0.10),
-            cellW - pad * 2, "right",
-            i == selected and COLORS.text or COLORS.muted)
+          local pf=fitBattleFont(captionFont:getHeight(),pp,cellW-pad*2,cellH*.34)
+          drawText(pp,pf,cx+pad,cy+cellH-pf:getHeight()-math.max(scale,cellH*.09),cellW-pad*2,"right",i==selected and COLORS.text or COLORS.muted)
         end
       end
     end
@@ -587,9 +653,50 @@ return function(mod)
 
     local gx, gy, gw, gh, fit = battleRect(state, viewport)
     fit = tonumber(fit) or math.max(0.5, math.min(gw / 160, gh / 144))
+    local winW,winH=G.getDimensions()
+    local isMobile=mobileHost()
+    local portrait=isMobile and (tonumber(winH) or 0)>(tonumber(winW) or 0)*1.18
+
+    -- Match Gen 1's OG/WIDE wording instead of exposing this as a boolean.
+    -- This remains a KIM presentation preference only: it selects the surface
+    -- used by the Modern lower battle UI without changing the native Gen 2
+    -- battle world, HP HUD, or Gen1Recomp's own saved battle-layout setting.
+    -- Older v166 saves used booleans, so true migrates to WIDE and false to OG.
+    -- Portrait keeps its dedicated mobile layout regardless of this option.
+    local savedBattleUiMode = opt("battleWideUi", "wide")
+    local battleUiMode
+    if savedBattleUiMode == true then battleUiMode = "wide"
+    elseif savedBattleUiMode == false then battleUiMode = "og"
+    else battleUiMode = tostring(savedBattleUiMode or "wide"):lower() end
+    if battleUiMode ~= "og" then battleUiMode = "wide" end
+
+    if not portrait and okChrome and Chrome
+        and type(Chrome.fitScaleFor) == "function"
+        and type(Chrome.fitOriginFor) == "function" then
+      local tilesW = battleUiMode == "wide" and 38 or 20
+      local targetW = battleUiMode == "wide" and 304 or 160
+      local canUse=true
+      if battleUiMode == "wide" and type(Chrome.playfieldRect)=="function" then
+        local okPlay,_,_,pw,ph=pcall(Chrome.playfieldRect,winW,winH)
+        if okPlay and tonumber(pw) and tonumber(ph) then
+          canUse=(pw>=304 and ph>=144)
+        end
+      end
+      if canUse then
+        local okFit, modeFit = pcall(Chrome.fitScaleFor,winW,winH,tilesW,18)
+        modeFit=okFit and tonumber(modeFit) or nil
+        if modeFit and modeFit>0 then
+          local okOrigin,ox,oy=pcall(Chrome.fitOriginFor,
+            winW,winH,modeFit,tilesW,18)
+          if okOrigin and tonumber(ox) and tonumber(oy) then
+            gx,gy,gw,gh,fit=ox,oy,targetW*modeFit,144*modeFit,modeFit
+          end
+        end
+      end
+    end
     -- Keep BATTLE UI SIZE at a user-facing/default 100%, but calibrate the
     -- authored Gen 2 lower panel so new 100% matches the former 95% footprint.
-    local uiScale = math.max(0.60, math.min(1.00,
+    local uiScale = math.max(0.60, math.min(1.50,
       (tonumber(opt("battleUiSize", "100")) or 100) / 100)) * 0.95
     local opacity = math.max(0.25, math.min(1.00,
       (tonumber(opt("battleUiOpacity", "100")) or 100) / 100))
@@ -607,19 +714,97 @@ return function(mod)
     local bodyFont = fontFor(logicalBody * fit)
     local captionFont = fontFor(logicalCaption * fit)
 
-    local baseH = 48 * fit * uiScale
+    local baseH = (portrait and 60 or 48) * fit * uiScale
     local phase = tostring(state.phase or "")
-    local minRows = (phase == "moves"
-        and tostring(opt("battleMoveLayout", "grid")):lower() == "vertical")
-      and 4 or 2
-    local minH = (bodyFont:getHeight() + 3 * fit) * minRows + 8 * fit
-    if phase ~= "moves" and phase ~= "menu" then
-      minH = bodyFont:getHeight() * 2 + 10 * fit
+    local moveLayout = tostring(opt("battleMoveLayout", "grid")):lower()
+    local showMoveInfo = opt("battleMoveInfo", true) ~= false
+    local bodyH, captionH = bodyFont:getHeight(), captionFont:getHeight()
+    local minH
+    if phase == "moves" then
+      if moveLayout == "vertical" then
+        minH = (bodyH + 3 * fit) * 4 + 11 * fit
+      else
+        -- A grid cell contains both a move name and a PP caption. Account for
+        -- BOTH when calculating panel height; the old formula only counted the
+        -- name, which is why 150% text collapsed back down or lost move info.
+        local rowNeed = bodyH + captionH + 5 * fit
+        minH = rowNeed * 2 + 9 * fit
+      end
+      if showMoveInfo then
+        if portrait then
+          local infoNeed = bodyH + captionH * 1.25 + 8 * fit
+          minH = minH + infoNeed
+        else
+          -- Landscape info is beside the move grid, so require enough height
+          -- for the selected name plus TYPE/PP/POW/ACC rows.
+          local infoNeed = bodyH + captionH * 4.15 + 10 * fit
+          minH = math.max(minH, infoNeed)
+        end
+      end
+    elseif phase == "menu" then
+      minH = bodyH * 2 + 14 * fit
+    else
+      minH = bodyH * 2 + 10 * fit
     end
-    local panelH = math.min(gh * 0.62, math.max(baseH, minH))
+    if portrait and phase=="moves" and showMoveInfo then
+      minH=math.max(minH,86*fit*uiScale)
+    elseif portrait and phase=="menu" then
+      minH=math.max(minH,62*fit*uiScale)
+    end
+    -- 100% remains the same default footprint, but larger BATTLE UI SIZE and
+    -- BATTLE TEXT SIZE settings are now allowed to consume more of the free
+    -- lower playfield instead of being hard-capped at the old 100% geometry.
+    local panelCap=portrait and math.min(gh*0.78,winH*0.30) or gh*0.80
+    local panelH = math.min(panelCap, math.max(baseH, minH))
     local margin = math.max(2 * fit, math.min(gw, gh) * 0.008)
     local x = gx + margin
-    local y = gy + gh - panelH - margin
+    local y
+    if portrait then
+      -- On phones the native 160x144 battle field sits in the upper half of
+      -- the display and touch controls occupy the bottom. The old KIM panel
+      -- was anchored INSIDE that field, covering the player mon and HP HUD.
+      -- Prefer the free band directly below the battle field and keep a touch-
+      -- control reserve at the bottom. If a device is unusually short, clamp
+      -- downward rather than climbing back over the battlers.
+      local desiredY=gy+gh+margin*1.5
+      local bottomReserve=math.max(28*fit,winH*0.27)
+      local maxY=winH-panelH-bottomReserve
+      y=math.max(gy+gh-panelH*0.08,math.min(desiredY,maxY))
+    else
+      -- Mobile landscape has much more vertical room than the authored
+      -- 304x144 battle canvas. Anchoring the Modern UI to the bottom of that
+      -- canvas can cover tall player battlers and the native player HP HUD
+      -- (Feraligatr is an obvious example). Anchor the lower panel to the
+      -- bottom of the actual usable playfield instead. Chrome.playfieldRect
+      -- already respects TouchSkin cutouts, so phones keep clear of any
+      -- reserved controller area while handhelds with physical controls can
+      -- use the otherwise-empty lower band.
+      if okChrome and Chrome and type(Chrome.playfieldRect)=="function"
+          and (isMobile or battleUiMode=="wide") then
+        local okPlay,px,py,pw,ph=pcall(Chrome.playfieldRect,winW,winH)
+        if okPlay and tonumber(py) and tonumber(ph) and ph>0 then
+          local maxY=py+ph-panelH-margin*1.5
+          if isMobile then
+            -- Mobile landscape can use the bottom of its touch-safe playfield.
+            y=maxY
+          else
+            -- Desktop WIDE used to pin the panel to the bottom of the authored
+            -- 304x144 battle canvas. At 100% that puts its top edge directly
+            -- through the player battler / player HP HUD. Keep the same width,
+            -- but reserve the lower ~20% of the authored battle surface for the
+            -- Modern panel and allow it to extend into the otherwise-unused
+            -- lower desktop playfield. This mirrors the spacing mobile WIDE now
+            -- gets without forcing the panel all the way to the window edge.
+            local clearY=gy+gh*0.80
+            y=math.min(clearY,maxY)
+          end
+        else
+          y=gy+gh-panelH-margin
+        end
+      else
+        y = gy + gh - panelH - margin
+      end
+    end
     local w = gw - margin * 2
     local h = panelH
 
@@ -632,9 +817,9 @@ return function(mod)
     local iw, ih = w - inner * 2, h - inner * 2
 
     if phase == "menu" then
-      drawCommands(state, ix, iy, iw, ih, bodyFont, captionFont, fit)
+      drawCommands(state, ix, iy, iw, ih, bodyFont, captionFont, fit, portrait)
     elseif phase == "moves" then
-      drawMoves(state, ix, iy, iw, ih, bodyFont, captionFont, fit)
+      drawMoves(state, ix, iy, iw, ih, bodyFont, captionFont, fit, portrait)
     else
       drawMessage(state, ix, iy, iw, ih, bodyFont, captionFont, fit)
     end

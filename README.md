@@ -1,4 +1,4 @@
-# Kanto in Motion v1.7.3
+# Kanto in Motion v1.7.4
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -9,6 +9,18 @@ It supports:
 - **Pokémon FireRed / LeafGreen / Ruby / Sapphire / Emerald** — National Dex #001–386
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
+
+## What’s new in v1.7.4
+
+v1.7.4 focuses on **Gen 2 battle presentation polish** and **Modern UI frame alignment across Gen 2 and Gen 3**, while retaining the prior multi-generation overhaul and compatibility work.
+
+- **Gen 2 battle UI layout improvements:** refined the Gold/Silver/Crystal Modern battle panel arrangement for more consistent presentation across games and desktop/mobile displays.
+- **OG / WIDE battle layout choice:** added the familiar OG/WIDE presentation option to the Gen 2 Modern battle UI, with corresponding desktop and mobile layout support.
+- **Battle UI scaling and placement:** refined battle panel, text scaling, and placement to reduce overlaps with battlers and HP/status HUDs.
+- **HD Pokémon sprite presentation:** corrected Gen 2 battle paths that could fall back to vanilla sprites when HD sprites were enabled.
+- **Crystal trainer presentation:** corrected the Crystal player battle-intro sprite selection so the appropriate native back sprite is used instead of unrelated front/menu artwork.
+- **Pixel Frame 1–3 borders:** adjusted Gen 2 and Gen 3 Modern UI panel frame drawing so pixel-style borders extend around panel edges rather than sitting inside the content area.
+- **Existing functionality retained:** Gen 1–3 Modern UI screens, external HD assets, Gen 2 Trainer Card and storage features, Gen 3 menus, and established compatibility bridges remain included.
 
 ## What’s new in v1.7.3
 

@@ -190,6 +190,13 @@ return function(mod)
     if not iw or not ih or iw<3 or ih<3 then return false end
     local slice=math.max(1,math.min(24,math.floor(math.min(iw,ih)/2)))
     pixelScale=clamp(math.floor(tonumber(pixelScale) or 1),1,4)
+    -- The authored 128px pixel frames have their decorative edges inset
+    -- from the image boundary. Extend the image outside the panel so the
+    -- visible border wraps its content instead of occupying its interior.
+    -- Match the seven-source-pixel offset of the shared Modern UI renderer.
+    local borderOutset=math.min(7,slice)*pixelScale
+    x,y=x-borderOutset,y-borderOutset
+    w,h=w+borderOutset*2,h+borderOutset*2
     local corner=math.min(slice*pixelScale,w/2,h/2)
     local function part(sx,sy,sw,sh,dx,dy,dw,dh)
       if sw<=0 or sh<=0 or dw<=0 or dh<=0 then return end

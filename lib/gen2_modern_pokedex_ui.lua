@@ -1,4 +1,4 @@
--- Kanto in Motion v1.7.3 - Gen 2 Modern Pokedex UI v36 -- native actions + area map
+-- Kanto in Motion v1.7.3 - Gen 2 Modern Pokedex UI v37 -- responsive mobile list
 --
 -- The Pokédex data model and presentation conversion below are the exact
 -- Gen2 Clean UI 0.4.1 adapter/presenter supplied by the user, vendored into
@@ -300,103 +300,171 @@ return function(mod)
     end
     return body()
   end
-  local function drawList(prepared,x,y,w,h,c,big,body,small,scale)
+  local function splitDexLabel(row)
+    local label=tostring(row and row.label or "-----")
+    local num,name=label:match("^%s*(%d+)%s+(.+)$")
+    if num then return num,name end
+    return "",label
+  end
+
+  local function drawList(prepared,x,y,w,h,c,big,body,small,scale,portrait)
     local m=prepared.model
     local source=prepared.sourceModel or {}
-    local listW=w*.57
-    local scrollW=24*scale
-    local gap=16*scale
-    local rightX=x+listW+scrollW+gap
-    local rightW=w-listW-scrollW-gap
-
-    -- Header gets its own measured band so the large title can never collide
-    -- with the NO./NAME/STATUS heading underneath it.
-    local headerH=math.max(big:getHeight(),small:getHeight())+14*scale
-    text(m.title or "POKéDEX",big,x,y,listW*.50,"left",c.text)
-    text((source.sortMode and ("MODE: "..source.sortMode.."  ·  001–251")
-      or "001–251"),small,x+listW*.50,y+6*scale,listW*.46,"right",c.muted)
-
-    local columnY=y+headerH
-    text("NO.   NAME                    STATUS",small,x,columnY,listW-8*scale,
-      "left",c.accent)
-
-    local listTop=columnY+small:getHeight()+10*scale
-    local footerH=small:getHeight()+14*scale
-    local listBottom=y+h-footerH
-    local availableH=math.max(1,listBottom-listTop)
     local rows=m.rows or {}
     local selected=tonumber(m.selected) or 1
     local scroll=tonumber(m.scroll) or 0
+    local footerH=small:getHeight()+14*scale
+    local desc=type(m.description)=="table"
+      and table.concat(m.description,"  ")
+      or (m.description or "UP/DOWN SPECIES   A DATA   SELECT OPTIONS   B BACK")
+
+    if portrait then
+      -- Phone portrait uses a stacked layout: the species list gets the full
+      -- width and the selected-mon preview lives underneath it. This avoids
+      -- forcing NO./NAME/STATUS, the preview, and totals into two tiny columns.
+      local headerH=big:getHeight()+small:getHeight()+18*scale
+      fittedText(m.title or "POKéDEX",big:getHeight(),x,y,w*.58,"left",c.text)
+      local mode=(source.sortMode and ("MODE: "..source.sortMode.."  ·  001–251") or "001–251")
+      fittedText(mode,small:getHeight(),x,y+big:getHeight()+4*scale,w,"left",c.muted)
+
+      local headingY=y+headerH
+      local scrollW=18*scale
+      local usableW=w-scrollW-8*scale
+      local numW=usableW*.16
+      local statusW=usableW*.24
+      local nameW=usableW-numW-statusW
+      fittedText("NO.",small:getHeight(),x,headingY,numW,"left",c.accent)
+      fittedText("NAME",small:getHeight(),x+numW,headingY,nameW,"left",c.accent)
+      fittedText("STATUS",small:getHeight(),x+numW+nameW,headingY,statusW,"right",c.accent)
+
+      local listTop=headingY+small:getHeight()+7*scale
+      local previewH=math.max(210*scale,h*.27)
+      local previewY=y+h-footerH-previewH
+      local availableH=math.max(1,previewY-listTop-12*scale)
+      local visible=math.max(5,math.min(7,math.floor(availableH/math.max(body:getHeight()*1.45,42*scale))))
+      local rowH=availableH/visible
+      for slot=1,visible do
+        local i=scroll+slot
+        local row=rows[i]
+        if row then
+          local yy=listTop+(slot-1)*rowH
+          local sel=i==selected
+          if sel then
+            color(c.selected); G.rectangle("fill",x,yy,usableW,rowH-3*scale,6*scale,6*scale)
+          end
+          local num,name=splitDexLabel(row)
+          local ny=yy+math.max(1*scale,(rowH-body:getHeight())*.48)
+          fittedText(num,body:getHeight(),x+8*scale,ny,numW-12*scale,"left",sel and c.text or c.muted)
+          fittedText(name,body:getHeight(),x+numW,ny,nameW-10*scale,"left",sel and c.text or c.muted)
+          fittedText(row.right or "",small:getHeight(),x+numW+nameW,yy+math.max(1*scale,(rowH-small:getHeight())*.5),statusW-5*scale,"right",sel and c.text or c.muted)
+        end
+      end
+      color(c.raised); G.rectangle("fill",x+usableW+5*scale,listTop,7*scale,availableH,4*scale,4*scale)
+      local total=math.max(1,#rows)
+      local thumbH=math.max(20*scale,availableH*math.min(1,visible/total))
+      local ratio=total>1 and ((selected-1)/(total-1)) or 0
+      color(c.accent); G.rectangle("fill",x+usableW+5*scale,listTop+(availableH-thumbH)*ratio,7*scale,thumbH,4*scale,4*scale)
+
+      panel(x,previewY,w,previewH,c,.60)
+      local cur=source.current or {}
+      local spriteW=w*.31
+      drawSpriteFor(prepared,x+8*scale,previewY+10*scale,spriteW-12*scale,previewH-20*scale)
+      local infoX=x+spriteW+8*scale
+      local infoW=w*.39
+      local infoY=previewY+14*scale
+      fittedText(cur.name or "-----",body:getHeight()*1.08,infoX,infoY,infoW,"left",c.text)
+      infoY=infoY+body:getHeight()+5*scale
+      fittedText(cur.dex and ("No. "..("%03d"):format(cur.dex)) or "No. ---",small:getHeight(),infoX,infoY,infoW,"left",c.muted)
+      infoY=infoY+small:getHeight()+4*scale
+      fittedText(table.concat(cur.types or {}," / "),small:getHeight(),infoX,infoY,infoW,"left",c.accent)
+      infoY=infoY+small:getHeight()+5*scale
+      fittedText(cur.caught and "OWNED" or cur.seen and "SEEN" or "UNSEEN",body:getHeight(),infoX,infoY,infoW,"left",c.text)
+
+      local totals=source.totals or {}
+      local countX=x+w*.73
+      local countW=w*.24
+      local countH=math.min(previewH-20*scale,body:getHeight()*2+28*scale)
+      panel(countX,previewY+(previewH-countH)*.5,countW,countH,c,.70)
+      local cy=previewY+(previewH-countH)*.5+8*scale
+      fittedText(("SEEN %d"):format(totals.seen or 0),small:getHeight(),countX+8*scale,cy,countW-16*scale,"left",c.muted)
+      cy=cy+small:getHeight()+7*scale
+      fittedText(("OWNED %d"):format(totals.caught or 0),small:getHeight(),countX+8*scale,cy,countW-16*scale,"left",c.text)
+
+      fittedText(desc,16*scale,x,y+h-small:getHeight(),w,"left",c.muted)
+      return
+    end
+
+    -- Landscape / desktop: keep the two-column presentation but measure each
+    -- column separately so long labels can never spill into the preview rail.
+    local listW=w*.59
+    local scrollW=22*scale
+    local gap=18*scale
+    local rightX=x+listW+scrollW+gap
+    local rightW=w-listW-scrollW-gap
+    local headerH=math.max(big:getHeight(),small:getHeight())+14*scale
+    fittedText(m.title or "POKéDEX",big:getHeight(),x,y,listW*.46,"left",c.text)
+    fittedText((source.sortMode and ("MODE: "..source.sortMode.."  ·  001–251") or "001–251"),small:getHeight(),x+listW*.48,y+5*scale,listW*.48,"right",c.muted)
+
+    local columnY=y+headerH
+    local usableW=listW-8*scale
+    local numW=usableW*.15
+    local statusW=usableW*.22
+    local nameW=usableW-numW-statusW
+    fittedText("NO.",small:getHeight(),x,columnY,numW,"left",c.accent)
+    fittedText("NAME",small:getHeight(),x+numW,columnY,nameW,"left",c.accent)
+    fittedText("STATUS",small:getHeight(),x+numW+nameW,columnY,statusW,"right",c.accent)
+
+    local listTop=columnY+small:getHeight()+8*scale
+    local listBottom=y+h-footerH
+    local availableH=math.max(1,listBottom-listTop)
     local den=Style and Style.density and Style.density() or 1
     local visible=math.max(5,math.min(9,math.floor(7/den+.5)))
     local rowH=availableH/visible
-
     for slot=1,visible do
       local i=scroll+slot
       local row=rows[i]
       if row then
         local yy=listTop+(slot-1)*rowH
         local sel=i==selected
-        if sel then
-          color(c.selected)
-          G.rectangle("fill",x,yy,listW-8*scale,rowH-4*scale,6*scale,6*scale)
-        end
-        local textY=yy+math.max(2*scale,(rowH-body:getHeight())*.45)
-        text(row.label or "-----",body,x+12*scale,textY,listW*.72,"left",
-          sel and c.text or c.muted)
-        text(row.right or "",small,x+listW*.72,
-          yy+math.max(2*scale,(rowH-small:getHeight())*.48),
-          listW*.23,"right",sel and c.text or c.muted)
+        if sel then color(c.selected); G.rectangle("fill",x,yy,usableW,rowH-4*scale,6*scale,6*scale) end
+        local num,name=splitDexLabel(row)
+        local ty=yy+math.max(1*scale,(rowH-body:getHeight())*.48)
+        fittedText(num,body:getHeight(),x+8*scale,ty,numW-12*scale,"left",sel and c.text or c.muted)
+        fittedText(name,body:getHeight(),x+numW,ty,nameW-10*scale,"left",sel and c.text or c.muted)
+        fittedText(row.right or "",small:getHeight(),x+numW+nameW,yy+math.max(1*scale,(rowH-small:getHeight())*.50),statusW-4*scale,"right",sel and c.text or c.muted)
       end
     end
 
-    color(c.raised)
-    G.rectangle("fill",x+listW+6*scale,listTop,8*scale,availableH,4*scale,4*scale)
+    color(c.raised); G.rectangle("fill",x+listW+6*scale,listTop,8*scale,availableH,4*scale,4*scale)
     local total=math.max(1,#rows)
     local thumbH=math.max(24*scale,availableH*math.min(1,visible/total))
-    local maxTravel=math.max(0,availableH-thumbH)
     local ratio=total>1 and ((selected-1)/(total-1)) or 0
-    color(c.accent)
-    G.rectangle("fill",x+listW+6*scale,listTop+maxTravel*ratio,
-      8*scale,thumbH,4*scale,4*scale)
+    color(c.accent); G.rectangle("fill",x+listW+6*scale,listTop+(availableH-thumbH)*ratio,8*scale,thumbH,4*scale,4*scale)
 
-    -- Right preview rail also uses measured positions instead of fixed pixel
-    -- constants, so larger fonts remain readable without stacking.
-    local progressH=body:getHeight()*2+28*scale
+    local progressH=small:getHeight()*2+30*scale
     local progressY=y+h-footerH-progressH
     local previewTop=y+headerH+4*scale
-    local previewBottom=progressY-12*scale
-    local previewH=math.max(120*scale,previewBottom-previewTop)
-    local spriteH=math.min(175*scale,previewH*.48)
-
-    drawSpriteFor(prepared,rightX+rightW*.14,previewTop,rightW*.72,spriteH)
-
+    local previewBottom=progressY-10*scale
+    local previewH=math.max(100*scale,previewBottom-previewTop)
+    local spriteH=math.min(150*scale,previewH*.46)
+    drawSpriteFor(prepared,rightX+rightW*.13,previewTop,rightW*.74,spriteH)
     local cur=source.current or {}
-    local infoY=previewTop+spriteH+8*scale
-    text(cur.name or "-----",big,rightX,infoY,rightW,"center",c.text)
-    infoY=infoY+big:getHeight()+4*scale
-    text(cur.dex and ("No. "..("%03d"):format(cur.dex)) or "No. ---",
-      small,rightX,infoY,rightW,"center",c.muted)
+    local infoY=previewTop+spriteH+5*scale
+    fittedText(cur.name or "-----",body:getHeight()*1.15,rightX,infoY,rightW,"center",c.text)
+    infoY=infoY+body:getHeight()+4*scale
+    fittedText(cur.dex and ("No. "..("%03d"):format(cur.dex)) or "No. ---",small:getHeight(),rightX,infoY,rightW,"center",c.muted)
     infoY=infoY+small:getHeight()+3*scale
-    text(table.concat(cur.types or {}," / "),small,rightX,infoY,rightW,
-      "center",c.accent)
+    fittedText(table.concat(cur.types or {}," / "),small:getHeight(),rightX,infoY,rightW,"center",c.accent)
     infoY=infoY+small:getHeight()+3*scale
-    local status=cur.caught and "OWNED" or cur.seen and "SEEN" or "UNSEEN"
-    text(status,body,rightX,infoY,rightW,"center",c.text)
+    fittedText(cur.caught and "OWNED" or cur.seen and "SEEN" or "UNSEEN",body:getHeight(),rightX,infoY,rightW,"center",c.text)
 
     local totals=source.totals or {}
     panel(rightX,progressY,rightW,progressH,c,.72)
-    local py=progressY+10*scale
-    text(("SEEN   %d"):format(totals.seen or 0),body,
-      rightX+16*scale,py,rightW-32*scale,"left",c.muted)
-    py=py+body:getHeight()+4*scale
-    text(("OWNED  %d"):format(totals.caught or 0),body,
-      rightX+16*scale,py,rightW-32*scale,"left",c.text)
-
-    local desc=type(m.description)=="table"
-      and table.concat(m.description,"  ")
-      or (m.description or "UP/DOWN SPECIES   A DATA   SELECT OPTIONS   B BACK")
-    fittedText(desc,18*scale,x,y+h-small:getHeight(),w,"left",c.muted)
+    local py=progressY+7*scale
+    fittedText(("SEEN   %d"):format(totals.seen or 0),small:getHeight(),rightX+12*scale,py,rightW-24*scale,"left",c.muted)
+    py=py+small:getHeight()+5*scale
+    fittedText(("OWNED  %d"):format(totals.caught or 0),small:getHeight(),rightX+12*scale,py,rightW-24*scale,"left",c.text)
+    fittedText(desc,16*scale,x,y+h-small:getHeight(),w,"left",c.muted)
   end
 
   local function drawEntry(prepared,x,y,w,h,c,big,body,small,scale)
@@ -545,17 +613,34 @@ return function(mod)
     local c=theme(); local sx,sy,sw,sh=playfield()
     local uiScale=Style and Style.uiScale and Style.uiScale(sw,sh) or 1
     local layout=Style and Style.layoutStyle and Style.layoutStyle() or "floating"
-    local pw=sw>=1000 and math.min(1240*uiScale,sw*.82) or sw*.96
-    local ph=sh>=700 and math.min(780*uiScale,sh*.88) or sh*.89
-    local scale=uiScale
-    if layout=="full" then pw=sw*.94; ph=sh*.92; scale=math.min(pw/1240,ph/780) end
+    local portrait=sh>sw*1.15
+    local pw,ph
+    if portrait then
+      pw=sw*.96; ph=sh*.88
+    else
+      pw=sw>=1000 and math.min(1480,sw*.94) or sw*.96
+      ph=sh>=700 and math.min(820,sh*.90) or sh*.90
+    end
+    if layout=="full" then pw=sw*.94; ph=sh*.92 end
+
+    -- Cap the authored scale to what the ACTUAL panel can contain. Mobile
+    -- AUTO/UI scale can otherwise be much larger than the available portrait
+    -- or landscape height, which was the source of the overlapping headers,
+    -- rows, preview text and Seen/Owned box.
+    local fitScale
+    if portrait then fitScale=math.min(pw/760,ph/1180)
+    else fitScale=math.min(pw/1240,ph/780) end
+    local scale=math.max(.58,math.min(uiScale,fitScale))
+
     local x=sx+(sw-pw)/2; local y=sy+(sh-ph)/2; panel(x,y,pw,ph,c,.95)
-    -- v14 keeps the text larger than the original implementation but backs
-    -- off the v13 oversize tier; measured spacing now does the readability work.
-    local big,body,small=font(34*scale),font(25*scale),font(19*scale)
-    local pad=26*scale; local vx,vy=x+pad,y+pad; local vw,vh=pw-pad*2,ph-pad*2
+    local bigBase=portrait and 30 or 32
+    local bodyBase=portrait and 22 or 23
+    local smallBase=portrait and 16 or 17
+    local big,body,small=font(bigBase*scale),font(bodyBase*scale),font(smallBase*scale)
+    local pad=(portrait and 18 or 22)*scale
+    local vx,vy=x+pad,y+pad; local vw,vh=pw-pad*2,ph-pad*2
     local view=tostring(prepared.model.sourceView or prepared.sourceModel and prepared.sourceModel.view or "list")
-    if view=="list" then drawList(prepared,vx,vy,vw,vh,c,big,body,small,scale)
+    if view=="list" then drawList(prepared,vx,vy,vw,vh,c,big,body,small,scale,portrait)
     elseif view=="entry" then drawEntry(prepared,vx,vy,vw,vh,c,big,body,small,scale)
     elseif view=="area" and drawAreaMap(state,prepared,vx,vy,vw,vh,c,big,body,small,scale) then
       -- Native Gen 2 nest map rendered inside the Modern UI frame.

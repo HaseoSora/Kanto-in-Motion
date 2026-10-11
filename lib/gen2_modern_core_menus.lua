@@ -1,4 +1,4 @@
--- Kanto in Motion v1.7.3 - Gen 2 Modern Core Menus v51 -- robust player portrait / page 1 draw
+-- Kanto in Motion v1.7.3 - Gen 2 Modern Core Menus v57 -- CAL outer-background transparency + preserved white clothing
 --
 -- Modern overlay presentation for the native Gen 2 Start Menu, Pack,
 -- Pokegear, Trainer Card, Save Menu, Options Menu and KIM Mod Settings. Their original objects remain authoritative for
@@ -168,6 +168,23 @@ return function(mod)
   end
   local function layoutStyle()
     return Style and Style.layoutStyle and Style.layoutStyle() or "floating"
+  end
+  local function mobileHost()
+    if type(mod._kantoInMotionNativeMobileHost)=="function" then
+      local ok,value=pcall(mod._kantoInMotionNativeMobileHost)
+      if ok then return value==true end
+    end
+    if love and love.system and type(love.system.getOS)=="function" then
+      local ok,name=pcall(love.system.getOS)
+      return ok and (name=="Android" or name=="iOS")
+    end
+    return false
+  end
+  local function mobilePortrait(sw,sh)
+    return mobileHost() and (tonumber(sh) or 0) > (tonumber(sw) or 0)*1.18
+  end
+  local function mobileLandscape(sw,sh)
+    return mobileHost() and not mobilePortrait(sw,sh)
   end
   local function panel(x,y,w,h,c,alpha)
     if Style and Style.panel then return Style.panel(x,y,w,h,c,alpha) end
@@ -423,9 +440,24 @@ return function(mod)
     local c=theme(); local sx,sy,sw,sh=playfield()
     local scale=uiScale(sw,sh); local den=density()
     local rows=s.items or {}; local count=#rows
+    local portrait=mobilePortrait(sw,sh)
+    local mobile=mobileHost()
     local w=math.min(520*scale,sw*.44)
+    if portrait then
+      -- Phone portrait needs a wider side card. The old 44% desktop width
+      -- forced labels such as POKéGEAR to wrap when FONT SCALE was raised.
+      w=math.min(sw*.68,640*scale)
+    elseif mobile then
+      w=math.max(w,math.min(sw*.52,650*scale))
+    end
     local naturalRh=60*scale*den
     local h=math.min(sh*.88,94*scale+math.min(count,9)*naturalRh+76*scale)
+    if mobile then
+      -- Keep authored spacing tied to the actual card, not the raw phone DPI.
+      scale=math.min(scale,w/520,h/math.max(1,94+math.min(count,9)*60*den+76))
+      naturalRh=60*scale*den
+      h=math.min(sh*.88,94*scale+math.min(count,9)*naturalRh+76*scale)
+    end
     local inset=(tonumber(opt("startMenuInset","0")) or 0)/100
     local x=sx+sw-w-28*scale-(sw-w)*inset; local y=sy+(sh-h)/2
     panel(x,y,w,h,c,.95)
@@ -465,7 +497,8 @@ return function(mod)
       if tostring(row.value or row.id or ""):lower() == "pokegear" then
         label = "POKéGEAR"
       end
-      text(label,body,x+28*scale,centeredTextY(barY,barH,body),w-56*scale,"left",i==index and c.text or c.muted)
+      local rowFont=fittedFont(31*scale,label,w-56*scale)
+      text(label,rowFont,x+28*scale,centeredTextY(barY,barH,rowFont),w-56*scale,"left",i==index and c.text or c.muted)
     end
     local row=rows[index]; local desc=row and row.desc or {}
     local descText=normalizeUiText(desc,"  ")
@@ -620,7 +653,21 @@ return function(mod)
     local footerLines=(s and s.hasSave) and 2 or 1
     local footerH=math.max((s and s.hasSave) and 78*scale or 58*scale,
       footerLines*small:getHeight()+math.max(16,22*scale))
+    local portrait=mobilePortrait(sw,sh)
+    local mobile=mobileHost()
     local w=full and sw*.70 or math.min(540*scale,sw*.44)
+    if portrait then
+      w=sw*.88
+    elseif mobile then
+      w=math.max(w,math.min(sw*.60,700*scale))
+    end
+    if mobile then
+      scale=math.min(scale,w/540)
+      body,small=font(31*scale),font(21*scale)
+      rh=math.max(64*scale*den,body:getHeight()+math.max(8,10*scale))
+      footerH=math.max((s and s.hasSave) and 78*scale or 58*scale,
+        footerLines*small:getHeight()+math.max(16,22*scale))
+    end
     local h=math.min(sh*.84,28*scale+math.max(1,#rows)*rh+footerH)
     -- The CONTINUE/save-summary phase is taller than the ordinary title menu:
     -- it always shows four information rows plus its own footer.  Basing this
@@ -628,7 +675,11 @@ return function(mod)
     -- small windows.  Give confirm mode its own height budget, then compress
     -- only the summary rows if the playfield itself is too short.
     if s and s.phase=="confirm" then
-      h=math.min(sh*.92,math.max(h,364*scale))
+      if portrait then
+        h=math.min(sh*.62,math.max(h,430*scale))
+      else
+        h=math.min(sh*.92,math.max(h,364*scale))
+      end
     end
     -- Title/main-menu parity with Gen 1: this is a modal navigation card over
     -- the title artwork, not the in-game side Start Menu, so always center it.
@@ -639,7 +690,8 @@ return function(mod)
 
     if s and s.phase=="confirm" then
       local summary=titleSaveSummary(s)
-      local titleFont=font(38*scale); local labelFont=font(24*scale)
+      local titleFont=fittedFont(38*scale,"CONTINUE",w-52*scale)
+      local labelFont=font(24*scale)
       text("CONTINUE",titleFont,x+26*scale,top,w-52*scale,"left",c.text)
       local yy=top+62*scale
       local info={
@@ -656,8 +708,12 @@ return function(mod)
         local ry=yy+(i-1)*rowH
         local barY,barH=centeredRowRect(ry,rowH,rowInset)
         color(c.raised,.78); G.rectangle("fill",x+20*scale,barY,w-40*scale,barH,5,5)
-        text(r[1],labelFont,x+34*scale,centeredTextY(barY,barH,labelFont),w*.42,"left",c.muted)
-        text(r[2],labelFont,x+w*.50,centeredTextY(barY,barH,labelFont),w*.40,"right",c.text)
+        local labelW=w*.34
+        local valueW=w*.48
+        local lf=fittedFont(24*scale,r[1],labelW)
+        local vf=fittedFont(24*scale,r[2],valueW)
+        text(r[1],lf,x+34*scale,centeredTextY(barY,barH,lf),labelW,"left",c.muted)
+        text(r[2],vf,x+w*.43,centeredTextY(barY,barH,vf),valueW,"right",c.text)
       end
       color(c.divider); G.rectangle("fill",x+20*scale,dividerY,w-40*scale,1)
       fittedText("A  CONTINUE    B  BACK",21*scale,x+24*scale,y+h-42*scale,w-48*scale,"left",c.accent)
@@ -787,88 +843,108 @@ return function(mod)
   local function drawPack(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
     local scale=uiScale(sw,sh); local den=density()
-    local w=math.min(1080*scale,sw*.72); local h=math.min(690*scale,sh*.82)
-    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/1080,h/690) end
+    local portrait=mobilePortrait(sw,sh)
+    local mobile=mobileHost()
+    local w,h
+    if portrait then
+      w=sw*.90; h=sh*.68
+      scale=math.min(scale,w/820,h/980)
+    elseif mobile then
+      w=sw*.90; h=sh*.84
+      scale=math.min(scale,w/1080,h/690)
+    else
+      w=math.min(1080*scale,sw*.72); h=math.min(690*scale,sh*.82)
+    end
+    if layoutStyle()=="full" then
+      w=sw*.94; h=sh*.92; scale=math.min(w/1080,h/(portrait and 980 or 690))
+    end
+    scale=math.max(.52,scale)
     local x=sx+(sw-w)/2; local y=sy+(sh-h)/2; panel(x,y,w,h,c,.95)
     local big, body, small = font(35*scale), font(26*scale), font(19*scale)
-    local tabFont = font(23*scale)
     local countFont = font(22*scale)
-    local pad=22*scale
-    text("PACK",big,x+pad,y+15*scale,w*.32,"left",c.text)
+    local pad=math.max(12,22*scale)
+    local titleY=y+math.max(8,15*scale)
+    text("PACK",fittedFont(35*scale,"PACK",w*.32),x+pad,titleY,w*.32,"left",c.text)
 
+    local tabTop=y+math.max(48*scale,big:getHeight()+18*scale)
+    local tabH=math.max(38*scale,body:getHeight()+8*scale)
     local tabW=(w-pad*2)/4
     for i,label in ipairs(POCKET_LABELS) do
       local tx=x+pad+(i-1)*tabW; local sel=i==(tonumber(s.pocketIndex) or 1)
-      if sel then color(c.selected); G.rectangle("fill",tx,y+56*scale,tabW-4,42*scale,5,5) end
-      text(label,tabFont,tx+4,y+64*scale,tabW-10,"center",sel and c.text or c.muted)
+      if sel then color(c.selected); G.rectangle("fill",tx,tabTop,tabW-4,tabH,5,5) end
+      local tf=fittedFont(23*scale,label,tabW-12)
+      text(label,tf,tx+4,centeredTextY(tabTop,tabH,tf),tabW-10,"center",sel and c.text or c.muted)
     end
 
-    local contentY=y+112*scale
-    local listW=w*.57; local detailX=x+listW+16*scale
-    local footerRight=x+w-20*scale
-    local footerAvail=math.max(80,footerRight-detailX)
-    local footerSpec=packFooterSpec(footerAvail,scale)
-    local footerH=footerSpec.height
-    local contentH=math.max(140*scale,h-112*scale-footerH)
-    color(c.divider,nil,true); G.rectangle("fill",x+listW+8*scale,contentY,1,contentH)
+    local headerH=(tabTop-y)+tabH+math.max(8,12*scale)
+    local footerH=portrait and math.max(78*scale,small:getHeight()*2+18*scale)
+      or math.max(62*scale,small:getHeight()+24*scale)
     local rows=s.rows or {}; local idx=tonumber(s.index) or 1; local scroll=tonumber(s.scroll) or 0
-    local desiredVisible=math.max(5,math.min(10,math.floor(8/den+.5)))
-    local minRowH=math.max(body:getHeight(),countFont:getHeight())+math.max(6,8*scale)
-    local fitVisible=math.max(1,math.floor(contentH/math.max(1,minRowH)))
-    local visible=math.max(1,math.min(desiredVisible,fitVisible))
-    local maxScroll=math.max(0,(#rows+1)-visible)
-    scroll=math.max(0,math.min(scroll,maxScroll))
-    if idx<=scroll then scroll=math.max(0,idx-1) end
-    if idx>scroll+visible then scroll=math.min(maxScroll,idx-visible) end
-    local rh=contentH/visible
-    for slot=1,visible do
-      local i=scroll+slot; local row=rows[i]
-      if i==#rows+1 then row={name="CANCEL"} end
-      if not row then break end
-      local yy=contentY+(slot-1)*rh; local sel=i==idx
-      local barY,barH=centeredRowRect(yy,rh,2*scale)
-      if sel then color(c.selected); G.rectangle("fill",x+pad*.65,barY,listW-pad*1.2,barH,5,5) end
-      text(row.name or "CANCEL",body,x+pad,centeredTextY(barY,barH,body),listW*.62,"left",sel and c.text or c.muted)
-      local right=row.teaches or (row.showCount and ("x"..tostring(row.count or 0))) or ""
-      text(right,countFont,x+listW*.65,centeredTextY(barY,barH,countFont),listW*.27,"right",sel and c.text or c.muted)
-    end
     local selected=idx<=#rows and rows[idx] or nil
-    text(selected and selected.name or "CANCEL",big,detailX,contentY+12*scale,w-listW-40*scale,"left",c.text)
-    text(itemDescription(s,selected),body,detailX,contentY+78*scale,w-listW-40*scale,"left",c.muted)
+
+    local function drawRows(listX,listY,listW,listH,desired)
+      local minRowH=math.max(body:getHeight(),countFont:getHeight())+math.max(6,8*scale)
+      local visible=math.max(1,math.min(desired or 7,math.floor(listH/math.max(1,minRowH))))
+      local maxScroll=math.max(0,(#rows+1)-visible)
+      scroll=math.max(0,math.min(scroll,maxScroll))
+      if idx<=scroll then scroll=math.max(0,idx-1) end
+      if idx>scroll+visible then scroll=math.min(maxScroll,idx-visible) end
+      local rh=listH/visible
+      for slot=1,visible do
+        local i=scroll+slot; local row=rows[i]
+        if i==#rows+1 then row={name="CANCEL"} end
+        if not row then break end
+        local yy=listY+(slot-1)*rh; local sel=i==idx
+        local barY,barH=centeredRowRect(yy,rh,math.max(2,2*scale))
+        if sel then color(c.selected); G.rectangle("fill",listX,barY,listW,barH,5,5) end
+        local right=row.teaches or (row.showCount and ("x"..tostring(row.count or 0))) or ""
+        local rightW=math.min(listW*.28,math.max(countFont:getWidth(right)+8*scale,listW*.18))
+        local nameW=listW-rightW-math.max(10,16*scale)
+        local nf=fittedFont(26*scale,row.name or "CANCEL",nameW)
+        local rf=fittedFont(22*scale,right,rightW)
+        text(row.name or "CANCEL",nf,listX+8*scale,centeredTextY(barY,barH,nf),nameW,"left",sel and c.text or c.muted)
+        if right~="" then
+          text(right,rf,listX+listW-rightW-6*scale,centeredTextY(barY,barH,rf),rightW,"right",sel and c.text or c.muted)
+        end
+      end
+    end
+
+    if portrait then
+      local contentY=y+headerH
+      local detailH=math.max(150*scale,h*.22)
+      local listH=math.max(180*scale,h-headerH-footerH-detailH)
+      local listX=x+pad; local listW=w-pad*2
+      drawRows(listX,contentY,listW,listH,7)
+      local detailY=contentY+listH+math.max(6,8*scale)
+      color(c.divider,nil,true); G.rectangle("fill",x+pad,detailY-4*scale,w-pad*2,1)
+      local name=selected and selected.name or "CANCEL"
+      local df=fittedFont(30*scale,name,w-pad*2)
+      text(name,df,x+pad,detailY+6*scale,w-pad*2,"left",c.text)
+      local descY=detailY+df:getHeight()+10*scale
+      local desc=itemDescription(s,selected)
+      local descFont=font(20*scale)
+      text(desc,descFont,x+pad,descY,w-pad*2,"left",c.muted)
+    else
+      local contentY=y+headerH
+      local contentH=math.max(140*scale,h-headerH-footerH)
+      local listW=w*.57; local detailX=x+listW+16*scale
+      color(c.divider,nil,true); G.rectangle("fill",x+listW+8*scale,contentY,1,contentH)
+      drawRows(x+pad*.65,contentY,listW-pad*1.2,contentH,math.max(5,math.min(9,math.floor(8/den+.5))))
+      local name=selected and selected.name or "CANCEL"
+      local df=fittedFont(35*scale,name,w-listW-40*scale)
+      text(name,df,detailX,contentY+12*scale,w-listW-40*scale,"left",c.text)
+      text(itemDescription(s,selected),font(22*scale),detailX,contentY+df:getHeight()+26*scale,w-listW-40*scale,"left",c.muted)
+    end
 
     local footerTop=y+h-footerH
-    local function drawActionRow(fx,fy,ff,bf,gap,micro)
-      boldText("A",bf,fx,fy-1*scale,c.accent)
-      fx=fx+bf:getWidth("A")+micro
-      text("CHOOSE",ff,fx,fy,nil,nil,c.accent)
-      fx=fx+ff:getWidth("CHOOSE")+gap
-      boldText("B",bf,fx,fy-1*scale,c.accent)
-      fx=fx+bf:getWidth("B")+micro
-      text("BACK",ff,fx,fy,nil,nil,c.accent)
-    end
-
-    if footerSpec.wrapped then
-      local line1Y=footerTop+10*scale
-      local fx=detailX
-      local arrowSize=footerSpec.arrowSize
-      drawChevronPair(fx+arrowSize*.55,line1Y+footerSpec.footerFont:getHeight()*.08,
-        arrowSize,c.accent,arrowSize*1.45)
-      fx=fx+footerSpec.arrowBlock+footerSpec.gap
-      text("POCKET",footerSpec.footerFont,fx,line1Y,nil,nil,c.accent)
-      local line2Y=line1Y+footerSpec.footerFont:getHeight()+8*scale
-      drawActionRow(detailX,line2Y,footerSpec.line2Font,footerSpec.line2ButtonFont,
-        footerSpec.line2Gap,footerSpec.line2Micro)
+    color(c.divider,nil,true); G.rectangle("fill",x+pad,footerTop,w-pad*2,1)
+    local footerLabel="< >  POCKET     A  CHOOSE     B  BACK"
+    local ff=fittedFont(20*scale,footerLabel,w-pad*2)
+    if portrait and ff:getWidth(footerLabel)>w-pad*2 then
+      fittedText("< >  POCKET",20*scale,x+pad,footerTop+8*scale,w-pad*2,"left",c.accent)
+      fittedText("A  CHOOSE     B  BACK",20*scale,x+pad,footerTop+8*scale+ff:getHeight()+5*scale,w-pad*2,"left",c.accent)
     else
-      local lineY=footerTop+(footerH-footerSpec.footerFont:getHeight())*.5
-      local fx=detailX
-      local arrowSize=footerSpec.arrowSize
-      drawChevronPair(fx+arrowSize*.55,lineY+footerSpec.footerFont:getHeight()*.08,
-        arrowSize,c.accent,arrowSize*1.45)
-      fx=fx+footerSpec.arrowBlock+footerSpec.gap
-      text("POCKET",footerSpec.footerFont,fx,lineY,nil,nil,c.accent)
-      fx=fx+footerSpec.pocketW+footerSpec.gap
-      drawActionRow(fx,lineY,footerSpec.footerFont,footerSpec.buttonFont,
-        footerSpec.gap,footerSpec.micro)
+      text(footerLabel,ff,x+pad,footerTop+(footerH-ff:getHeight())*.5,w-pad*2,"center",c.accent)
     end
 
     if s.submenu and type(s.submenu.rows)=="table" then
@@ -1098,6 +1174,8 @@ return function(mod)
   -- trainer sprite are preserved and the native Gen 2 player palette is still
   -- applied at draw time.
   local trainerCardPlayerSprites={}
+  local loadTrainerCardImage
+  local imageDataForDrawable
   -- Keep this helper self-contained.  The generic trainer-card flood helper is
   -- declared later in this file, so calling it from here used to resolve a nil
   -- global and abort the whole page-1 Modern UI draw before the text rows were
@@ -1119,7 +1197,10 @@ return function(mod)
         if v<=1.000001 then v=v*255 end
         return v
       end
-      return ch(a)>0 and ch(r)>=248 and ch(g)>=248 and ch(b)>=248
+      -- Only treat the near-pure paper/background white as removable.  The
+      -- flood starts at the image edge, so enclosed white details in CAL's
+      -- clothing remain opaque even when they use the same source shade.
+      return ch(a)>0 and ch(r)>=252 and ch(g)>=252 and ch(b)>=252
     end
     local function add(x,y)
       if x<0 or y<0 or x>=w or y>=h then return end
@@ -1158,32 +1239,94 @@ return function(mod)
     trainerCardPlayerSprites[path]=img
     return img
   end
-  local function drawNativePlayerPortrait(s,x,y,w,h)
-    local data=s and s.game and s.game.data
-    local hud=data and data.gen2MenuGfx and data.gen2MenuGfx.battleHud
-    local pics=hud and hud.trainerPics
-    local path=pics and pics[(s and s.female) and "KRIS" or "CHRIS"]
-    local img=transparentTrainerCardPlayer(path)
+  local function drawGoldSilverCardPortrait(s,x,y,w,h)
+    -- Gold/Silver do not expose Crystal's standalone CHRIS/KRIS 56x56 frontpic.
+    -- Their vanilla Trainer Card portrait is the first 35 tiles of
+    -- ChrisPicAndTrainerCardGFX. The extractor stores those source tiles in
+    -- their original 5x7 visual (row-major) order inside the generated card
+    -- sheet, so rebuild that exact vanilla portrait instead of substituting
+    -- KIM's later-generation player artwork.
+    local sheet=s and s.card
+    if not (sheet and type(sheet.image)=="function" and type(sheet.quad)=="function") then
+      return false
+    end
+    local img=sheet:image()
     if not img then return false end
-    local iw,ih=img:getDimensions()
-    if not iw or not ih or iw<=0 or ih<=0 then return false end
-    local fit=math.min(w/iw,h/ih)
-    local dw,dh=iw*fit,ih*fit
+    local fit=math.min(w/(5*8),h/(7*8))
+    if not fit or fit<=0 then return false end
+    local dw,dh=40*fit,56*fit
     local dx=x+(w-dw)/2
     local dy=y+(h-dh)/2
     local function body()
       G.setColor(1,1,1,1)
-      G.draw(img,dx,dy,0,fit,fit)
+      for row=0,6 do
+        for col=0,4 do
+          local index=row*5+col
+          local q=sheet:quad(index)
+          if q then
+            G.draw(img,q,dx+col*8*fit,dy+row*8*fit,0,fit,fit)
+          end
+        end
+      end
     end
     local colors=type(s.colorsAt)=="function" and s:colorsAt(14,1) or nil
-    if colors and okGbcPalette and GbcPalette and type(GbcPalette.with)=="function" then
-      local ok=pcall(GbcPalette.with,colors,body)
-      if not ok then body() end
+    if colors and okGbcPalette and GbcPalette then
+      -- Shade 0 is the paper/background around the portrait. The keyed palette
+      -- keeps that transparent without any canvas readback, which is important
+      -- on mobile and avoids the old capture corruption path.
+      local keyed=GbcPalette.keyedWith or GbcPalette.withKeyed
+      if type(keyed)=="function" then
+        local ok=pcall(keyed,colors,body)
+        if not ok then body() end
+      elseif type(GbcPalette.with)=="function" then
+        local ok=pcall(GbcPalette.with,colors,body)
+        if not ok then body() end
+      else
+        body()
+      end
     else
       body()
     end
     G.setColor(1,1,1,1)
     return true
+  end
+
+  local function drawNativePlayerPortrait(s,x,y,w,h)
+    local data=s and s.game and s.game.data
+    local hud=data and data.gen2MenuGfx and data.gen2MenuGfx.battleHud
+    local pics=hud and hud.trainerPics
+    local version=s and s.save and s.save.version
+    -- Crystal has dedicated CHRIS/KRIS frontpics. Gold/Silver do not; their
+    -- matching 7x7 vanilla trainer portrait is the CAL trainer sprite.
+    local key=(version=="crystal") and ((s and s.female) and "KRIS" or "CHRIS") or "CAL"
+    local path=pics and pics[key]
+    local img=transparentTrainerCardPlayer(path)
+    if img then
+      local iw,ih=img:getDimensions()
+      if iw and ih and iw>0 and ih>0 then
+        local fit=math.min(w/iw,h/ih)
+        local dw,dh=iw*fit,ih*fit
+        local dx=x+(w-dw)/2
+        local dy=y+(h-dh)/2
+        local function body()
+          G.setColor(1,1,1,1)
+          G.draw(img,dx,dy,0,fit,fit)
+        end
+        local colors=type(s.colorsAt)=="function" and s:colorsAt(14,1) or nil
+        if colors and okGbcPalette and GbcPalette and type(GbcPalette.with)=="function" then
+          local ok=pcall(GbcPalette.with,colors,body)
+          if not ok then body() end
+        else
+          body()
+        end
+        G.setColor(1,1,1,1)
+        return true
+      end
+    end
+    -- Old/incomplete caches may not expose the CAL/CHRIS/KRIS trainer pic;
+    -- keep the ROM card portrait as a last-resort fallback rather than leaving
+    -- page 1 blank.
+    return drawGoldSilverCardPortrait(s,x,y,w,h)
   end
 
   local JOHTO={"ZEPHYR","HIVE","PLAIN","FOG","STORM","MINERAL","GLACIER","RISING"}
@@ -1254,7 +1397,7 @@ return function(mod)
   local trainerCardImageCache={}
 
   local trainerCardProcessedImageCache={}
-  local function loadTrainerCardImage(path)
+  loadTrainerCardImage=function(path)
     if type(path)~="string" or path=="" then return nil end
     if trainerCardImageCache[path]~=nil then return trainerCardImageCache[path] or nil end
     local ok,img=false,nil
@@ -1269,7 +1412,7 @@ return function(mod)
     trainerCardImageCache[path]=img or false
     return img
   end
-  local function imageDataForDrawable(img)
+  imageDataForDrawable=function(img)
     if not img then return nil end
     if type(img.newImageData)=="function" then
       local ok,data=pcall(img.newImageData,img)
@@ -1598,125 +1741,101 @@ return function(mod)
   end
   local function drawGear(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
-    local scale=uiScale(sw,sh); local den=density()
-    local w=math.min(1080*scale,sw*.72); local h=math.min(680*scale,sh*.82)
-    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/1080,h/680) end
+    local scale=uiScale(sw,sh); local portrait=mobilePortrait(sw,sh); local mobile=mobileHost()
+    local w,h
+    if portrait then
+      w=sw*.86; h=sh*.64; scale=math.min(scale,w/760,h/900)
+    elseif mobile then
+      w=sw*.88; h=sh*.82; scale=math.min(scale,w/1080,h/680)
+    else
+      w=math.min(1080*scale,sw*.72); h=math.min(680*scale,sh*.82)
+    end
+    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/1080,h/(portrait and 900 or 680)) end
+    scale=math.max(.52,scale)
     local x=sx+(sw-w)/2; local y=sy+(sh-h)/2; panel(x,y,w,h,c,.95)
     local big, body, small = font(35*scale), font(26*scale), font(19*scale)
-    local tabFont = font(23*scale)
-    local footerFont = font(21*scale)
-    text("POKéGEAR",big,x+24*scale,y+18*scale,w*.35,"left",c.text)
+    local pad=math.max(12,24*scale)
+    text("POKéGEAR",fittedFont(35*scale,"POKéGEAR",w*.46),x+pad,y+18*scale,w*.46,"left",c.text)
 
-    local tabs=s.cards or {}; local tabW=(w-48*scale)/math.max(1,#tabs)
+    local tabs=s.cards or {}; local tabTop=y+math.max(56*scale,big:getHeight()+18*scale)
+    local tabH=math.max(44*scale,body:getHeight()+10*scale)
+    local tabW=(w-pad*2)/math.max(1,#tabs)
     for i,card in ipairs(tabs) do
       local label=type(s.cardLabel)=="function" and s:cardLabel(card) or card.label or card.id
-      local tx=x+24*scale+(i-1)*tabW; local sel=i==(s.cardIndex or 1)
-      if sel then color(c.selected); G.rectangle("fill",tx,y+60*scale,tabW-5,54*scale,5,5) end
-      text(label,tabFont,tx+4,y+69*scale,tabW-8,"center",sel and c.text or c.muted)
+      local tx=x+pad+(i-1)*tabW; local sel=i==(s.cardIndex or 1)
+      if sel then color(c.selected); G.rectangle("fill",tx,tabTop,tabW-4,tabH,5,5) end
+      local tf=fittedFont(23*scale,label,tabW-10)
+      text(label,tf,tx+4,centeredTextY(tabTop,tabH,tf),tabW-8,"center",sel and c.text or c.muted)
     end
 
-    local id=cardId(s); local cy=y+138*scale; local ch=h-202*scale
+    local footerH=math.max(60*scale,small:getHeight()+22*scale)
+    local cy=tabTop+tabH+math.max(8,12*scale)
+    local ch=math.max(1,y+h-footerH-cy)
+    local id=cardId(s)
     if s.mode=="strip" then
-      text("Choose a POKéGEAR card.",body,x+36*scale,cy,w-72*scale,"center",c.text)
-      local footerText = "CARD   A OPEN   B BACK"
-      local tw = small:getWidth(footerText)
-      local tx = x + (w - tw) * .5
-      local ty = y + h - 52*scale
-      local arrowSize = math.max(10*scale, small:getHeight()*.5)
-      drawChevronPair(tx - arrowSize*1.9, ty + small:getHeight()*.08, arrowSize, c.muted, arrowSize*1.45)
-      fittedText(footerText,19*scale,tx,ty,math.max(1,x+w-24*scale-tx),"left",c.muted)
-      return
-    end
-    if id=="clock" then
+      local pf=fittedFont(26*scale,"Choose a POKéGEAR card.",w-pad*2)
+      text("Choose a POKéGEAR card.",pf,x+pad,cy+ch*.35,w-pad*2,"center",c.text)
+    elseif id=="clock" then
       local hour,minute,weekday=0,0,1
       if type(s.clockParts)=="function" then local ok,a,b,d=pcall(s.clockParts,s); if ok then hour,minute,weekday=a,b,d end end
       local days={"SUN","MON","TUE","WED","THU","FRI","SAT"}
       local period=hour>=12 and "PM" or "AM"; local h12=hour%12; if h12==0 then h12=12 end
-      text(("%d:%02d %s"):format(h12,minute or 0,period),font(62*scale),x+40*scale,cy+70*scale,w-80*scale,"center",c.text)
-      text(days[weekday or 1] or "DAY",big,x+40*scale,cy+150*scale,w-80*scale,"center",c.accent)
+      local clock=("%d:%02d %s"):format(h12,minute or 0,period)
+      local cf=fittedFont(portrait and 56*scale or 62*scale,clock,w-pad*2)
+      local day=days[weekday or 1] or "DAY"
+      local df=fittedFont(35*scale,day,w-pad*2)
+      local total=cf:getHeight()+df:getHeight()+math.max(12,20*scale)
+      local yy=cy+math.max(0,(ch-total)*.42)
+      text(clock,cf,x+pad,yy,w-pad*2,"center",c.text)
+      text(day,df,x+pad,yy+cf:getHeight()+math.max(10,16*scale),w-pad*2,"center",c.accent)
     elseif id=="map" then
       local region=type(s.region)=="function" and s:region() or "johto"
-      text((tostring(region):upper()).." MAP",big,x+36*scale,cy+4*scale,w-72*scale,"left",c.text)
-      local mapX=x+42*scale; local mapY=cy+48*scale
-      local mapW=w-84*scale; local mapH=math.max(120*scale,ch-80*scale)
-      if not drawNativeMapCard(s,mapX,mapY,mapW,mapH,c) then
-        text("MAP UNAVAILABLE",body,mapX,mapY+50*scale,mapW,"center",c.muted)
+      local rf=fittedFont(31*scale,(tostring(region):upper()).." MAP",w-pad*2)
+      text((tostring(region):upper()).." MAP",rf,x+pad,cy,w-pad*2,"left",c.text)
+      local mapY=cy+rf:getHeight()+8*scale
+      local mapH=math.max(80*scale,ch-rf:getHeight()-12*scale)
+      if not drawNativeMapCard(s,x+pad,mapY,w-pad*2,mapH,c) then
+        text("MAP UNAVAILABLE",body,x+pad,mapY+mapH*.4,w-pad*2,"center",c.muted)
       end
     elseif id=="radio" then
-      text("RADIO",big,x+36*scale,cy+12*scale,w-72*scale,"left",c.text)
-      text(("CHANNEL %d"):format(tonumber(s.station) or 1),font(48*scale),x+36*scale,cy+80*scale,w-72*scale,"center",c.accent)
-      text(s.radioOn and "ON AIR" or "NO SIGNAL",body,x+36*scale,cy+145*scale,w-72*scale,"center",c.text)
+      local rf=fittedFont(35*scale,"RADIO",w-pad*2)
+      text("RADIO",rf,x+pad,cy,w-pad*2,"left",c.text)
+      local station=("CHANNEL %d"):format(tonumber(s.station) or 1)
+      local sf=fittedFont(48*scale,station,w-pad*2)
+      text(station,sf,x+pad,cy+ch*.30,w-pad*2,"center",c.accent)
+      text(s.radioOn and "ON AIR" or "NO SIGNAL",body,x+pad,cy+ch*.58,w-pad*2,"center",c.text)
     elseif id=="phone" then
-      text("PHONE",big,x+36*scale,cy+12*scale,w-72*scale,"left",c.text)
+      text("PHONE",fittedFont(35*scale,"PHONE",w-pad*2),x+pad,cy,w-pad*2,"left",c.text)
       local list=type(s.phoneList)=="function" and s:phoneList() or {}
       local start=(tonumber(s.phoneScroll) or 0)+1
+      local listTop=cy+math.max(42*scale,big:getHeight()+6*scale)
+      local rowH=(y+h-footerH-listTop)/4
       for slot=1,4 do
-        local idx=start+slot-1; local yy=cy+62*scale+(slot-1)*66*scale
+        local idx=start+slot-1; local yy=listTop+(slot-1)*rowH
         local selected=(slot-1)==(tonumber(s.phoneCursor) or 0)
-        if selected then color(c.selected); G.rectangle("fill",x+60*scale,yy,w-120*scale,46*scale,5,5) end
+        if selected then color(c.selected); G.rectangle("fill",x+pad,yy,w-pad*2,rowH*.86,5,5) end
         local value=list[idx] or 0
         local label, className = "----------", nil
         if value ~= 0 and type(s.contactRow) == "function" then
           local okContact, name, class = pcall(s.contactRow, s, value)
-          if okContact then
-            label = tostring(name or "----------"):gsub(":$", "")
-            className = class
-          end
+          if okContact then label=tostring(name or "----------"):gsub(":$",""); className=class end
         end
-        text(label,body,x+80*scale,yy+7*scale,w-160*scale,"left",selected and c.text or c.muted)
+        local lf=fittedFont(24*scale,label,w-pad*2)
+        text(label,lf,x+pad*1.4,yy+rowH*.10,w-pad*2.8,"left",selected and c.text or c.muted)
         if className then
-          text(className,small,x+96*scale,yy+35*scale,w-176*scale,"left",
-            selected and c.text or c.muted)
+          local cf=fittedFont(17*scale,className,w-pad*2.8)
+          text(className,cf,x+pad*1.6,yy+rowH*.52,w-pad*3.2,"left",selected and c.text or c.muted)
         end
       end
     else
-      text(tostring(id):upper(),big,x+36*scale,cy+20*scale,w-72*scale,"center",c.text)
+      text(tostring(id):upper(),big,x+pad,cy,w-pad*2,"center",c.text)
     end
-    local footerY=y+h-58*scale
-    local leftText="B RETURN"
-    local rightText=s.fly and "REGION" or "CARD"
-    local arrowSize=math.max(10*scale,footerFont:getHeight()*.5)
-    local gap=18*scale
-    local groupW=footerFont:getWidth(leftText)+gap+arrowSize*2.35+gap+footerFont:getWidth(rightText)
-    local gx=x+(w-groupW)*.5
-    text(leftText,footerFont,gx,footerY,nil,nil,c.muted)
-    gx=gx+footerFont:getWidth(leftText)+gap
-    drawChevronPair(gx+arrowSize*.55, footerY+footerFont:getHeight()*.1, arrowSize, c.muted, arrowSize*1.45)
-    gx=gx+arrowSize*2.35+gap
-    text(rightText,footerFont,gx,footerY,nil,nil,c.muted)
-  end
 
-
-  local function saveSummary(s)
-    if okSaveCore and SaveCore and type(SaveCore.summary)=="function" then
-      local ok,summary=pcall(SaveCore.summary,s.save)
-      if ok and type(summary)=="table" then return summary end
-    end
-    local save=s.save or {}
-    local player=save.player or {}
-    local pd=save.pokedex or {}
-    local caught=0
-    for _,v in pairs(pd.caught or {}) do if v then caught=caught+1 end end
-    local badges=0
-    for _,v in pairs(player.badges or {}) do if v then badges=badges+1 end end
-    local pt=save.playTime or {}
-    return {
-      name=player.name or "GOLD",
-      badges=badges,
-      caught=caught,
-      hours=pt.hours or 0,
-      minutes=pt.minutes or 0,
-    }
-  end
-
-  local function savePromptLines(s)
-    local lines=type(s.prompt)=="function" and s:prompt() or {""}
-    if type(lines)~="table" then lines={tostring(lines or "")} end
-    if okTyper and Typer and s.typedPhase==s.phase and type(Typer.text)=="function" then
-      local ok,typed=pcall(Typer.text,s,lines)
-      if ok and type(typed)=="table" then lines=typed end
-    end
-    return lines
+    local fy=y+h-footerH
+    color(c.divider,nil,true); G.rectangle("fill",x+pad,fy,w-pad*2,1)
+    local footerText=(s.action=="fly") and "B RETURN    < > REGION" or "B RETURN    < > CARD"
+    local ff=fittedFont(19*scale,footerText,w-pad*2)
+    text(footerText,ff,x+pad,fy+(footerH-ff:getHeight())*.5,w-pad*2,"center",c.muted)
   end
 
   local function drawSave(s)

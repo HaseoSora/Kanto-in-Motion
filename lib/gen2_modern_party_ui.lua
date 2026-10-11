@@ -1,4 +1,4 @@
--- Kanto in Motion v1.7.3 - Gen 2 Modern Party UI v33
+-- Kanto in Motion v1.7.3 - Gen 2 Modern Party UI v34 -- responsive mobile parity
 --
 -- The native PartyMenu remains the complete input/state owner. KIM makes the
 -- state transparent, hides only its native render, then draws a final-window
@@ -97,6 +97,34 @@ return function(mod)
     return text .. tail
   end
 
+
+  local function fittedFont(basePx,value,maxW,maxH)
+    local px=math.max(8,tonumber(basePx) or 8)
+    value=tostring(value or "")
+    local f=fontFor(px)
+    while px>8 and ((maxW and f:getWidth(value)>maxW)
+        or (maxH and f:getHeight()>maxH)) do
+      local wr=maxW and (maxW/math.max(1,f:getWidth(value))) or 1
+      local hr=maxH and (maxH/math.max(1,f:getHeight())) or 1
+      local ratio=math.max(.62,math.min(.96,wr,hr))
+      local nextPx=math.max(8,math.min(px-1,px*ratio))
+      if nextPx>=px then nextPx=px-1 end
+      px=nextPx; f=fontFor(px)
+    end
+    return f
+  end
+
+  local function mobileHost()
+    if type(mod._kantoInMotionNativeMobileHost)=="function" then
+      local ok,v=pcall(mod._kantoInMotionNativeMobileHost)
+      if ok then return v==true end
+    end
+    if love and love.system and type(love.system.getOS)=="function" then
+      local ok,name=pcall(love.system.getOS)
+      return ok and (name=="Android" or name=="iOS")
+    end
+    return false
+  end
   local function loadImage(path)
     if not path then return nil end
     if imageCache[path] ~= nil then return imageCache[path] or nil end
@@ -299,197 +327,232 @@ return function(mod)
   local function drawParty(self)
     local colors=theme()
     local sx,sy,sw,sh=playfield()
-    local compact = sw >= 900 and sh >= 600
+    local mobile=mobileHost()
+    local portrait=mobile and sh>sw*1.18
     local uiScale = Style and Style.uiScale and Style.uiScale(sw,sh) or 1
     local layout = Style and Style.layoutStyle and Style.layoutStyle() or "floating"
-    -- Keep the six-slot party screen closer to the compact Gen 1 footprint.
-    -- The previous 1080x690 authored box left a large unused lower-right area
-    -- after the four moves were drawn.  The detail pane still has room for the
-    -- portrait, all five Gen 2 battle stats and four moves at this size.
-    local pw = compact and math.min(960*uiScale, sw * 0.62) or sw * 0.94
-    local ph = compact and math.min(470*uiScale, sh * 0.68)
-      or math.min(sh * 0.84, pw * 0.78)
-    local scale=compact and uiScale or math.max(0.78,math.min(1.2,pw/760))
-    if layout=="full" then
-      pw=sw*.94; ph=sh*.92; scale=math.min(pw/1080,ph/690)
+    local pw,ph,scale
+    if portrait then
+      pw=sw*.90; ph=sh*.62
+      scale=math.min(uiScale,pw/820,ph/980)
+    elseif mobile then
+      pw=sw*.90; ph=sh*.82
+      scale=math.min(uiScale,pw/1080,ph/690)
+    else
+      local compact = sw >= 900 and sh >= 600
+      pw = compact and math.min(960*uiScale, sw * 0.62) or sw * 0.94
+      ph = compact and math.min(470*uiScale, sh * 0.68) or math.min(sh * 0.84, pw * 0.78)
+      scale=compact and uiScale or math.max(0.78,math.min(1.2,pw/760))
     end
+    if layout=="full" then
+      pw=sw*.94; ph=sh*.92; scale=math.min(pw/1080,ph/(portrait and 980 or 690))
+    end
+    scale=math.max(.52,scale)
     local x=sx+(sw-pw)/2; local y=sy+(sh-ph)/2
     panel(x,y,pw,ph,colors,0.92)
-    local titleFont, bodyFont, smallFont =
-      fontFor(34*scale), fontFor(26*scale), fontFor(19*scale)
-    local pad=16*scale; local header=58*scale; local footer=44*scale
-    drawText(("POKéMON  %d/6"):format(#self.party),titleFont,x+pad,y+12*scale,pw*0.45,"left",colors.text)
+    local titleFont, bodyFont, smallFont = fontFor(34*scale), fontFor(26*scale), fontFor(19*scale)
+    local pad=math.max(10,16*scale)
+    local header=math.max(50*scale,titleFont:getHeight()+18*scale)
+    local footer=math.max(44*scale,smallFont:getHeight()+18*scale)
+    local title=("POKéMON  %d/6"):format(#self.party)
+    local tf=fittedFont(34*scale,title,pw*.56,header*.76)
+    drawText(title,tf,x+pad,y+math.max(6,10*scale),pw*.56,"left",colors.text)
     local prompt = type(self.bottomMessage)=="function" and self:bottomMessage() or "Choose a POKéMON."
-    drawText(prompt,smallFont,x+pw*0.52,y+18*scale,pw*0.44-pad,"right",colors.muted)
+    local pf=fittedFont(19*scale,prompt,pw*.38,header*.60)
+    drawText(prompt,pf,x+pw*.59,y+math.max(8,14*scale),pw*.37-pad,"right",colors.muted)
 
     local contentY=y+header; local contentH=ph-header-footer
-    local listW=pw*0.52; local detailX=x+listW; local detailW=pw-listW
-    color(colors.divider,0.7,true); G.rectangle("fill",detailX,contentY,1,contentH)
-
-    local rows=math.max(6,#self.party)
-    local rowH=contentH/6
-    for i=1,6 do
-      local mon=self.party[i]
-      if mon then
-        local ry=contentY+(i-1)*rowH
-        local selected=self.index==i
-        if selected then
-          color(colors.selected,0.96); G.rectangle("fill",x+6,ry+2,listW-12,rowH-4,5,5)
-          color(colors.accent,nil,true); G.rectangle("fill",x+6,ry+2,3,rowH-4,2,2)
-        end
-        local iconSize=math.min(rowH-8,30*scale)
-        drawIcon(self,mon,x+14*scale,ry+(rowH-iconSize)/2,iconSize,selected)
-        local name=monName(self,mon)
-        local hp=self:shownHpFor(i,mon); local maxHp=mon.maxHp or (mon.stats and mon.stats.hp) or 1
-        drawText(truncate(name,bodyFont,listW*0.42),bodyFont,x+52*scale,ry+7*scale,listW*0.45,"left",colors.text)
-        drawText(("Lv %d"):format(tonumber(mon.level) or 0),smallFont,x+listW*0.66,ry+9*scale,listW*0.13,"right",colors.muted)
-        drawText(("%d/%d"):format(hp or 0,maxHp or 0),smallFont,x+listW*0.80,ry+9*scale,listW*0.17,"right",colors.text)
-        hpBar(x+52*scale,ry+rowH-9*scale,listW-68*scale,5*scale,hp,maxHp,colors)
+    local function rowInfo(mon,i,listX,listW,ry,rowH)
+      local selected=self.index==i
+      if selected then
+        color(colors.selected,0.96); G.rectangle("fill",listX,ry+rowH*.06,listW,rowH*.88,5,5)
+        color(colors.accent,nil,true); G.rectangle("fill",listX,ry+rowH*.06,math.max(2,3*scale),rowH*.88,2,2)
       end
+      local iconSize=math.min(rowH*.74,30*scale)
+      drawIcon(self,mon,listX+8*scale,ry+(rowH-iconSize)/2,iconSize,selected)
+      local tx=listX+iconSize+18*scale
+      local hp=self:shownHpFor(i,mon); local maxHp=mon.maxHp or (mon.stats and mon.stats.hp) or 1
+      local level=("Lv %d"):format(tonumber(mon.level) or 0)
+      local hpText=("%d/%d"):format(hp or 0,maxHp or 0)
+      local infoW=math.max(82*scale,listW*.31)
+      local nameW=math.max(40,listW-(tx-listX)-infoW-8*scale)
+      local nf=fittedFont(26*scale,monName(self,mon),nameW,rowH*.44)
+      local sf=fittedFont(19*scale,level,infoW*.44,rowH*.35)
+      local hf=fittedFont(19*scale,hpText,infoW*.54,rowH*.35)
+      local textY=ry+rowH*.12
+      drawText(monName(self,mon),nf,tx,textY,nameW,"left",colors.text)
+      local infoX=listX+listW-infoW
+      drawText(level,sf,infoX,textY,infoW*.44,"left",colors.muted)
+      local gender=resolvedGender(self,mon)
+      if gender then
+        local symbolSize=math.max(7,sf:getHeight()*.66)
+        local gc=(gender=="male") and {0.28,0.66,1,1} or {1,0.40,0.66,1}
+        local gx=math.min(infoX+infoW*.40,infoX+sf:getWidth(level)+5*scale)
+        genderSymbol(gx,textY+sf:getHeight()*.50,symbolSize,gender,gc)
+      end
+      drawText(hpText,hf,infoX+infoW*.43,textY,infoW*.55,"right",colors.text)
+      hpBar(tx,ry+rowH*.76,listW-(tx-listX)-8*scale,math.max(3,5*scale),hp,maxHp,colors)
     end
 
     local selected = self.party[math.max(1,math.min(#self.party,self.index or 1))]
-    if selected then
-      local name,def=monName(self,selected)
-      local px=detailX+pad; local py=contentY+pad
-      local portrait,portraitColors=preview(self,selected)
-      local portraitBox=88*scale
-      if portrait then
-        local iw,ih=portrait:getDimensions(); local s=math.min(portraitBox/iw,portraitBox/ih)
-        local dx=px+(portraitBox-iw*s)/2
-        local dy=py+portraitBox-ih*s
-        local function drawPortrait()
-          color({1,1,1,1}); G.draw(portrait,dx,dy,0,s,s)
-        end
-        if portraitColors and okGbc and type(GbcPalette)=="table"
-            and type(GbcPalette.with)=="function" and type(GbcPalette.available)=="function"
-            and GbcPalette.available() then
-          GbcPalette.with(portraitColors,drawPortrait)
-        else
-          drawPortrait()
-        end
-      end
-      local tx=px+portraitBox+10*scale
-      drawText(name,bodyFont,tx,py,detailW-(tx-detailX)-pad,"left",colors.text)
-      local levelText=("Lv %d"):format(tonumber(selected.level) or 0)
-      local levelY=py+30*scale
-      drawText(levelText,smallFont,tx,levelY,140*scale,"left",colors.muted)
-      local gender=resolvedGender(self,selected)
-      if gender=="male" or gender=="female" then
-        local symbolSize=smallFont:getHeight()*.78
-        local gx=tx+smallFont:getWidth(levelText)+6*scale+symbolSize*.36
-        local gy=levelY+smallFont:getHeight()*.50
-        local gc=(gender=="male") and {0.28,0.66,1,1} or {1,0.40,0.66,1}
-        genderSymbol(gx,gy,symbolSize,gender,gc)
-      end
-      local types=def and def.types or {}
-      drawText(table.concat(types or {}, " / "),smallFont,tx,py+52*scale,detailW-(tx-detailX)-pad,"left",colors.accent)
-
-      local hp=selected.hp or 0; local maxHp=selected.maxHp or (selected.stats and selected.stats.hp) or 1
-      hpBar(tx,py+78*scale,detailW-(tx-detailX)-pad,7*scale,hp,maxHp,colors)
-      drawText(("%d/%d"):format(hp,maxHp),smallFont,tx,py+89*scale,detailW-(tx-detailX)-pad,"left",colors.text)
-
-      -- Gen 2 has five non-HP battle stats.  Party records normally carry
-      -- attack/defense/speed/specialAttack/specialDefense, but imported or
-      -- older records can arrive with aliases or an incomplete cached block.
-      -- Resolve aliases first, then recompute from the native Gen 2 formula
-      -- without mutating the saved Pokémon so the detail pane never shows a
-      -- misleading dash for Speed / Sp. Atk / Sp. Def.
-      local stats=selected.stats or {}
-      local computed=nil
+    local function selectedStats(mon,def)
+      local stats=mon.stats or {}; local computed=nil
       local function stat(...)
         local keys={...}
-        for _,key in ipairs(keys) do
-          local v=stats[key]
-          if tonumber(v)~=nil then return tonumber(v) end
-        end
-        for _,key in ipairs(keys) do
-          local v=selected[key]
-          if tonumber(v)~=nil then return tonumber(v) end
-        end
-        if computed==nil and def and def.baseStats and selected.dvs then
-          local okMon,Gen2Mon=pcall(require,"src.battle.gen2.Mon")
-          if okMon and Gen2Mon and type(Gen2Mon.stats)=="function" then
-            local okCalc,value=pcall(Gen2Mon.stats,def.baseStats,selected.dvs,
-              tonumber(selected.level) or 1,selected.statExp)
+        for _,key in ipairs(keys) do local v=stats[key]; if tonumber(v)~=nil then return tonumber(v) end end
+        for _,key in ipairs(keys) do local v=mon[key]; if tonumber(v)~=nil then return tonumber(v) end end
+        if computed==nil and def and def.baseStats and mon.dvs then
+          if okGen2Mon and Gen2Mon and type(Gen2Mon.stats)=="function" then
+            local okCalc,value=pcall(Gen2Mon.stats,def.baseStats,mon.dvs,tonumber(mon.level) or 1,mon.statExp)
             computed=okCalc and type(value)=="table" and value or false
-          else
-            computed=false
-          end
+          else computed=false end
         end
         if type(computed)=="table" then
-          for _,key in ipairs(keys) do
-            local v=computed[key]
-            if tonumber(v)~=nil then return tonumber(v) end
-          end
+          for _,key in ipairs(keys) do local v=computed[key]; if tonumber(v)~=nil then return tonumber(v) end end
         end
         return "—"
       end
+      return stat("attack","atk"),stat("defense","def"),stat("speed","spe"),
+        stat("specialAttack","spAttack","spAtk","spa","special"),
+        stat("specialDefense","spDefense","spDef","spd","special")
+    end
 
-      local atk=stat("attack","atk")
-      local defStat=stat("defense","def")
-      local speed=stat("speed","spe")
-      local spAtk=stat("specialAttack","spAttack","spAtk","spa","special")
-      local spDef=stat("specialDefense","spDefense","spDef","spd","special")
-      local sy2=py+portraitBox+16*scale
-      -- Give the five Gen 2 battle stats room to breathe.  The compact Party
-      -- window still has plenty of horizontal and vertical space in the
-      -- detail pane, so keep two clearly separated columns and increase the
-      -- row pitch instead of packing the labels together.
-      local statLeft=detailW*0.38
-      local statRightX=px+detailW*0.58
-      local statRightW=detailW*0.34
-      local statStep=22*scale
-      drawText("ATK "..tostring(atk),smallFont,px,sy2,statLeft,"left",colors.muted)
-      drawText("SP.ATK "..tostring(spAtk),smallFont,statRightX,sy2,statRightW,"left",colors.muted)
-      drawText("DEF "..tostring(defStat),smallFont,px,sy2+statStep,statLeft,"left",colors.muted)
-      drawText("SP.DEF "..tostring(spDef),smallFont,statRightX,sy2+statStep,statRightW,"left",colors.muted)
-      drawText("SPEED "..tostring(speed),smallFont,px,sy2+statStep*2,statLeft,"left",colors.muted)
+    if portrait then
+      local listH=contentH*.54
+      local listX=x+pad*.55; local listW=pw-pad*1.10
+      local rowH=listH/6
+      for i=1,6 do local mon=self.party[i]; if mon then rowInfo(mon,i,listX,listW,contentY+(i-1)*rowH,rowH) end end
+      local detailY=contentY+listH+math.max(6,8*scale)
+      local detailH=y+ph-footer-detailY
+      color(colors.divider,0.65,true); G.rectangle("fill",x+pad,detailY-4*scale,pw-pad*2,1)
+      if selected then
+        local name,def=monName(self,selected)
+        local previewSize=math.min(detailH*.43,pw*.22)
+        local px=x+pad; local py=detailY+6*scale
+        local portraitImg,portraitColors=preview(self,selected)
+        if portraitImg then
+          local iw,ih=portraitImg:getDimensions(); local ss=math.min(previewSize/iw,previewSize/ih)
+          local dx=px+(previewSize-iw*ss)/2; local dy=py+previewSize-ih*ss
+          local function drawPortrait() color({1,1,1,1}); G.draw(portraitImg,dx,dy,0,ss,ss) end
+          if portraitColors and okGbc and GbcPalette and type(GbcPalette.with)=="function" and GbcPalette.available() then GbcPalette.with(portraitColors,drawPortrait) else drawPortrait() end
+        end
+        local infoX=px+previewSize+10*scale; local infoW=x+pw-pad-infoX
+        local nf=fittedFont(27*scale,name,infoW)
+        drawText(name,nf,infoX,py,infoW,"left",colors.text)
+        local levelText=("Lv %d"):format(tonumber(selected.level) or 0)
+        local lf=fittedFont(18*scale,levelText,infoW*.40)
+        drawText(levelText,lf,infoX,py+nf:getHeight()+3*scale,infoW*.40,"left",colors.muted)
+        local gender=resolvedGender(self,selected)
+        if gender then
+          local symbolSize=lf:getHeight()*.74
+          local gc=(gender=="male") and {0.28,0.66,1,1} or {1,0.40,0.66,1}
+          genderSymbol(infoX+lf:getWidth(levelText)+6*scale,py+nf:getHeight()+3*scale+lf:getHeight()*.5,symbolSize,gender,gc)
+        end
+        local types=def and def.types or {}
+        local typeText=table.concat(types or {}," / ")
+        drawText(typeText,fittedFont(18*scale,typeText,infoW),infoX,py+nf:getHeight()+lf:getHeight()+8*scale,infoW,"left",colors.accent)
+        local hp=selected.hp or 0; local maxHp=selected.maxHp or (selected.stats and selected.stats.hp) or 1
+        hpBar(infoX,py+previewSize*.70,infoW,math.max(4,6*scale),hp,maxHp,colors)
+        local hpText=("%d/%d"):format(hp,maxHp)
+        drawText(hpText,fittedFont(18*scale,hpText,infoW),infoX,py+previewSize*.70+8*scale,infoW,"left",colors.text)
 
-      local my=sy2+statStep*3+6*scale
-      for i,m in ipairs(selected.moves or {}) do
-        if i>4 then break end
-        local pp=tonumber(m.pp) or 0
-        local maxpp=(self.moves and self.moves[m.id] and self.moves[m.id].pp) or pp
-        drawText(moveName(self,m),smallFont,px,my+(i-1)*24*scale,detailW*0.58,"left",colors.text)
-        drawText(("PP %d/%d"):format(pp,maxpp),smallFont,px+detailW*0.58,my+(i-1)*24*scale,detailW*0.33,"right",colors.muted)
+        local bottomY=py+previewSize+8*scale
+        local bottomH=math.max(1,detailY+detailH-bottomY)
+        local statsW=(pw-pad*2)*.43
+        local movesX=x+pad+statsW+10*scale; local movesW=x+pw-pad-movesX
+        local atk,defStat,speed,spAtk,spDef=selectedStats(selected,def)
+        local statRows={{"ATK",atk,"SP.ATK",spAtk},{"DEF",defStat,"SP.DEF",spDef},{"SPEED",speed,"",""}}
+        local step=bottomH/3
+        for i,r in ipairs(statRows) do
+          local yy=bottomY+(i-1)*step
+          local a=tostring(r[1]).." "..tostring(r[2]); local b=r[3]~="" and (tostring(r[3]).." "..tostring(r[4])) or ""
+          drawText(a,fittedFont(17*scale,a,statsW*.48,step*.8),x+pad,yy,statsW*.48,"left",colors.muted)
+          if b~="" then drawText(b,fittedFont(17*scale,b,statsW*.48,step*.8),x+pad+statsW*.51,yy,statsW*.48,"left",colors.muted) end
+        end
+        local moves=selected.moves or {}; local moveStep=bottomH/4
+        for i=1,4 do
+          local m=moves[i]; if m then
+            local mn=moveName(self,m); local pp=tonumber(m.pp) or 0; local maxpp=(self.moves and self.moves[m.id] and self.moves[m.id].pp) or pp
+            local ppText=("PP %d/%d"):format(pp,maxpp)
+            local yy=bottomY+(i-1)*moveStep
+            local mnW=movesW*.62; local ppW=movesW*.36
+            drawText(mn,fittedFont(17*scale,mn,mnW,moveStep*.85),movesX,yy,mnW,"left",colors.text)
+            drawText(ppText,fittedFont(15*scale,ppText,ppW,moveStep*.85),movesX+mnW,yy,ppW,"right",colors.muted)
+          end
+        end
+      end
+    else
+      local listW=pw*.52; local detailX=x+listW; local detailW=pw-listW
+      color(colors.divider,0.7,true); G.rectangle("fill",detailX,contentY,1,contentH)
+      local rowH=contentH/6
+      for i=1,6 do local mon=self.party[i]; if mon then rowInfo(mon,i,x+6*scale,listW-12*scale,contentY+(i-1)*rowH,rowH) end end
+      if selected then
+        local name,def=monName(self,selected); local px=detailX+pad; local dw=detailW-pad*2
+        local previewSize=math.min(dw*.42,contentH*.31)
+        local portraitImg,portraitColors=preview(self,selected)
+        if portraitImg then
+          local iw,ih=portraitImg:getDimensions(); local ss=math.min(previewSize/iw,previewSize/ih)
+          local dx=px+(previewSize-iw*ss)/2; local dy=contentY+pad+previewSize-ih*ss
+          local function drawPortrait() color({1,1,1,1}); G.draw(portraitImg,dx,dy,0,ss,ss) end
+          if portraitColors and okGbc and GbcPalette and type(GbcPalette.with)=="function" and GbcPalette.available() then GbcPalette.with(portraitColors,drawPortrait) else drawPortrait() end
+        end
+        local infoX=px+previewSize+8*scale; local infoW=detailX+detailW-pad-infoX
+        drawText(name,fittedFont(25*scale,name,infoW),infoX,contentY+pad,infoW,"left",colors.text)
+        local levelText=("Lv %d"):format(tonumber(selected.level) or 0)
+        local levelFont=fittedFont(17*scale,levelText,infoW*.5)
+        local levelY=contentY+pad+30*scale
+        drawText(levelText,levelFont,infoX,levelY,infoW*.5,"left",colors.muted)
+        local gender=resolvedGender(self,selected)
+        if gender then
+          local symbolSize=math.max(7,levelFont:getHeight()*.74)
+          local gc=(gender=="male") and {0.28,0.66,1,1} or {1,0.40,0.66,1}
+          genderSymbol(infoX+levelFont:getWidth(levelText)+6*scale,
+            levelY+levelFont:getHeight()*.50,symbolSize,gender,gc)
+        end
+        local types=def and def.types or {}; local typeText=table.concat(types or {}," / ")
+        drawText(typeText,fittedFont(17*scale,typeText,infoW),infoX,contentY+pad+52*scale,infoW,"left",colors.accent)
+        local hp=selected.hp or 0; local maxHp=selected.maxHp or (selected.stats and selected.stats.hp) or 1
+        hpBar(infoX,contentY+pad+77*scale,infoW,math.max(4,6*scale),hp,maxHp,colors)
+        local hpText=("%d/%d"):format(hp,maxHp)
+        drawText(hpText,fittedFont(17*scale,hpText,infoW),infoX,contentY+pad+87*scale,infoW,"left",colors.text)
+        local statsY=contentY+math.max(previewSize+22*scale,125*scale)
+        local movesY=contentY+contentH*.62
+        local atk,defStat,speed,spAtk,spDef=selectedStats(selected,def)
+        local statLines={{"ATK "..atk,"SP.ATK "..spAtk},{"DEF "..defStat,"SP.DEF "..spDef},{"SPEED "..speed,""}}
+        local statStep=math.max(18*scale,(movesY-statsY)/3)
+        for i,r in ipairs(statLines) do
+          local yy=statsY+(i-1)*statStep
+          drawText(r[1],fittedFont(16*scale,r[1],dw*.47,statStep*.85),px,yy,dw*.47,"left",colors.muted)
+          if r[2]~="" then drawText(r[2],fittedFont(16*scale,r[2],dw*.47,statStep*.85),px+dw*.52,yy,dw*.47,"left",colors.muted) end
+        end
+        local moves=selected.moves or {}; local moveH=math.max(1,(contentY+contentH-movesY)/4)
+        for i=1,4 do local m=moves[i]; if m then
+          local mn=moveName(self,m); local pp=tonumber(m.pp) or 0; local maxpp=(self.moves and self.moves[m.id] and self.moves[m.id].pp) or pp
+          local ppText=("PP %d/%d"):format(pp,maxpp); local yy=movesY+(i-1)*moveH
+          drawText(mn,fittedFont(16*scale,mn,dw*.60,moveH*.85),px,yy,dw*.60,"left",colors.text)
+          drawText(ppText,fittedFont(14*scale,ppText,dw*.36,moveH*.85),px+dw*.62,yy,dw*.36,"right",colors.muted)
+        end end
       end
     end
 
-    local footerY = y + ph - footer
-    drawText("Choose a POKéMON.",smallFont,x+pad,
-      footerY + (footer-smallFont:getHeight())*0.50,
-      pw*0.60,"left",colors.muted)
-    local cancelSelected=self:isCancel()
-    local cancelH=footer-8*scale
-    local cancelY=footerY+4*scale
-    if cancelSelected then
-      color(colors.selected); G.rectangle("fill",x+pw-150*scale,cancelY,126*scale,cancelH,5,5)
-    end
-    drawText("CANCEL",bodyFont,x+pw-150*scale,
-      cancelY+(cancelH-bodyFont:getHeight())*0.50,126*scale,"center",
-      cancelSelected and colors.text or colors.muted)
+    local footerY=y+ph-footer
+    color(colors.divider,0.55,true); G.rectangle("fill",x+pad,footerY,pw-pad*2,1)
+    local footPrompt=fittedFont(18*scale,prompt,pw*.58,footer*.72)
+    drawText(prompt,footPrompt,x+pad,footerY+(footer-footPrompt:getHeight())*.50,pw*.58,"left",colors.muted)
+    local cancelSelected=self:isCancel(); local cancelW=math.min(140*scale,pw*.24); local cancelX=x+pw-pad-cancelW
+    if cancelSelected then color(colors.selected); G.rectangle("fill",cancelX,footerY+4*scale,cancelW,footer-8*scale,5,5) end
+    local cf=fittedFont(23*scale,"CANCEL",cancelW-8*scale,footer*.70)
+    drawText("CANCEL",cf,cancelX,footerY+(footer-cf:getHeight())*.50,cancelW,"center",cancelSelected and colors.text or colors.muted)
 
     if self.submenu and type(self.submenu.items)=="table" then
-      local count=#self.submenu.items; local row=25*scale
-      local mw=180*scale; local mh=count*row+16*scale
-      local mx=x+pw-mw-18*scale; local my=y+ph-mh-18*scale
+      local count=#self.submenu.items; local row=math.max(25*scale,bodyFont:getHeight()+8*scale)
+      local mw=math.min(220*scale,pw*.48); local mh=count*row+16*scale
+      local mx=x+pw-mw-pad; local my=math.max(y+header,y+ph-mh-footer)
       panel(mx,my,mw,mh,colors,0.98)
       for i,item in ipairs(self.submenu.items) do
-        local yy=my+8*scale+(i-1)*row
-        local textH=bodyFont:getHeight()
-        local textY=yy+(row-textH)*0.50
-        if i==self.submenu.index then
-          -- Keep the selection bar centered on the row/text instead of
-          -- starting at the row's top edge. This mirrors the main party list
-          -- highlight and stays centered when UI/font scale changes.
-          local highlightH=math.min(row-4*scale,textH+8*scale)
-          local highlightY=yy+(row-highlightH)*0.50
-          color(colors.selected)
-          G.rectangle("fill",mx+7*scale,highlightY,mw-14*scale,highlightH,4,4)
-        end
-        drawText(item.label or item.id or "?",bodyFont,mx+14*scale,textY,mw-28*scale,"left",
-          i==self.submenu.index and colors.text or colors.muted)
+        local yy=my+8*scale+(i-1)*row; local sf=fittedFont(22*scale,item.label or item.id or "?",mw-28*scale,row*.75)
+        if i==self.submenu.index then color(colors.selected); G.rectangle("fill",mx+7*scale,yy+2*scale,mw-14*scale,row-4*scale,4,4) end
+        drawText(item.label or item.id or "?",sf,mx+14*scale,yy+(row-sf:getHeight())*.50,mw-28*scale,"left",i==self.submenu.index and colors.text or colors.muted)
       end
     end
   end
