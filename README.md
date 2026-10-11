@@ -1,4 +1,4 @@
-# Kanto in Motion v1.7.4
+# Kanto in Motion v1.7.5
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -9,6 +9,17 @@ It supports:
 - **Pokémon FireRed / LeafGreen / Ruby / Sapphire / Emerald** — National Dex #001–386
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
+
+## What’s new in v1.7.5
+
+v1.7.5 focuses on **independent Start Menu customization across all three generations**, with additional Gen 1 Pokémon summary presentation improvements and Gen 2 Save Game/mobile UI refinements.
+
+- **START MENU UI SIZE (Gen 1 / Gen 2 / Gen 3):** new independent 60%–200% control (default 100%) for sizing the in-game Start Menu panel, rows, and layout without changing other Modern UI screens.
+- **START MENU TEXT SIZE (Gen 1 / Gen 2 / Gen 3):** new independent 60%–200% control (default 100%) for the Start Menu title, entries, and hints. Text is fitted to available space.
+- **Gen 1 Pokémon Status/Summary:** reorganized the Pokémon artwork, name, level, HP, stats, and moves into a more readable structured layout inspired by Gen 2's information panel. The Party Menu remains unchanged.
+- **Gen 2 Save Game presentation:** repaired missing rendering helpers that could leave the Modern Save Game panel blank and improved its mobile panel sizing behavior. The native save operation remains game-owned.
+- **PC and mobile:** Start Menu layout and text customization work independently and are bounded by the available viewport.
+- **Existing features retained:** includes the v1.7.4 Gen 2 battle layout and sprite fixes, OG/WIDE battle interface, and Gen 2/Gen 3 Pixel Frame alignment updates.
 
 ## What’s new in v1.7.4
 
@@ -154,6 +165,8 @@ Open **KANTO IN MOTION** from the mod settings screen. On **Red / Blue / Yellow*
 | **MENU SPRITES** | KIM HD / VANILLA | KIM HD | Chooses KIM's HD animated menu Pokémon or yields supported Gen 1 menu Pokémon surfaces back to Gen1Recomp/compatible sprite providers such as Crystal Animated Sprites. Independent from POKEMON ICONS and BATTLE SPRITES. |
 | **POKEMON ICONS** | ON / OFF | ON | Uses KIM's HD Pokémon icons in party and other native icon slots. OFF yields icon presentation to the game or another compatible icon provider such as HGSS_SPRITES. |
 | **INTEGRATED MODERN UI** | ON / OFF | ON | Enables KIM's customized Gen 1 Modern UI presentation. |
+| **START MENU UI SIZE** | 60%–200% | 100% | Resizes only the in-game Start Menu panel and layout independently of overall UI scale; bounded on mobile. |
+| **START MENU TEXT SIZE** | 60%–200% | 100% | Resizes only Start Menu titles, entries, and hints independently of Start Menu UI Size and overall font scale. |
 | **ANIMATION** | ON / OFF | ON | Enables animated Pokémon playback and supported animated trainer presentation. OFF holds supported animated art on its first frame. |
 | **TITLE SCREEN** | ON / OFF | ON | Enables KIM's animated title-screen Pokémon presentation. |
 | **TITLE TRAINER** | ANIMATED / ORIGINAL GEN 1 | ANIMATED | Chooses KIM's animated Red title trainer or Gen1Recomp's original title trainer. |
@@ -220,6 +233,8 @@ These controls are grouped under **KANTO IN MOTION → UI SETTINGS**. They mirro
 | **UI DENSITY** | AUTO / COMPACT / COMFORTABLE | AUTO | Adjusts panel spacing and row height. |
 | **UI SCALE** | AUTO; 75%–150% in 5% steps; 175%–400% in 25% steps | 100% | Scales Gen 2 Modern UI panels and control spacing. 100% is calibrated to the cleaner Gen 1-like footprint. |
 | **FONT SCALE** | AUTO; 80%–200% in 5% steps | 100% | Scales Modern UI title, body, caption, value, and hint text independently of panel size. Settings/list layouts adapt their row and footer spacing to larger fonts. |
+| **START MENU UI SIZE** | 60%–200% | 100% | Resizes only the in-game Start Menu panel and layout independently of overall UI scale; bounded on mobile. |
+| **START MENU TEXT SIZE** | 60%–200% | 100% | Resizes only Start Menu titles, entries, and hints independently of Start Menu UI Size and overall font scale. |
 | **PIXEL ART FONT** | ON / OFF | OFF | ON uses the Plain Pixel font. OFF uses the normal scalable system font, matching the cleaner Gen 1-style presentation. |
 | **DIALOGUE TEXT SCALE** | INHERIT / 110% / 125% / 150% / 175% / 200% | INHERIT | Boosts dialogue, choices, quantities, and confirmation text separately from general font scale. |
 | **LAYOUT STYLE** | ADAPTIVE / FLOATING / FULL SCREEN | ADAPTIVE | Chooses responsive/floating cards or a larger full-screen presentation. |
@@ -291,6 +306,8 @@ Gen 3 keeps **Game3 gameplay/state ownership native** while KIM supplies the opt
 | **UI THEME** | GEN1 MODERN / CLASSIC MONO / CRIMSON / CRIMSON GLASS / MODERN GLASS / POCKET GREEN / MIDNIGHT / MIDNIGHT GLASS / FROST / LIGHT / DARK | GEN1 MODERN | Chooses the palette used across Gen 3 Modern UI. |
 | **UI SCALE** | AUTO; 75%–150% in 5% steps; 175%–400% in 25% steps | 100% | Scales non-battle Modern UI panels/control spacing. Battle UI has its own size control. |
 | **FONT SCALE** | AUTO; 80%–200% in 5% steps | 100% | Scales Modern UI text independently of panel size. |
+| **START MENU UI SIZE** | 60%–200% | 100% | Resizes only the in-game Start Menu panel and layout independently of overall UI scale; bounded on mobile. |
+| **START MENU TEXT SIZE** | 60%–200% | 100% | Resizes only Start Menu titles, entries, and hints independently of Start Menu UI Size and overall font scale. |
 | **PIXEL ART FONT** | ON / OFF | OFF | Uses the Plain Pixel font where available; OFF uses the normal scalable system font. |
 | **UI FRAME STYLE** | THEME / PIXEL / SOFT / PLAIN | PIXEL | Chooses the Modern UI panel border treatment. |
 | **PIXEL FRAME** | FRAME 1 / FRAME 2 / FRAME 3 | FRAME 2 | Selects the decorative PNG border surrounding Modern UI panels when UI FRAME STYLE is PIXEL. |
@@ -467,3 +484,8 @@ For **Battle Art Voxel Gen2 2.1.x**, KIM supplies higher-resolution 4x G/S/C HD 
 When **3D-BTL** is active, KIM keeps the actual native G/S/C HP/status HUD. The live enemy and player HUD bands are captured during Battle Art's widescreen render pass and placed toward the outside-left and outside-right of the 3D battlefield rather than remaining over the centered 160×144 battle area. Native HP/status/EXP, party-ball timing, caught-state behavior, battle logic, trainers, and move timing remain source-owned.
 
 Battle Art's arena, camera, lighting, world geometry, and move effects remain Battle Art-owned; KIM does not modify Battle Art files. Fully closing and restarting Gen1Recomp after replacing either compatibility mod is recommended so old Lua modules are not left resident in the launcher process.
+
+
+### Independent Start Menu controls (Gen 1 / Gen 2 / Gen 3)
+
+Each generation offers **START MENU UI SIZE** and **START MENU TEXT SIZE** (both 60%–200%, default 100%). Window sizing and typography are independent from each other and from the overall UI/font controls. These options affect the in-game Start Menu only, not Party, Bag, Summary, or other Modern UI panels. On smaller mobile screens the panel and text are constrained to the available space.

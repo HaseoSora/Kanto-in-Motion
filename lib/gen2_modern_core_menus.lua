@@ -163,6 +163,14 @@ return function(mod)
     if Style and Style.uiScale then return Style.uiScale(sw,sh) end
     return math.max(.88,math.min(1.42,(sh or 720)/760))
   end
+  -- Only the in-game Gen 2 Start Menu uses this scale. It deliberately does
+  -- not read uiScale(), so overall UI SCALE cannot change the Start card.
+  local function startMenuScale()
+    local pct=math.max(60,math.min(200,tonumber(opt("startMenuScale","100")) or 100))
+    local scale=(pct/100)*.78
+    if opt("minimalUi",false)==true then scale=scale*.90 end
+    return scale,pct/100
+  end
   local function density()
     return Style and Style.density and Style.density() or 1
   end
@@ -438,17 +446,17 @@ return function(mod)
   local function drawStart(s)
     pruneStartMapRow(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
-    local scale=uiScale(sw,sh); local den=density()
+    local scale,startRatio=startMenuScale(); local den=density()
     local rows=s.items or {}; local count=#rows
     local portrait=mobilePortrait(sw,sh)
     local mobile=mobileHost()
-    local w=math.min(520*scale,sw*.44)
+    local w=math.min(520*scale,sw*math.min(.80,.44*startRatio))
     if portrait then
       -- Phone portrait needs a wider side card. The old 44% desktop width
       -- forced labels such as POKéGEAR to wrap when FONT SCALE was raised.
-      w=math.min(sw*.68,640*scale)
+      w=math.min(sw*math.min(.94,.68*startRatio),640*scale)
     elseif mobile then
-      w=math.max(w,math.min(sw*.52,650*scale))
+      w=math.max(w,math.min(sw*math.min(.88,.52*startRatio),650*scale))
     end
     local naturalRh=60*scale*den
     local h=math.min(sh*.88,94*scale+math.min(count,9)*naturalRh+76*scale)
@@ -461,7 +469,10 @@ return function(mod)
     local inset=(tonumber(opt("startMenuInset","0")) or 0)/100
     local x=sx+sw-w-28*scale-(sw-w)*inset; local y=sy+(sh-h)/2
     panel(x,y,w,h,c,.95)
-    local big, body, small = font(40*scale), font(31*scale), font(23*scale)
+    local textRatio=math.max(.60,math.min(2.0,
+      (tonumber(opt("startMenuTextScale","100")) or 100)/100))
+    local big, body, small = font(40*scale*textRatio),
+      font(31*scale*textRatio), font(23*scale*textRatio)
     text("START",big,x+18*scale,y+15*scale,w-36*scale,"left",c.text)
     local index=(s.list and tonumber(s.list.index)) or 1
 
@@ -497,7 +508,7 @@ return function(mod)
       if tostring(row.value or row.id or ""):lower() == "pokegear" then
         label = "POKéGEAR"
       end
-      local rowFont=fittedFont(31*scale,label,w-56*scale)
+      local rowFont=fittedFont(31*scale*textRatio,label,w-56*scale)
       text(label,rowFont,x+28*scale,centeredTextY(barY,barH,rowFont),w-56*scale,"left",i==index and c.text or c.muted)
     end
     local row=rows[index]; local desc=row and row.desc or {}
@@ -1838,12 +1849,60 @@ return function(mod)
     text(footerText,ff,x+pad,fy+(footerH-ff:getHeight())*.5,w-pad*2,"center",c.muted)
   end
 
+  -- Gen 2's SaveMenu remains responsible for writing saves and processing
+  -- YES/NO input. These helpers only read its live data for presentation.
+  local function saveSummary(s)
+    local summary=titleSaveSummary(s)
+    if type(summary)=="table" then return summary end
+    return {name="GOLD",badges=0,caught=0,hours=0,minutes=0}
+  end
+
+  local function savePromptLines(s)
+    -- Native SaveMenu exposes its current text via prompt() on supported
+    -- engine builds. Do not let an absent method blank the entire UI.
+    local raw
+    if s and type(s.prompt)=="function" then
+      local ok,value=pcall(s.prompt,s)
+      if ok then raw=value end
+    end
+    if raw==nil and s and type(s.message)=="function" then
+      local ok,value=pcall(s.message,s)
+      if ok then raw=value end
+    end
+    if raw==nil and s then raw=s.promptText or s.messageText end
+    local lines={}
+    if type(raw)=="table" then
+      for _,v in ipairs(raw) do
+        if type(v)=="string" or type(v)=="number" then
+          lines[#lines+1]=normalizeUiText(v)
+        end
+      end
+    elseif type(raw)=="string" then
+      for line in raw:gmatch("[^\n]+") do
+        lines[#lines+1]=normalizeUiText(line)
+      end
+    end
+    if #lines==0 then
+      local phase=tostring(s and s.phase or "confirm")
+      if phase=="saving" then lines={"Saving your progress..."}
+      elseif phase=="done" then
+        lines={s and s.saved and "Your progress was saved." or "Unable to save game."}
+      elseif phase=="overwrite" then lines={"Overwrite the saved game?"}
+      else lines={"Would you like to save the game?"} end
+    end
+    return lines
+  end
+
   local function drawSave(s)
     local c=theme(); local sx,sy,sw,sh=playfield()
-    local scale=uiScale(sw,sh); local den=density()
-    local w=math.min(980*scale,sw*.70)
-    local h=math.min(610*scale,sh*.80)
-    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/980,h/610) end
+    local requestedScale=uiScale(sw,sh)
+    local den=density()
+    -- Resize the entire Save panel with UI SCALE rather than scaling fonts
+    -- against a fixed-width mobile container. Fit all authored contents.
+    local w=math.min(980*requestedScale,sw*.94)
+    local h=math.min(610*requestedScale,sh*.86)
+    if layoutStyle()=="full" then w=sw*.94; h=sh*.92 end
+    local scale=math.min(w/980,h/610)
     local x=sx+(sw-w)/2; local y=sy+(sh-h)/2
     panel(x,y,w,h,c,.97)
 

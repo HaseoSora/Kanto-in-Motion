@@ -84,6 +84,18 @@ return function(mod)
       description = "Use Modern UI for Gen 3 Party, Pokédex, Summary and Pokémon stat screens." },
     { key = "gen3ManagerUi", label = "MOD MANAGER UI", type = "toggle", default = true,
       description = "Use Modern UI presentation for Kanto in Motion and supported mod settings screens." },
+    { key = "gen3StartMenuScale", label = "START MENU UI SIZE", type = "choice", default = "100", choices = { { "60%", "60" }, { "70%", "70" }, { "80%", "80" },
+          { "90%", "90" }, { "100%", "100" }, { "110%", "110" },
+          { "120%", "120" }, { "130%", "130" }, { "140%", "140" },
+          { "150%", "150" }, { "175%", "175" }, { "200%", "200" } },
+      description = "Resize the Gen 3 Start Menu panel, entries and fonts independently from UI SCALE. Limited by screen edges." },
+
+    { key = "gen3StartMenuTextScale", label = "START MENU TEXT SIZE", type = "choice",
+      default = "100", choices = { { "60%", "60" }, { "70%", "70" }, { "80%", "80" },
+          { "90%", "90" }, { "100%", "100" }, { "110%", "110" },
+          { "120%", "120" }, { "130%", "130" }, { "140%", "140" },
+          { "150%", "150" }, { "175%", "175" }, { "200%", "200" } },
+      description = "Scale only the in-game Start Menu text independently of START MENU UI SIZE and overall FONT SCALE. Text is fitted to its row when necessary." },
     { key = "gen3StartMenuFastJump", label = "START MENU FAST JUMP", type = "toggle", default = true,
       description = "Let left/right directional presses jump five rows in the Gen 3 Start Menu." },
     { key = "gen3StartMenuInset", label = "SIDE MENU INSET", type = "choice", default = "50", choices = {

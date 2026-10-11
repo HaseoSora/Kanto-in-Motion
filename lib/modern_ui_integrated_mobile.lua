@@ -3449,6 +3449,18 @@ return function(mod)
       choices = runtime.extendedPercentChoices(UI_SCALE_MIN_PERCENT,
         UI_AUTO_LEGACY_CEILING_PERCENT, UI_SCALE_MAX_PERCENT, true),
       default = "100" },
+    { key = "startMenuScale", label = "START MENU UI SIZE", type = "choice",
+      description = "Resize only the Gen 1 in-game Start Menu panel and rows independently from UI SCALE. Screen boundaries constrain its size.",
+      choices = { { "60%", "60" }, { "70%", "70" }, { "80%", "80" },
+          { "90%", "90" }, { "100%", "100" }, { "110%", "110" },
+          { "120%", "120" }, { "130%", "130" }, { "140%", "140" },
+          { "150%", "150" }, { "175%", "175" }, { "200%", "200" } }, default = "100" },
+    { key = "startMenuTextScale", label = "START MENU TEXT SIZE", type = "choice",
+      description = "Adjust only the Start Menu heading, entries and hints independently from its UI SIZE.",
+      choices = { { "60%", "60" }, { "70%", "70" }, { "80%", "80" },
+          { "90%", "90" }, { "100%", "100" }, { "110%", "110" },
+          { "120%", "120" }, { "130%", "130" }, { "140%", "140" },
+          { "150%", "150" }, { "175%", "175" }, { "200%", "200" } }, default = "100" },
     { key = "fontScale", label = "FONT SCALE", type = "choice",
       description = "Scale title, body, caption, value, and hint text manually from 80% to 200%, or choose AUTO for responsive sizing up to 200%.",
       choices = FONT_SCALE_CHOICES, default = "100" },
@@ -9448,6 +9460,156 @@ return function(mod)
     -- tracker or its private draw implementation.
     local isDvPage = state.page == 3 or state.page == "dvs"
       or state.view == "dvs" or state.dvsPage == true
+    -- v173: Gen 1 Summary-only layout. Modelled on Gen 2's selected-Pokemon
+    -- details card. PartyMenu itself is deliberately not modified.
+    -- Keep extension / DV Tracker pages on their original presentation path.
+    if not isDvPage then
+      local panelH, px, py = envelope.h, envelope.x, envelope.y
+      local colors = theme.colors
+      local compact = panelW < 620
+      local titleFont = font(fontCache, theme.typography.title * (compact and 0.82 or 0.95))
+      local bodyFont = font(fontCache, theme.typography.body * (compact and 0.78 or 0.92))
+      local smallFont = font(fontCache, theme.typography.caption * (compact and 0.90 or 1.0))
+      local captionFont = font(fontCache, theme.typography.caption)
+      local pad = math.max(10, spacing.lg)
+      local ix, iw = px + pad, math.max(120, panelW - 2 * pad)
+      local footerH = math.max(22, textHeight(captionFont) + spacing.md)
+      local top = py + pad
+      local bottom = py + panelH - footerH - spacing.sm
+      local available = math.max(160, bottom - top)
+      local heroH = math.min(available * 0.46, math.max(104, available * 0.40))
+      local spriteW = math.min(heroH * 0.92, iw * 0.29)
+      local sx, sy = ix, top
+      local infoX = sx + spriteW + spacing.md
+      local infoW = math.max(70, ix + iw - infoX)
+      local summarySprite = crystalAnimatedStateSprite(game, state, mon,
+        "sprite", "spriteTrueColor")
+        or spriteFor(game, mon, state.sprite, "summary")
+      local stats = mon.stats or {}
+      local maxHp = math.max(1, tonumber(stats.hp or mon.maxHp or mon.maxHP) or 1)
+      local hp = math.max(0, math.min(maxHp, tonumber(mon.hp) or 0))
+      local types = def and def.types or mon.types or {}
+      local typeWords = {}
+      if type(types) == "table" then
+        for _, v in ipairs(types) do
+          local word = runtime.displayType and runtime.displayType(v) or safeText(v)
+          if word and safeText(word) ~= "" and safeText(word) ~= "-" then
+            typeWords[#typeWords + 1] = safeText(word):upper()
+          end
+        end
+      end
+      local typeLabel = table.concat(typeWords, " / ")
+      local function value(...)
+        for _, key in ipairs({...}) do
+          if stats[key] ~= nil then return safeText(stats[key]) end
+          if mon[key] ~= nil then return safeText(mon[key]) end
+        end
+        return "-"
+      end
+      local function row(label, valueText, rx, ry, rw)
+        setColor(colors.textMuted)
+        love.graphics.setFont(bodyFont)
+        drawFittedText(label .. "  " .. safeText(valueText), rx, ry, rw, bodyFont)
+      end
+      runtime.drawPresenterBackdrop(theme, viewport)
+      -- Opaque surface avoids native Party/Summary text bleeding through
+      -- semi-transparent Glass themes below the Modern UI presentation.
+      local surface = colors.surface or {0.09, 0.07, 0.09, 1}
+      setColor({surface[1] or 0.09, surface[2] or 0.07,
+        surface[3] or 0.09, 1})
+      love.graphics.rectangle("fill", px, py, panelW, panelH, theme.radii.lg)
+      runtime.drawPanelFrame(theme, px, py, panelW, panelH, theme.radii.lg)
+      runtime.drawPanelAccent(theme, px, py, panelW, theme.radii.lg, 4)
+
+      if summarySprite then
+        local sw, sh = runtime.imageMetrics(summarySprite)
+        if sw and sh and sw > 0 and sh > 0 then
+          local maxW = math.max(12, spriteW - spacing.sm)
+          local maxH = math.max(12, heroH - spacing.sm)
+          local spriteScale = math.min(maxW / sw, maxH / sh)
+          -- Keep pixel art crisp when magnification allows integer scaling.
+          if spriteScale >= 1 then spriteScale = math.max(1, math.floor(spriteScale)) end
+          setColor({1, 1, 1, 1})
+          runtime.drawImage(summarySprite,
+            sx + (spriteW - sw * spriteScale) / 2,
+            sy + (heroH - sh * spriteScale) / 2, 0, spriteScale, spriteScale)
+        end
+      end
+      setColor(colors.text)
+      love.graphics.setFont(titleFont)
+      drawFittedText(name, infoX, sy, infoW, titleFont)
+      local levelY = sy + textHeight(titleFont) + spacing.xs
+      setColor(colors.textMuted)
+      love.graphics.setFont(bodyFont)
+      drawFittedText("Lv " .. safeText(mon.level or "-"), infoX, levelY, infoW, bodyFont)
+      setColor(colors.accent)
+      drawFittedText(typeLabel, infoX, levelY + textHeight(bodyFont) + spacing.xs,
+        infoW, bodyFont)
+      local barY = sy + heroH - math.max(12, textHeight(smallFont) + spacing.sm)
+      runtime.drawBattleBar(theme, infoX, barY, infoW, 6, hp, maxHp)
+      setColor(colors.text)
+      love.graphics.setFont(smallFont)
+      drawFittedText(("%d/%d"):format(hp, maxHp), infoX,
+        barY - textHeight(smallFont) - spacing.xs, infoW, smallFont)
+
+      local lowerY = top + heroH + spacing.sm
+      setColor(colors.divider)
+      love.graphics.rectangle("fill", ix, lowerY - spacing.xs, iw, 1)
+      local bottomH = math.max(30, bottom - lowerY)
+      if isMovePage then
+        local experience = "EXP " .. safeText(mon.exp or 0)
+        row("EXPERIENCE", mon.exp or 0, ix, lowerY, iw)
+        lowerY = lowerY + textHeight(bodyFont) + spacing.md
+        bottomH = bottom - lowerY
+      else
+        local statRows = {
+          {"ATK", value("attack", "atk"), "SPECIAL", value("special", "spc", "specialAttack")},
+          {"DEF", value("defense", "def"), "STATUS", safeText(mon.status or "OK")},
+          {"SPEED", value("speed", "spd"), "ID", safeText(mon.otId or
+            (game.save and game.save.player and game.save.player.id) or "-")},
+        }
+        local statsH = math.min(bottomH * 0.42, (textHeight(bodyFont) + spacing.sm) * 3)
+        local statStep = statsH / 3
+        for i, r in ipairs(statRows) do
+          local yy = lowerY + (i - 1) * statStep
+          row(r[1], r[2], ix, yy, iw * 0.48)
+          row(r[3], r[4], ix + iw * 0.51, yy, iw * 0.49)
+        end
+        lowerY = lowerY + statsH + spacing.sm
+        bottomH = bottom - lowerY
+      end
+      setColor(colors.divider)
+      love.graphics.rectangle("fill", ix, lowerY - spacing.xs, iw, 1)
+      local moves = mon.moves or {}
+      local rowH = math.max(1, bottomH / 4)
+      local ppW = math.max(58, iw * 0.30)
+      for i = 1, 4 do
+        local mv = moves[i]
+        local moveDef = mv and game.data and game.data.moves
+          and game.data.moves[mv.id]
+        local moveName = safeText(moveDef and moveDef.name or mv and mv.id or "-")
+        local pp = ""
+        if mv then
+          local basePP = tonumber(moveDef and moveDef.pp) or tonumber(mv.pp) or 0
+          local maxPP = basePP + (tonumber(mv.ppUps) or 0) * math.floor(basePP / 5)
+          pp = ("PP %d/%d"):format(tonumber(mv.pp) or 0, maxPP)
+        end
+        local yy = lowerY + (i - 1) * rowH + math.max(0, (rowH - textHeight(bodyFont)) * 0.5)
+        setColor(colors.text)
+        love.graphics.setFont(bodyFont)
+        drawFittedText(moveName, ix, yy, iw - ppW - spacing.sm, bodyFont)
+        setColor(colors.textMuted)
+        love.graphics.setFont(smallFont)
+        drawFittedText(pp, ix + iw - ppW, yy, ppW, smallFont)
+      end
+      setColor(colors.textMuted)
+      love.graphics.setFont(captionFont)
+      runtime.drawHintIfUseful(theme, "A / B  continue", ix,
+        py + panelH - footerH, iw)
+      love.graphics.pop()
+      return
+    end
+
     local summarySprite = nil
     if not isMovePage and not isDvPage then
       summarySprite = crystalAnimatedStateSprite(game, state, mon,
@@ -18621,6 +18783,26 @@ return function(mod)
     if not rows then return end
     local navigationMenu = kind == "menu" and state
       and (state.screenId == "StartMenu" or state._gen1ModMenus)
+    -- The in-game Start Menu uses its own scale instead of inheriting the
+    -- global UI SCALE. Other menus (including the mod options) are untouched.
+    if navigationMenu and state and state.screenId == "StartMenu" then
+      local target = clamp(tonumber(runtime.option("startMenuScale", "100")) or 100,
+        60, 200) / 100
+      local current = math.max(0.01, tonumber(theme.scale and theme.scale.ui) or 1)
+      local ratio = target / current
+      local textScale = clamp(tonumber(runtime.option("startMenuTextScale", "100")) or 100,
+        60, 200) / 100
+      -- Remove the global typography multiplier before applying the menu's
+      -- own text size, while retaining the independent panel scale.
+      local globalFont = clamp(tonumber(runtime.option("fontScale", "100")) or 100,
+        50, 400) / 100
+      local menuTheme = scaledTheme(theme, ratio, ratio * textScale / globalFont,
+        themeScaleCache)
+      menuTheme = copy(menuTheme)
+      menuTheme.scale = copy(theme.scale or {})
+      menuTheme.scale.ui = target
+      theme = menuTheme
+    end
     local layout = runtime.layoutFor(viewport, theme, kind, rows, title,
       footerText, navigationMenu and "NAV" or nil)
     selected = clamp(selected, 1, math.max(1, #rows))

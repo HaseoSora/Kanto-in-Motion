@@ -220,10 +220,12 @@ return function(mod)
       fw = roomy and ((kind=="bag") and 0.78 or 0.76) or 0.94
       fh = roomy and 0.84 or 0.92
     end
-    local userScale=uiScaleFactor()
+    local userScale=kind=="start"
+      and math.max(.60,math.min(2.0,(tonumber(opt("gen3StartMenuScale","100")) or 100)/100))
+      or uiScaleFactor()
     local w=math.min(sw*0.97,sw*fw*userScale)
     local h=math.min(sh*0.97,sh*fh*userScale)
-    if Style and Style.layoutStyle and Style.layoutStyle()=="full" then
+    if kind~="start" and Style and Style.layoutStyle and Style.layoutStyle()=="full" then
       w=sw*0.94; h=sh*0.92
     end
     local x=sx+(sw-w)*0.5
@@ -755,9 +757,11 @@ return function(mod)
     local pad=math.max(7*s,w*0.045)
     local header=math.max(22*s,h*0.16)
     local footer=math.max(17*s,h*0.13)
-    local titleF=fontFor(10.5*s)
-    local bodyF=fontFor(8.0*s)
-    local smallF=fontFor(6.1*s)
+    local textRatio=math.max(.60,math.min(2.0,
+      (tonumber(opt("gen3StartMenuTextScale","100")) or 100)/100))
+    local titleF=fontFor(10.5*s*textRatio)
+    local bodyF=fontFor(8.0*s*textRatio)
+    local smallF=fontFor(6.1*s*textRatio)
 
     local session=StartMenu._session or {}
     local player=tostring(session.name or session.playerName or "PLAYER")
@@ -789,7 +793,7 @@ return function(mod)
     rowH=math.min(18*s,rowH)
     local rowFont=bodyF
     if rowH < bodyF:getHeight()+4*s then
-      rowFont=fontFor(math.max(5.2*s,rowH*0.48))
+      rowFont=fontFor(math.max(5.2*s*math.min(1,textRatio),rowH*0.48))
     end
 
     for r=1,visible do

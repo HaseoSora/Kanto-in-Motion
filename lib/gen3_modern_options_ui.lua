@@ -501,7 +501,7 @@ return function(mod)
     gen3Density=true, gen3LayoutStyle=true, gen3PanelOpacity=true,
     gen3ForegroundOpacity=true, gen3MinimalUi=true, gen3HideOriginalUi=true,
     gen3MenuUi=true, gen3PokemonUi=true, gen3ManagerUi=true,
-    gen3StartMenuFastJump=true, gen3StartMenuInset=true,
+    gen3StartMenuScale=true, gen3StartMenuTextScale=true, gen3StartMenuFastJump=true, gen3StartMenuInset=true,
     gen3DialogueUi=true, gen3DialogueUiScale=true, gen3DialogueTextScale=true,
   }
 

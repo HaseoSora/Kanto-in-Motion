@@ -1,7 +1,7 @@
 {
   "id": "animated_menu_pokemon",
   "name": "Kanto in Motion",
-  "version": "1.7.4",
+  "version": "1.7.5",
   "api": 2,
   "entry": "main.lua",
   "profile": "overhaul",
@@ -42,6 +42,6 @@
     "network"
   ],
   "affects_link": false,
-  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul for Gen1Recomp. v1.7.4 refines Gen 2 Gold/Silver/Crystal battle UI layouts, scaling, HD sprite presentation, Crystal trainer handling, and Gen 2/Gen 3 Modern UI pixel-frame borders.",
+  "description": "Kanto in Motion multi-generation HD Pokemon presentation and battle overhaul for Gen1Recomp. v1.7.5 adds independent Start Menu panel and text sizing for Gen 1, 2, and 3, plus Gen 1 summary presentation and Gen 2 save-panel improvements.",
   "github": "HaseoSora/Kanto-in-Motion"
 }
