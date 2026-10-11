@@ -407,6 +407,10 @@ return function(mod)
   mod.exports.registerBattleCompatibility = mod.exports.kantoInMotionCompatibility.registerBattleOwner
   local HD_SPRITE_DATA_FILE = "data/hd_pokemon_sprites.lua"
 
+  -- Gen 1 v1.7.2 and earlier exposed MENU SPRITES as a boolean. Read the
+  -- stored value before redefining the schema so existing users who had it
+  -- OFF migrate naturally to VANILLA instead of being forced back to KIM HD.
+  local legacyGen1MenuSprites = (not IS_GEN2) and mod.options:get("enabled") or nil
 
   local optionSchema = {
     { key = "enabled", label = "MENU SPRITES", type = "toggle", default = true },
@@ -458,6 +462,22 @@ return function(mod)
         { "KIM HD", "kim" }, { "VANILLA", "vanilla" },
       },
       description = "Choose Kanto in Motion HD animated menu Pokemon or the native Gold/Silver/Crystal Pokemon artwork. This is independent from POKEMON ICONS and BATTLE SPRITES.",
+    })
+  else
+    -- Gen 1 now matches Gen 2's explicit source selector. VANILLA deliberately
+    -- means "yield the Pokemon artwork slot": with no sprite mod installed it
+    -- is the original R/B/Y art, while a compatible provider such as Crystal
+    -- Animated Sprites can supply that same slot without KIM replacing it.
+    local gen1Main = {}
+    for _, row in ipairs(optionSchema) do
+      if row.key ~= "enabled" then gen1Main[#gen1Main + 1] = row end
+    end
+    optionSchema = gen1Main
+    table.insert(optionSchema, 1, {
+      key = "gen1MenuSpriteSource", label = "MENU SPRITES", type = "choice",
+      default = (legacyGen1MenuSprites == false) and "vanilla" or "kim",
+      choices = { { "KIM HD", "kim" }, { "VANILLA", "vanilla" } },
+      description = "Choose Kanto in Motion HD animated Pokemon or yield Party, Pokedex, Summary, PC and Evolution artwork to the native Gen 1 sprite path. Compatible sprite mods such as Crystal Animated Sprites are honored on VANILLA. This is independent from POKEMON ICONS and BATTLE SPRITES.",
     })
   end
 
@@ -781,8 +801,9 @@ return function(mod)
   for _, row in ipairs(gen2UiOptionSchema) do
     combinedKantoOptionSchema[#combinedKantoOptionSchema + 1] = row
   end
-  -- Keep the old Gen 2 MENU SPRITES boolean defined for save compatibility,
-  -- but do not expose it now that Gen 2 has an explicit source choice.
+  -- Gen 2 still carries the old boolean in its schema for historical saves.
+  -- Gen 1 no longer needs to expose it at all: its stored value was read above
+  -- solely to choose the first default for gen1MenuSpriteSource.
   if IS_GEN2 then
     combinedKantoOptionSchema[#combinedKantoOptionSchema + 1] =
       { key = "enabled", label = "LEGACY MENU SPRITES", type = "toggle", default = true }
@@ -1319,7 +1340,7 @@ return function(mod)
     if IS_GEN2 then
       return tostring(mod.options:get("gen2MenuSpriteSource") or "kim") == "kim"
     end
-    return mod.options:get("enabled") ~= false
+    return tostring(mod.options:get("gen1MenuSpriteSource") or "kim") == "kim"
   end
 
   -- HD sheets are already authored at their intended presentation size, so

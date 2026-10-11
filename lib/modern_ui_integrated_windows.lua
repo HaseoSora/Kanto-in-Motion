@@ -4808,7 +4808,7 @@ return function(mod)
       description = "Compatibility and reset controls." },
   }
   local OPTION_CATEGORY_BY_KEY = {
-    enabled = "kanto", integratedModernUi = "kanto",
+    enabled = "kanto", gen1MenuSpriteSource = "kanto", integratedModernUi = "kanto",
     animate = "kanto", titleScreen = "kanto", titleTrainer = "kanto", titleCycleSpeed = "kanto",
     battleSystem = "kanto", battleSprites = "kanto", battleShadowQuality = "kanto", battleShadowOpacity = "kanto", hdBattleBackgrounds = "kanto", battleBgMode = "kanto",
     battleShinyOdds = "kanto", battlePlayerSize = "kanto",
@@ -7262,12 +7262,83 @@ return function(mod)
   local spriteFor
   local spriteResolver
 
+  -- Crystal Animated Sprites compatibility.  KIM normally prefers its own
+  -- animated-menu provider before consulting the host pokemon.sprite seam.
+  -- That meant the Crystal sprite mod could successfully replace Gen 1's
+  -- source sprite, but Modern UI would immediately replace it again with KIM's
+  -- atlas.  Resolve the optional mod through its public exports and yield KIM's
+  -- provider only for species for which the Crystal mod actually has artwork.
+  local function crystalAnimatedExports()
+    if IS_GEN2 or type(mod.find) ~= "function" then return nil end
+    local ok, handle = pcall(mod.find,
+      "crystal_animated_sprites_with_shiny_visuals")
+    local exports = ok and type(handle) == "table" and handle.exports or nil
+    if type(exports) ~= "table"
+        or type(exports.dexFor) ~= "function"
+        or type(exports.isCrystalImage) ~= "function" then
+      return nil
+    end
+    return exports
+  end
+
+  local function crystalAnimatedHasSpecies(species)
+    -- KIM HD is now an explicit Gen 1 menu source. Only yield this slot to
+    -- Crystal Animated (or another pokemon.sprite provider) when VANILLA is
+    -- selected. This makes the setting authoritative regardless of load order.
+    if tostring(mod.options:get("gen1MenuSpriteSource") or "kim") == "kim" then
+      return false
+    end
+    local exports = crystalAnimatedExports()
+    if not exports or species == nil then return false end
+    local okDex, dex = pcall(exports.dexFor, species)
+    if not okDex or dex == nil then return false end
+    if type(exports.hasCrystalArt) == "function" then
+      local okArt, hasArt = pcall(exports.hasCrystalArt, dex)
+      if okArt then return hasArt == true end
+    end
+    return true
+  end
+
+  -- Summary, Dex Entry and Evolution are still updated by the Crystal mod's
+  -- native screen wrappers even while KIM owns presentation.  Prefer those
+  -- live images when available so its real frame timing and its COLORS-mode
+  -- true-color flag survive into Modern UI instead of being flattened by a
+  -- second palette pass.
+  local function crystalAnimatedStateSprite(game, state, mon, field, trueField)
+    if tostring(mod.options:get("gen1MenuSpriteSource") or "kim") == "kim" then
+      return nil
+    end
+    local exports = crystalAnimatedExports()
+    if not exports or type(state) ~= "table" then return nil end
+    local owner = state
+    local value = state[field or "sprite"]
+    if value == nil and type(state.vanilla) == "table" then
+      owner = state.vanilla
+      value = owner[field or "sprite"]
+    end
+    if value == nil then return nil end
+    local image = runtime.imageFor(value)
+    if not image then return nil end
+    local okCrystal, isCrystal = pcall(exports.isCrystalImage, image)
+    if not okCrystal or not isCrystal then return nil end
+    local flagName = trueField or "spriteTrueColor"
+    local trueColor = owner[flagName] == true
+    paletteRuntime.setImage(image, not trueColor
+      and paletteRuntime.pokemon(game, mon and mon.species) or nil)
+    return image
+  end
+
   -- Optional standalone animated-menu sprite provider. Animated Menu Pokemon
   -- owns its private Gen 2/3/4/5 atlases and returns a ready-to-draw current
   -- frame Canvas, so this UI never reaches into a sibling mod's files.
   local function animatedMenuSpriteFor(mon, kind)
     if type(mon) ~= "table" or type(mon.species) ~= "string"
         or type(mod.find) ~= "function" then return nil end
+    -- The Crystal mod owns Gen 1 sprite selection when it has art for this
+    -- species.  Returning nil here lets spriteFor() continue to the host's
+    -- pokemon.sprite seam, where that mod supplies its normal/shiny Crystal
+    -- artwork and the correct trueColor flag for the current COLORS mode.
+    if crystalAnimatedHasSpecies(mon.species) then return nil end
     if kind ~= "party" and kind ~= "summary" and kind ~= "dex"
         and kind ~= "dex_entry" and kind ~= "evolution"
         and kind ~= "box" and kind ~= "box_mon_list" then return nil end
@@ -9380,8 +9451,12 @@ return function(mod)
     -- tracker or its private draw implementation.
     local isDvPage = state.page == 3 or state.page == "dvs"
       or state.view == "dvs" or state.dvsPage == true
-    local summarySprite = not isMovePage and not isDvPage
-      and spriteFor(game, mon, nil, "summary") or nil
+    local summarySprite = nil
+    if not isMovePage and not isDvPage then
+      summarySprite = crystalAnimatedStateSprite(game, state, mon,
+        "sprite", "spriteTrueColor")
+        or spriteFor(game, mon, state.sprite, "summary")
+    end
     local page = isDvPage and "DVs / STAT EXP"
       or isMovePage and "MOVES / EXPERIENCE" or "STATUS / TRAINER DATA"
     local compact = panelW < 620
@@ -9831,8 +9906,12 @@ return function(mod)
     end
     local shownSpecies = showNew and newSpecies or oldSpecies
     local fallback = showNew and state.newSprite or state.oldSprite
-    local shown = shownSpecies and spriteFor(game, { species = shownSpecies },
-      fallback, "evolution") or runtime.imageFor(fallback)
+    local evoMon = { species = shownSpecies }
+    local shown = crystalAnimatedStateSprite(game, state, evoMon,
+      showNew and "newSprite" or "oldSprite",
+      showNew and "newSpriteTrueColor" or "oldSpriteTrueColor")
+      or (shownSpecies and spriteFor(game, evoMon, fallback, "evolution")
+        or runtime.imageFor(fallback))
 
     love.graphics.push("all")
     love.graphics.origin()
@@ -11334,8 +11413,11 @@ return function(mod)
     if type(species) == "table" then species = species.species or species.id end
     local page = state.view or "data"
     local title = safeText(def.name or "POKÃ©DEX")
-    local sprite = spriteFor(game, { species = species }, state.sprite or
-      (state.vanilla and state.vanilla.sprite), "dex_entry")
+    local dexMon = { species = species }
+    local sprite = crystalAnimatedStateSprite(game, state, dexMon,
+      "sprite", "spriteTrueColor")
+      or spriteFor(game, dexMon, state.sprite or
+        (state.vanilla and state.vanilla.sprite), "dex_entry")
     local titleFont = font(fontCache, theme.typography.title)
     local bodyFont = font(fontCache, theme.typography.body)
     local captionFont = font(fontCache, theme.typography.caption)

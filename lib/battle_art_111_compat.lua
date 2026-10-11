@@ -65,7 +65,7 @@ return function(mod, battleRecord, renderPresentationFrame, currentFrame)
 
   local function kimEnabled(stage, exports)
     if not (mod and mod.options) then return false end
-    if mod.options:get("enabled") == false or mod.options:get("battleSprites") == false then
+    if mod.options:get("battleSprites") == false then
       return false
     end
     return stageEnabled(stage, exports)

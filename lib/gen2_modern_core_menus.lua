@@ -1,4 +1,4 @@
--- Kanto in Motion v1.7.2 - Gen 2 Modern Core Menus v48 -- Trainer Card / Fly region / generic field menus
+-- Kanto in Motion v1.7.3 - Gen 2 Modern Core Menus v51 -- robust player portrait / page 1 draw
 --
 -- Modern overlay presentation for the native Gen 2 Start Menu, Pack,
 -- Pokegear, Trainer Card, Save Menu, Options Menu and KIM Mod Settings. Their original objects remain authoritative for
@@ -1090,6 +1090,102 @@ return function(mod)
     return true
   end
 
+  -- Use the game's clean CHRIS/KRIS 56x56 trainer frontpic for the modern
+  -- Trainer Card portrait.  This is the same ROM-derived player art on every
+  -- platform, so mobile no longer depends on a reconstructed 5x7 card tile
+  -- sheet (which could expose a stray card glyph such as the black "K").
+  -- Only edge-connected white is made transparent; white details inside the
+  -- trainer sprite are preserved and the native Gen 2 player palette is still
+  -- applied at draw time.
+  local trainerCardPlayerSprites={}
+  -- Keep this helper self-contained.  The generic trainer-card flood helper is
+  -- declared later in this file, so calling it from here used to resolve a nil
+  -- global and abort the whole page-1 Modern UI draw before the text rows were
+  -- rendered.  That is why v154 showed only the card shell on both PC/mobile.
+  local function clearPlayerSpriteBorder(data)
+    if not data or type(data.getDimensions)~="function"
+        or type(data.getPixel)~="function" or type(data.setPixel)~="function" then
+      return false
+    end
+    local w,h=data:getDimensions()
+    if not w or not h or w<1 or h<1 then return false end
+    local seen,xs,ys={}, {}, {}
+    local head=1
+    local function key(x,y) return y*w+x end
+    local function nearWhite(x,y)
+      local r,g,b,a=data:getPixel(x,y)
+      local function ch(v)
+        v=tonumber(v) or 0
+        if v<=1.000001 then v=v*255 end
+        return v
+      end
+      return ch(a)>0 and ch(r)>=248 and ch(g)>=248 and ch(b)>=248
+    end
+    local function add(x,y)
+      if x<0 or y<0 or x>=w or y>=h then return end
+      local k=key(x,y)
+      if seen[k] or not nearWhite(x,y) then return end
+      seen[k]=true
+      xs[#xs+1],ys[#ys+1]=x,y
+    end
+    for x=0,w-1 do add(x,0); add(x,h-1) end
+    for y=1,h-2 do add(0,y); add(w-1,y) end
+    while head<=#xs do
+      local x,y=xs[head],ys[head]
+      head=head+1
+      data:setPixel(x,y,0,0,0,0)
+      add(x-1,y); add(x+1,y); add(x,y-1); add(x,y+1)
+    end
+    return true
+  end
+  local function transparentTrainerCardPlayer(path)
+    if type(path)~="string" or path=="" then return nil end
+    if trainerCardPlayerSprites[path]~=nil then return trainerCardPlayerSprites[path] or nil end
+    local data=nil
+    if love and love.image and type(love.image.newImageData)=="function" then
+      local ok,d=pcall(love.image.newImageData,path)
+      if ok then data=d end
+    end
+    if not data then
+      local src=loadTrainerCardImage(path)
+      data=imageDataForDrawable(src)
+    end
+    if not data then trainerCardPlayerSprites[path]=false; return nil end
+    clearPlayerSpriteBorder(data)
+    local ok,img=pcall(G.newImage,data)
+    if not ok or not img then trainerCardPlayerSprites[path]=false; return nil end
+    if img.setFilter then pcall(img.setFilter,img,"nearest","nearest") end
+    trainerCardPlayerSprites[path]=img
+    return img
+  end
+  local function drawNativePlayerPortrait(s,x,y,w,h)
+    local data=s and s.game and s.game.data
+    local hud=data and data.gen2MenuGfx and data.gen2MenuGfx.battleHud
+    local pics=hud and hud.trainerPics
+    local path=pics and pics[(s and s.female) and "KRIS" or "CHRIS"]
+    local img=transparentTrainerCardPlayer(path)
+    if not img then return false end
+    local iw,ih=img:getDimensions()
+    if not iw or not ih or iw<=0 or ih<=0 then return false end
+    local fit=math.min(w/iw,h/ih)
+    local dw,dh=iw*fit,ih*fit
+    local dx=x+(w-dw)/2
+    local dy=y+(h-dh)/2
+    local function body()
+      G.setColor(1,1,1,1)
+      G.draw(img,dx,dy,0,fit,fit)
+    end
+    local colors=type(s.colorsAt)=="function" and s:colorsAt(14,1) or nil
+    if colors and okGbcPalette and GbcPalette and type(GbcPalette.with)=="function" then
+      local ok=pcall(GbcPalette.with,colors,body)
+      if not ok then body() end
+    else
+      body()
+    end
+    G.setColor(1,1,1,1)
+    return true
+  end
+
   local JOHTO={"ZEPHYR","HIVE","PLAIN","FOG","STORM","MINERAL","GLACIER","RISING"}
   local KANTO={"BOULDER","CASCADE","THUNDER","RAINBOW","SOUL","MARSH","VOLCANO","EARTH"}
   -- Native badge OAM is not in the same order as the visible leader grid:
@@ -1370,7 +1466,13 @@ return function(mod)
     local c=theme(); local sx,sy,sw,sh=playfield()
     local scale=uiScale(sw,sh); local den=density()
     local w=math.min(940*scale,sw*.68); local h=math.min(620*scale,sh*.80)
-    if layoutStyle()=="full" then w=sw*.94; h=sh*.92; scale=math.min(w/940,h/620) end
+    if layoutStyle()=="full" then
+      w=sw*.94; h=sh*.92
+    end
+    -- On wide mobile screens uiScale can be much larger than the height the
+    -- card is actually allowed to occupy.  Cap the internal layout scale to
+    -- the final panel dimensions so the fourth Gym row always clears footer.
+    scale=math.min(scale,w/940,h/620)
     local x=sx+(sw-w)/2; local y=sy+(sh-h)/2; panel(x,y,w,h,c,.95)
     local big, body, small = font(35*scale), font(26*scale), font(20*scale)
     local pageFont = font(23*scale)
@@ -1390,18 +1492,29 @@ return function(mod)
         {"POKéDEX",tostring((function() local n=0 for _,v in pairs(pd.caught or {}) do if v then n=n+1 end end return n end)())},
         {"PLAY TIME",("%d:%02d"):format(pt.hours or 0,pt.minutes or 0)},
       }
+      -- Draw the data rows first so a bad/custom portrait can never blank the
+      -- trainer information along with the image again.
+      for i,r in ipairs(rows) do
+        local yy=contentY+(i-1)*68*scale
+        text(r[1],body,x+45*scale,yy,w*.28,"left",c.muted)
+        text(r[2],body,x+w*.34,yy,w*.29,"right",c.text)
+      end
       local portraitX=x+w*.70
       local portraitY=contentY-8*scale
       local portraitW=w*.24
       local portraitH=250*scale
       panel(portraitX,portraitY,portraitW,portraitH,c,.58)
-      -- Native Trainer Card portrait is the 5x7 tile block at (14,1).
-      drawTransparentCardCrop(nativeCard,"portrait_"..tostring(s.female==true),112,8,40,56,
-        portraitX+12*scale,portraitY+12*scale,portraitW-24*scale,portraitH-24*scale)
-      for i,r in ipairs(rows) do
-        local yy=contentY+(i-1)*68*scale
-        text(r[1],body,x+45*scale,yy,w*.28,"left",c.muted)
-        text(r[2],body,x+w*.34,yy,w*.29,"right",c.text)
+      -- Use the ROM-derived CHRIS/KRIS 56x56 front sprite on every platform.
+      -- Isolate the portrait draw so an unexpected asset/palette problem can
+      -- fall back without aborting the rest of the Modern Trainer Card.
+      local okPortrait,drew=pcall(drawNativePlayerPortrait,s,
+        portraitX+12*scale,portraitY+12*scale,
+        portraitW-24*scale,portraitH-24*scale)
+      if not okPortrait or not drew then
+        pcall(drawTransparentCardCrop,nativeCard,
+          "portrait_"..tostring(s.female==true),112,8,40,56,
+          portraitX+12*scale,portraitY+12*scale,
+          portraitW-24*scale,portraitH-24*scale)
       end
     else
       local names=page==2 and JOHTO or KANTO
