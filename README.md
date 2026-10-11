@@ -15,8 +15,8 @@ The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Moti
 v1.7.4 focuses on **Gen 2 battle presentation polish** and **Modern UI frame alignment across Gen 2 and Gen 3**, while retaining the prior multi-generation overhaul and compatibility work.
 
 - **Gen 2 battle UI layout improvements:** refined the Gold/Silver/Crystal Modern battle panel arrangement for more consistent presentation across games and desktop/mobile displays.
-- **OG / WIDE battle layout choice:** added the familiar OG/WIDE presentation option to the Gen 2 Modern battle UI, with corresponding desktop and mobile layout support.
-- **Battle UI scaling and placement:** refined battle panel, text scaling, and placement to reduce overlaps with battlers and HP/status HUDs.
+- **OG / WIDE battle layout choice:** added **BATTLE UI MODE** under Gen 2 UI SETTINGS (OG/WIDE; default WIDE), for choosing classic-width or widescreen lower battle menus. Portrait retains its dedicated mobile arrangement.
+- **Battle UI scaling and placement:** refined battle panel, text scaling, and placement to reduce overlaps with battlers and HP/status HUDs; Gen 2 BATTLE UI SIZE now ranges from 60% to 150% (default 100%).
 - **HD Pokémon sprite presentation:** corrected Gen 2 battle paths that could fall back to vanilla sprites when HD sprites were enabled.
 - **Crystal trainer presentation:** corrected the Crystal player battle-intro sprite selection so the appropriate native back sprite is used instead of unrelated front/menu artwork.
 - **Pixel Frame 1–3 borders:** adjusted Gen 2 and Gen 3 Modern UI panel frame drawing so pixel-style borders extend around panel edges rather than sitting inside the content area.
@@ -215,8 +215,8 @@ These controls are grouped under **KANTO IN MOTION → UI SETTINGS**. They mirro
 | --- | --- | --- | --- |
 | **UI THEME** | GEN1 MODERN / CLASSIC MONO / CRIMSON / CRIMSON GLASS / MODERN GLASS / POCKET GREEN / MIDNIGHT / MIDNIGHT GLASS / FROST / LIGHT / DARK | GEN1 MODERN | Chooses the palette used across the Gen 2 Modern UI. |
 | **UI FRAME STYLE** | THEME / PIXEL / SOFT / PLAIN | PIXEL | Chooses the Modern UI panel border treatment. |
-| **PIXEL FRAME** | FRAME 1 / FRAME 2 / FRAME 3 | FRAME 2 | Chooses the authored PNG frame used when PIXEL framing is active. |
-| **PIXEL FRAME SCALE** | 1X / 2X / 3X / 4X | 2X | Scales the pixel-frame artwork by a whole-number multiplier. |
+| **PIXEL FRAME** | FRAME 1 / FRAME 2 / FRAME 3 | FRAME 2 | Selects the decorative PNG border surrounding Modern UI panels when UI FRAME STYLE is PIXEL. |
+| **PIXEL FRAME SCALE** | 1X / 2X / 3X / 4X | 2X | Scales the pixel border artwork by a whole-number multiplier; the frame surrounds the panel rather than sitting inside its content area. |
 | **UI DENSITY** | AUTO / COMPACT / COMFORTABLE | AUTO | Adjusts panel spacing and row height. |
 | **UI SCALE** | AUTO; 75%–150% in 5% steps; 175%–400% in 25% steps | 100% | Scales Gen 2 Modern UI panels and control spacing. 100% is calibrated to the cleaner Gen 1-like footprint. |
 | **FONT SCALE** | AUTO; 80%–200% in 5% steps | 100% | Scales Modern UI title, body, caption, value, and hint text independently of panel size. Settings/list layouts adapt their row and footer spacing to larger fonts. |
@@ -235,7 +235,8 @@ These controls are grouped under **KANTO IN MOTION → UI SETTINGS**. They mirro
 | **MOD MANAGER UI** | ON / OFF | ON | Enables Modern UI presentation for Kanto in Motion's own settings screens. |
 | **SPRITE ANIMATION** | ON / OFF | ON | Animates supported KIM menu/Party/Pokédex artwork without changing the selected MENU SPRITES source. |
 | **MODERN BATTLE UI** | ON / OFF | ON | Replaces only the native lower battle dialogue/command/move surface; the native Gen 2 HP/status HUD and battle logic remain unchanged. |
-| **BATTLE UI SIZE** | 60%–100% in 5% steps | 100% | Adjusts the Gen 2 Modern lower battle-panel footprint while keeping it bottom-anchored. 100% is the calibrated neutral size and matches the physical footprint that 95% used in earlier releases. |
+| **BATTLE UI MODE** | OG / WIDE | WIDE | Selects the Gen 2 Modern lower battle-menu layout. OG uses the classic 160×144-width presentation; WIDE uses KIM’s 304×144 widescreen presentation. Portrait mode keeps its dedicated mobile layout. This does not change the native battle battlefield or HP/status HUD. |
+| **BATTLE UI SIZE** | 60%–150% in 5% steps | 100% | Adjusts the Gen 2 Modern lower battle-panel footprint while keeping it bottom-anchored. 100% is the calibrated neutral size. |
 | **BATTLE UI OPACITY** | 25%–100% in 5% steps | 100% | Adjusts only the Gen 2 Modern lower battle-panel background opacity. |
 | **BATTLE TEXT SIZE** | 50%–200% in 25% steps | 100% | Scales Gen 2 Modern battle command, move, and message text independently of the native HP/status HUD. |
 | **MOVE LAYOUT** | GRID / VERTICAL | GRID | GRID uses a 2×2 move selector. VERTICAL lists the four moves top-to-bottom. |
@@ -292,8 +293,8 @@ Gen 3 keeps **Game3 gameplay/state ownership native** while KIM supplies the opt
 | **FONT SCALE** | AUTO; 80%–200% in 5% steps | 100% | Scales Modern UI text independently of panel size. |
 | **PIXEL ART FONT** | ON / OFF | OFF | Uses the Plain Pixel font where available; OFF uses the normal scalable system font. |
 | **UI FRAME STYLE** | THEME / PIXEL / SOFT / PLAIN | PIXEL | Chooses the Modern UI panel border treatment. |
-| **PIXEL FRAME** | FRAME 1 / FRAME 2 / FRAME 3 | FRAME 2 | Chooses the authored PNG frame used when PIXEL framing is active. |
-| **PIXEL FRAME SCALE** | 1X / 2X / 3X / 4X | 2X | Scales the pixel-frame artwork by a whole-number multiplier. |
+| **PIXEL FRAME** | FRAME 1 / FRAME 2 / FRAME 3 | FRAME 2 | Selects the decorative PNG border surrounding Modern UI panels when UI FRAME STYLE is PIXEL. |
+| **PIXEL FRAME SCALE** | 1X / 2X / 3X / 4X | 2X | Scales the pixel border artwork by a whole-number multiplier; the frame surrounds the panel rather than sitting inside its content area. |
 | **UI DENSITY** | AUTO / COMPACT / COMFORTABLE | AUTO | Adjusts panel spacing and row height. |
 | **LAYOUT STYLE** | ADAPTIVE / FLOATING / FULL SCREEN | ADAPTIVE | Chooses adaptive/floating cards or a larger full-screen presentation where supported. |
 | **PANEL OPACITY** | 0%–100% in 5% steps | 100% | Adjusts panel-background opacity independently from text and borders. |
