@@ -300,7 +300,12 @@ return function(mod)
   if okCenterPc then makeTransparent(CenterPcMenu,"menu") end
   if okPc then makeTransparent(PcMenu,"menu") end
   if okBoxPc then makeTransparent(BoxMenu,"pokemon") end
-  if okEvolution then makeTransparent(EvolutionAnim,"pokemon") end
+  -- Preserve the native Gen 2 evolution movie: it owns the full silhouette/flash
+  -- sequence and isOpaque state. KIM only substitutes artwork in drawPic.
+  -- Hiding this state produces an empty Modern evolution card.
+  -- The source evolution state retains timing/input, while KIM now owns its
+  -- visual presentation. Do not alter isOpaque globally: the custom
+  -- screen visibility hook below handles the movie only when Modern UI is on.
 
   -- PcMenu, BoxMenu and EvolutionAnim normally claim the full widescreen
   -- surround.  Modern UI owns them as floating windows, so let Game2 fall
@@ -317,7 +322,9 @@ return function(mod)
   end
   floatingWidescreen(PcMenu,"menu","__kimModernPcFloatingV142")
   floatingWidescreen(BoxMenu,"pokemon","__kimModernBoxFloatingV142")
-  floatingWidescreen(EvolutionAnim,"pokemon","__kimModernEvolutionFloatingV142")
+  -- With Modern UI active, the evolution movie is drawn by KIM rather than
+  -- the native full-screen renderer; input and animation timings remain native.
+  floatingWidescreen(EvolutionAnim,"pokemon","__kimModernEvoFloatingV185")
 
   -- The category pages created by OptionsMenu's local pushGroup() still use
   -- OptionsMenu:drawsWidescreen().  Disable that path only while KIM owns
@@ -2834,8 +2841,15 @@ return function(mod)
     return ok and img or nil
   end
   local function drawGen2Evolution(s)
-    local c=theme(); local sx,sy,sw,sh=playfield(); local scale=uiScale(sw,sh)
-    local w=math.min(sw*.58,720*scale); local h=math.min(sh*.70,520*scale)
+    local c=theme(); local sx,sy,sw,sh=playfield()
+    -- Evolution is a standalone presentation rather than a compact PC card.
+    -- The old 58%-width / 70%-height caps made it tiny at UI SCALE=100%.
+    -- Respect the existing Gen 2 overall UI scale but use larger neutral
+    -- artwork dimensions, with a fit factor for smaller/portrait displays.
+    local requestedScale=uiScale(sw,sh)*1.25
+    local w=math.min(sw*.86,960*requestedScale)
+    local h=math.min(sh*.86,660*requestedScale)
+    local scale=math.min(requestedScale,w/760,h/550)
     local x=sx+(sw-w)/2; local y=sy+(sh-h)/2; panel(x,y,w,h,c,.96)
     drawPcHeader(x,y,w,scale,c,"EVOLUTION",s.force and "Evolution cannot be stopped" or "B  stop evolution")
     local species=s.showNew and s.newSpecies or s.oldSpecies
@@ -2843,8 +2857,27 @@ return function(mod)
       if not s.canceled then species=s.newSpecies end
     end
     local img=gen2EvolutionSprite(s,species)
+    -- The native EvolutionAnim:pic() is used as an ordinary drawable only as a
+    -- fallback. Do not call drawPic() here: it applies the Gen 2 blackout
+    -- palette to HD art and can turn transparent pixels into a black square.
+    if not img and type(s.pic)=="function" then
+      local ok,native=pcall(s.pic,s,species)
+      if ok then img=native end
+    end
     local art=math.min(w*.48,h*.48)
-    if img and s.phase~="learn" then drawFitImage(img,x+(w-art)/2,y+92*scale,art,art) end
+    if img and s.phase~="learn" and s.phase~="evolving" and s.phase~="cry" then
+      local shader
+      if s.blackout and G.newShader then
+        if not mod._kimGen2EvoSilhouetteShader then
+          local ok,created=pcall(G.newShader,[[vec4 effect(vec4 color, Image texture, vec2 tc, vec2 sc) { vec4 tex=Texel(texture,tc); return vec4(0.035,0.035,0.05,tex.a*color.a); }]])
+          if ok then mod._kimGen2EvoSilhouetteShader=created end
+        end
+        shader=mod._kimGen2EvoSilhouetteShader
+      end
+      if shader then G.setShader(shader) end
+      drawFitImage(img,x+(w-art)/2,y+78*scale,art,art)
+      if shader then G.setShader() end
+    end
     if type(s.balls)=="table" and #s.balls>0 then
       color(c.accent,.9,true)
       local cx=x+w/2; local cy=y+92*scale+art/2
@@ -3012,10 +3045,8 @@ return function(mod)
       local game=type(state)=="table" and state.game or nil
       local stack=game and game.stack
       local top=stack and type(stack.top)=="function" and stack:top() or nil
-      if top and top~=state and target(top)=="evolution"
-          and presenterEnabled("pokemon") and hideOriginal() then
-        return false
-      end
+      -- Native evolution must keep its own movie and appropriate underlying
+      -- screen stack rather than be replaced with KIM's empty floating card.
       local kind=target(state)
       if kind=="dexradar" and type(state)=="table" then
         if rawget(state,"_kimDexRadarOriginalOpaque")==nil then
@@ -3033,6 +3064,34 @@ return function(mod)
       local top=game and game.stack and type(game.stack.top)=="function" and game.stack:top()
       local kind=target(top)
       if kind and presenterEnabled(presenterForKind(kind)) then
+        -- Post-battle evolution is still stacked over BattleState until the
+        -- evolution callback completes.  Keep that sequencing intact, but
+        -- present the *live overworld* behind KIM's evolution card instead
+        -- of exposing the finished battle as a background.  Rare-Candy
+        -- evolutions already have the overworld behind them; skip those.
+        if kind=="evolution" and hideOriginal()
+            and game and game.world and game.world.map then
+          local states=game.stack and game.stack.states or {}
+          local underneathBattle=false
+          for i=1,#states-1 do
+            local prior=states[i]
+            if prior and type(prior.bgMode)=="function" then
+              underneathBattle=true
+              break
+            end
+          end
+          if underneathBattle then
+            G.push("all")
+            G.origin()
+            local okWorld=pcall(function() game.world:draw() end)
+            G.pop()
+            -- Do not interfere with native battle/evolution state on failure.
+            if not okWorld and not mod._kimGen2EvolutionWorldWarning then
+              mod._kimGen2EvolutionWorldWarning=true
+              print("[KIM] Gen 2 evolution overworld backdrop unavailable")
+            end
+          end
+        end
         G.push("all"); G.origin(); pcall(renderers[kind],top); G.pop()
       end
       return unpack(result)

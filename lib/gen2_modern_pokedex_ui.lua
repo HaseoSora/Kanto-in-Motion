@@ -614,23 +614,23 @@ return function(mod)
     local uiScale=Style and Style.uiScale and Style.uiScale(sw,sh) or 1
     local layout=Style and Style.layoutStyle and Style.layoutStyle() or "floating"
     local portrait=sh>sw*1.15
-    local pw,ph
-    if portrait then
-      pw=sw*.96; ph=sh*.88
-    else
-      pw=sw>=1000 and math.min(1480,sw*.94) or sw*.96
-      ph=sh>=700 and math.min(820,sh*.90) or sh*.90
+    -- The old dex used a near-full-screen window at every UI SCALE setting
+    -- and only resized its contents. Size the *panel* from the same requested
+    -- multiplier, then derive the drawing scale from the fitted panel so text,
+    -- list rows, preview, and border stay in sync on desktop and mobile.
+    local baseW,baseH=portrait and 760 or 1240,portrait and 1180 or 780
+    local maxW,maxH=sw*.96,sh*.90
+    if layout=="full" then maxW,maxH=sw*.94,sh*.92 end
+    local desiredW,desiredH=baseW*uiScale,baseH*uiScale
+    local fit=math.min(1,maxW/math.max(1,desiredW),maxH/math.max(1,desiredH))
+    local pw,ph=desiredW*fit,desiredH*fit
+    local scale=math.min(pw/baseW,ph/baseH)
+    -- A deliberately full-screen layout still occupies the screen, but its
+    -- content remains fitted to the available rectangle.
+    if layout=="full" then
+      pw,ph=maxW,maxH
+      scale=math.min(uiScale,pw/baseW,ph/baseH)
     end
-    if layout=="full" then pw=sw*.94; ph=sh*.92 end
-
-    -- Cap the authored scale to what the ACTUAL panel can contain. Mobile
-    -- AUTO/UI scale can otherwise be much larger than the available portrait
-    -- or landscape height, which was the source of the overlapping headers,
-    -- rows, preview text and Seen/Owned box.
-    local fitScale
-    if portrait then fitScale=math.min(pw/760,ph/1180)
-    else fitScale=math.min(pw/1240,ph/780) end
-    local scale=math.max(.58,math.min(uiScale,fitScale))
 
     local x=sx+(sw-pw)/2; local y=sy+(sh-ph)/2; panel(x,y,pw,ph,c,.95)
     local bigBase=portrait and 30 or 32

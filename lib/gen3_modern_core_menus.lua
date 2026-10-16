@@ -1577,12 +1577,12 @@ return function(mod)
     setFloatingLayer("evolution_scene",true)
     local sx,sy,sw,sh=playfield(viewport)
     local scale=uiScaleFactor()
-    local roomy=sw>=720 and sh>=460
-    local w=math.min(sw*.96,(roomy and 760 or 660)*scale)
-    local h=math.min(sh*.72,(roomy and 500 or 430)*scale)
+    -- Match Gen 2's centered, large evolution card. EvolutionScene still
+    -- owns the native cycle, silhouette, flash and cancellation states.
+    local w=math.min(sw*.86,960*scale)
+    local h=math.min(sh*.86,660*scale)
     local x=sx+(sw-w)*.5
-    -- Keep room for the shared Modern dialogue presenter along the bottom.
-    local y=sy+math.max(12*scale,(sh-h)*.16)
+    local y=sy+(sh-h)*.5
     if Style and Style.panel then Style.panel(x,y,w,h,c,.96)
     else card(x,y,w,h,c.surface,c.frame,math.max(6,7*scale)) end
 

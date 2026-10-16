@@ -8009,6 +8009,12 @@ return function(mod)
       forcedPreset)
     rows = rows or {}
     local rowCount = #rows
+    -- Settings descriptions need a real multi-line reading area. Use the
+    -- existing larger stable preset rather than squeezing hints into the
+    -- compact seven-row card. The whole menu scales/clamps with the viewport.
+    if runtime._kimSettingsFooter and forcedPreset ~= "NAV" then
+      forcedPreset = "M"
+    end
     local envelope = runtime.stableEnvelope(viewport, theme, kind, nil, rows,
       forcedPreset)
     local spacing = theme.spacing or {}
@@ -8016,13 +8022,23 @@ return function(mod)
     local captionFont = font(fontCache, theme.typography.caption)
     local titleBlock = safeText(title) ~= "" and measureTextBlock(title,
       math.max(1, envelope.w - (spacing.lg or 18) * 2), titleFont) or nil
+    local helpFont = runtime._kimSettingsFooter
+      and font(fontCache, math.max(18, theme.typography.body or 17))
+      or captionFont
     local footerBlock = safeText(footerText) ~= "" and measureTextBlock(
       footerText, math.max(1, envelope.w - (spacing.lg or 18) * 2),
-      captionFont) or nil
+      helpFont) or nil
     local header = titleBlock and (titleBlock.height + (spacing.md or 13) * 2)
       or (spacing.md or 13)
     local footer = footerBlock and (footerBlock.height + (spacing.sm or 9) * 2)
       or (textHeight(captionFont) + (spacing.sm or 9) * 2)
+    if runtime._kimSettingsFooter then
+      -- Stable body-font typography; reserve enough height for all wrapped
+      -- lines instead of shrinking or ellipsizing longer descriptions.
+      footer = math.max(footer,
+        (footerBlock and footerBlock.height or textHeight(helpFont))
+          + (spacing.sm or 9) * 2 + 2)
+    end
     local maximumChrome = math.max(0, envelope.h - 1)
     if header + footer > maximumChrome then
       local ratio = maximumChrome / math.max(1, header + footer)
@@ -8652,7 +8668,7 @@ return function(mod)
     if scroll + layout.visible < #rows then
       setColor(colors.accent)
       drawText("v", layout.x + layout.w - theme.spacing.lg - 8,
-        layout.y + layout.h - layout.footer - 2)
+        layout.y + layout.h - layout.footer - textHeight(font(fontCache, theme.typography.caption)) - 4)
     end
   end
 
@@ -9015,9 +9031,17 @@ return function(mod)
       underState)
     local rows, selected, scroll, title, footerText = runtime.rowsFor(game, state, kind)
     if not rows then return end
-    local hint = runtime.modalHint(kind, footerText)
+    local settingsDescription = type(state) == "table"
+      and state._kimModernSettings ~= nil
+      and type(state.footer) == "string" and state.footer ~= ""
+      and state.footer or nil
+    local hint = settingsDescription or runtime.modalHint(kind, footerText)
+    -- KIM settings are presented as *modal rows*, not the generic presenter.
+    -- Set the measurement flag here, on the path that actually draws them.
+    runtime._kimSettingsFooter = settingsDescription ~= nil
     local layout = runtime.layoutFor(viewport, theme, kind, rows, title,
       runtime.shouldDrawHint(hint) and hint or "")
+    runtime._kimSettingsFooter = nil
     local x, y, w, h = presenterRect(viewport)
     local spacing = theme.spacing
     local horizontalChoice = kind == "choice" and w > h * 1.2
@@ -9077,8 +9101,20 @@ return function(mod)
         py + panelH - layout.footer, panelW - spacing.lg * 2,
         runtime.themeMetric(theme, "divider", 1))
       setColor(theme.colors.textMuted)
-      runtime.drawHintIfUseful(theme, Strings(hint), px + spacing.lg,
-        py + panelH - layout.footer + spacing.xs, panelW - spacing.lg * 2)
+      if settingsDescription then
+        local descriptionFont = font(fontCache,
+          math.max(18, theme.typography.body or 17))
+        local left = px + spacing.lg
+        local top = py + panelH - layout.footer + spacing.sm
+        local width = math.max(1, panelW - spacing.lg * 2)
+        local previousFont = love.graphics.getFont()
+        love.graphics.setFont(descriptionFont)
+        love.graphics.printf(settingsDescription, left, top, width, "left")
+        if previousFont then love.graphics.setFont(previousFont) end
+      else
+        runtime.drawHintIfUseful(theme, Strings(hint), px + spacing.lg,
+          py + panelH - layout.footer + spacing.xs, panelW - spacing.lg * 2)
+      end
     end
   end
 
@@ -9298,8 +9334,28 @@ return function(mod)
 
   runtime.drawManager = function(game, state, viewport, theme)
     local rows, selected, scroll, title = managerRowsFor(game, state)
+    -- Gen 1 Modern UI Settings is the Mod Manager's options page, NOT the
+    -- ListMenu used by Kanto Settings. Bind its selected help before layout.
+    local kimSettingsDescription
+    if state and state.screen == "options" and state.currentMod
+        and state.currentMod.id == MOD_ID then
+      local selectedRow = type(state.optionRows) == "table"
+        and state.optionRows[state.cursor or 1] or nil
+      local optionDescription = selectedRow and (
+        runtime.optionDescription(selectedRow.id)
+        or selectedRow.description or selectedRow.help
+        or (type(selectedRow.option) == "table" and
+          (selectedRow.option.description or selectedRow.option.help))
+        or (type(selectedRow.schema) == "table" and
+          (selectedRow.schema.description or selectedRow.schema.help)))
+      if type(optionDescription) == "string" and optionDescription ~= "" then
+        kimSettingsDescription = optionDescription
+      end
+    end
+    runtime._kimSettingsFooter = kimSettingsDescription ~= nil
     local layout = runtime.layoutFor(viewport, theme, "mod_manager", rows, title,
-      state.notice)
+      kimSettingsDescription or state.notice)
+    runtime._kimSettingsFooter = nil
     -- The manager has a tab strip and (for detail/apply views) a status
     -- subtitle in addition to the normal title. Reserve that line before
     -- calculating how many rows fit so portrait layouts never overlap text.
@@ -9346,13 +9402,31 @@ return function(mod)
     elseif not footer and state.screen == "permissions" then
       footer = "Declared by author; not enforced   B  back"
     elseif not footer and state.screen == "options" then
-      footer = "Arrow keys  adjust   SELECT  help   B  done"
+      -- Keep the selected option's description visible like Gen 2. SELECT
+      -- still opens the unabridged description for narrow screens.
+      footer = kimSettingsDescription or "Arrow keys  adjust   SELECT  help   B  done"
     elseif not footer then
       footer = "A  choose   B  back"
     end
-    runtime.drawHintIfUseful(theme, Strings(footer), layout.x + theme.spacing.lg,
-      layout.y + layout.h - layout.footer + 8,
-      layout.w - theme.spacing.lg * 2)
+    if kimSettingsDescription then
+      -- Unlike the generic one-line hint, setting descriptions need readable
+      -- multiline text that stays inside the reserved footer.
+      local helpFont = font(fontCache, theme.typography.body)
+      local maxWidth = math.max(1, layout.w - theme.spacing.lg * 2)
+      local helpBlock = measureTextBlock(kimSettingsDescription, maxWidth, helpFont)
+      local lineY = layout.y + layout.h - layout.footer + theme.spacing.sm
+      local footerBottom = layout.y + layout.h - theme.spacing.sm
+      love.graphics.setFont(helpBlock.font)
+      for _, line in ipairs(helpBlock.lines) do
+        if lineY + helpBlock.lineHeight > footerBottom + 1 then break end
+        drawText(line, layout.x + theme.spacing.lg, lineY)
+        lineY = lineY + helpBlock.lineHeight
+      end
+    else
+      runtime.drawHintIfUseful(theme, Strings(footer), layout.x + theme.spacing.lg,
+        layout.y + layout.h - layout.footer + 8,
+        layout.w - theme.spacing.lg * 2)
+    end
     runtime.drawManagerOverlay(theme, layout, state, viewport)
     runtime.drawManagerOptionHelp(theme, layout, state, viewport)
     love.graphics.pop()
@@ -13921,7 +13995,7 @@ return function(mod)
     -- KIM's authored lower battle panel ran slightly larger than the preferred
     -- neutral footprint. Keep the user-facing/default value at 100%, but bake
     -- the former 95% calibration into the renderer so 100% is the new neutral.
-    return (clamp(percent, 60, 100) / 100) * 0.95
+    return (clamp(percent, 60, 150) / 100) * 0.95
   end
 
   function battleRuntime.lowerPanelVisualTheme(theme)
@@ -18514,10 +18588,47 @@ return function(mod)
     end
     local rows, selected, scroll, title, footerText = runtime.rowsFor(game, state, kind)
     if not rows then return end
+    -- Gen 1 KIM ListMenu settings are drawn by this Windows presenter (not
+    -- modern_ui_integrated.lua). Match the menu state built in main.lua.
+    -- The live ListMenu supplies its selected help text as state.footer.
+    -- Use that same value for layout measurement AND drawing; never depend
+    -- on a presenter title (which can be normalized or rewritten).
+    local kimSettingsMenu = type(state) == "table" and
+      state._kimModernSettings ~= nil
+    if not kimSettingsMenu then
+      for _, entry in ipairs(rows) do
+        local raw = type(entry) == "table" and entry.source
+        if type(raw) == "table" and type(raw.id) == "string"
+            and raw.id:match("^animated_menu_pokemon:") then
+          kimSettingsMenu = true
+          break
+        end
+      end
+    end
+    local kimSettingsDescription
+    if kimSettingsMenu then
+      kimSettingsDescription = type(state) == "table" and state.footer or nil
+      if type(kimSettingsDescription) ~= "string" or kimSettingsDescription == "" then
+        kimSettingsDescription = footerText
+      end
+      if type(kimSettingsDescription) ~= "string" or kimSettingsDescription == "" then
+        local idx = math.max(1, math.floor(tonumber(selected) or 1))
+        local entry = rows[idx]
+        local raw = type(entry) == "table" and entry.source
+        local option = type(raw) == "table" and raw.option
+        kimSettingsDescription = type(option) == "table" and option.description
+      end
+      if type(kimSettingsDescription) ~= "string" or kimSettingsDescription == "" then
+        kimSettingsDescription = "Left/right adjust   A select   B back"
+      end
+      footerText = kimSettingsDescription
+    end
     local navigationMenu = kind == "menu" and state
       and (state.screenId == "StartMenu" or state._gen1ModMenus)
+    runtime._kimSettingsFooter = kimSettingsDescription ~= nil
     local layout = runtime.layoutFor(viewport, theme, kind, rows, title,
       footerText, navigationMenu and "NAV" or nil)
+    runtime._kimSettingsFooter = nil
     selected = clamp(selected, 1, math.max(1, #rows))
     scroll = runtime.scrollForSelection(layout, scroll, selected, #rows)
 
@@ -18536,13 +18647,28 @@ return function(mod)
     love.graphics.rectangle("fill", layout.x + theme.spacing.lg,
       layout.y + layout.h - layout.footer, layout.w - theme.spacing.lg * 2, 1)
     setColor(theme.colors.textMuted)
-    local footer = layout.sidePanel and "A  select   B  back" or footerText or
+    local footer = kimSettingsDescription or
+      (layout.sidePanel and "A  select   B  back") or footerText or
       (kind == "choice" and "A  choose    B  cancel"
       or kind == "quantity" and "A  confirm    B  cancel"
       or "Arrow keys / A  select    B  back")
-    runtime.drawHintIfUseful(theme, Strings(footer), layout.x + theme.spacing.lg,
-      layout.y + layout.h - layout.footer + 8,
-      layout.w - theme.spacing.lg * 2)
+    if kimSettingsDescription then
+      -- Render this footer independently from the compact one-line hint path.
+      -- printf performs true line wrapping at one fixed font size.
+      local descriptionFont = font(fontCache,
+        math.max(18, theme.typography.body or 17))
+      local left = layout.x + theme.spacing.lg
+      local top = layout.y + layout.h - layout.footer + theme.spacing.sm
+      local width = math.max(1, layout.w - theme.spacing.lg * 2)
+      local previousFont = love.graphics.getFont()
+      love.graphics.setFont(descriptionFont)
+      love.graphics.printf(kimSettingsDescription, left, top, width, "left")
+      if previousFont then love.graphics.setFont(previousFont) end
+    else
+      runtime.drawHintIfUseful(theme, Strings(footer), layout.x + theme.spacing.lg,
+        layout.y + layout.h - layout.footer + 8,
+        layout.w - theme.spacing.lg * 2)
+    end
     if kind == "menu" and state and state.screenId == "StartMenu" then
       mod._gen1ModernSpecialPresenters.drawStartMenuQuickView(
         game, state, viewport, theme, layout)
@@ -19671,6 +19797,54 @@ return function(mod)
     return next(visible, state)
   end, 100)
 
+  -- Gen 1 evolution is stacked above an opaque `evoClear` screen and a
+  -- still-active BattleState. The engine's visibleBase() must see the real
+  -- overworld as its base; hiding BattleState alone leaves evoClear opaque.
+  -- This is render-only: the stack, updates, callbacks and B-cancel remain
+  -- untouched. Do not apply this to Gen 2 or Gen 3.
+  mod.hooks:wrap("screen.render_visible", function(next, visible, state)
+    local oneArgument = state == nil and type(visible) == "table"
+    if oneArgument then state, visible = visible, true end
+    if not IS_GEN2 and state
+        and runtime.option("integratedModernUi", true) ~= false
+        and runtime.option("menuUi", true) ~= false
+        and runtime.option("hideOriginalUi", true) ~= false then
+      local game = runtime.ownerGame(state, currentGame)
+      local stack = game and game.stack
+      local states = stack and stack.states
+      if type(states) == "table" and #states >= 3 then
+        -- The engine can push a completion dialogue above EvolutionState.
+        -- Keep battle/evoClear hidden until EvolutionState actually leaves.
+        local top
+        for i = #states, 1, -1 do
+          local candidate = states[i]
+          if candidate and runtime.kindFor(candidate, game) == "evolution" then
+            top = candidate
+            break
+          end
+        end
+        if top and runtime.presenterEnabled("evolution", top)
+            and runtime.presenterReady(game, top, "evolution") then
+          local worldAt, battleAt, stateAt
+          for i, candidate in ipairs(states) do
+            if candidate == game.overworld then worldAt = i end
+            if candidate == state then stateAt = i end
+            if candidate ~= top and runtime.kindFor(candidate, game) == "battle" then
+              battleAt = i
+            end
+          end
+          if worldAt and battleAt and stateAt
+              and worldAt < battleAt and battleAt < #states
+              and stateAt > worldAt and stateAt < #states then
+            return false
+          end
+        end
+      end
+    end
+    if oneArgument then return next(state) end
+    return next(visible, state)
+  end, 110)
+
   -- render.compose receives the already-drawn world and UI canvases before
   -- the engine performs its normal whole-window composite.  Clearing only the
   -- UI canvas hides the classic interface while still letting the engine do
@@ -19889,8 +20063,27 @@ return function(mod)
             responsiveThemeCache))
       end
     end
+    -- The source transient layer can draw battle-only HP/dialogue over the
+    -- Gen 1 overworld evolution frame even after screen.render_visible hides
+    -- BattleState. EvolutionState's Modern presenter owns the movie here.
+    local evoTop
+    local evoStates = game and game.stack and game.stack.states
+    if type(evoStates) == "table" then
+      for i = #evoStates, 1, -1 do
+        local candidate = evoStates[i]
+        if candidate and runtime.kindFor(candidate, game) == "evolution" then
+          evoTop = candidate
+          break
+        end
+      end
+    end
+    local gen1EvolutionMovie = not IS_GEN2 and tonumber(mod.generation) == 1 and evoTop
+      and runtime.presenterEnabled("evolution", evoTop)
+      and runtime.presenterReady(game, evoTop, "evolution")
+    if not gen1EvolutionMovie then
     runtime.drawSourceTransients(game, viewportForTouchControls(game, viewport),
       responsiveTheme(runtime.currentTheme(viewport, nil), viewport,
         responsiveThemeCache))
+    end
   end, 100)
 end

@@ -1,4 +1,4 @@
-# Kanto in Motion v1.7.5
+# Kanto in Motion v1.7.6
 
 **Kanto in Motion** is an HD animated Pokémon presentation and battle overhaul for **Gen1Recomp**.
 
@@ -9,6 +9,17 @@ It supports:
 - **Pokémon FireRed / LeafGreen / Ruby / Sapphire / Emerald** — National Dex #001–386
 
 The internal mod ID remains `animated_menu_pokemon`, so compatible Kanto in Motion settings can carry forward when updating.
+
+## What’s new in v1.7.6
+
+- **Gen 1:** BATTLE UI SIZE now supports up to **150%** (default 100%).
+- **Gen 1:** Added per-setting descriptions to Kanto Settings, with readable wrapped text and concise help. Modern UI Settings footer presentation has also been revised.
+- **Gen 1 evolution:** Improved the Modern UI evolution window and overworld presentation after battles, including handling of leftover battle HUD layers during evolution. Additional completion-stage behavior may vary by mod stack.
+- **Gen 2:** Improved desktop Battle Art Gen 2 HUD and already-caught Poké Ball compatibility, including native icons in both 2D and 3D-BTL modes, QOL RED/GREY indicators, and HUD COLOR inversion.
+- **Gen 2:** Improved Modern Battle UI layout clearance and Nidoran♀/Nidoran♂ gender-symbol rendering in battle dialogue.
+- **Gen 2:** Refined Modern UI evolution window scaling and overworld presentation.
+- **Gen 3:** Includes Ruby/Sapphire Modern Battle UI graphics-stack hardening and battle cursor fixes from the development line, plus evolution-window layout adjustments. Emerald Modern Battle UI stability remains under investigation.
+
 
 ## What’s new in v1.7.5
 
@@ -402,7 +413,7 @@ External compatibility mod packages are not bundled. v1.6.0 directly vendors onl
 
 ### Installation / first launch
 
-1. Install **Kanto in Motion v1.7.3** and enable it in Gen1Recomp.
+1. Install **Kanto in Motion v1.7.6** and enable it in Gen1Recomp.
 2. On Red/Blue/Yellow and Gold/Silver/Crystal, KIM opens the **HD ASSET MANAGER** when the external HD battle pack is not already cached. On FireRed/LeafGreen/Emerald, the native Start Menu shows **KIM ASSETS** only while the shared pack is missing or incomplete; healthy caches hide the entry automatically.
 3. Choose **A — DOWNLOAD** to download the official asset ZIP once, or **B — USE VANILLA / LATER** to continue without it.
 4. After a successful install, the HD assets remain in Gen1Recomp's installation-scoped KIM cache and are reused by later KIM code updates.
@@ -489,3 +500,7 @@ Battle Art's arena, camera, lighting, world geometry, and move effects remain Ba
 ### Independent Start Menu controls (Gen 1 / Gen 2 / Gen 3)
 
 Each generation offers **START MENU UI SIZE** and **START MENU TEXT SIZE** (both 60%–200%, default 100%). Window sizing and typography are independent from each other and from the overall UI/font controls. These options affect the in-game Start Menu only, not Party, Bag, Summary, or other Modern UI panels. On smaller mobile screens the panel and text are constrained to the available space.
+
+### Gen 2 native battle HP HUD color (v188 test)
+
+- **HUD COLOR** (COLOR / INVERTED; default COLOR) changes the native Gen 2 battle HP frame and HP-label tile ink from black to light while preserving the colored health gauges. It does not affect the lower battle UI, Glass themes, sprites, or other screens.

@@ -463,14 +463,69 @@ return function(mod)
     return tostring(math.floor(a + 0.5)) .. "%"
   end
 
+  -- PlainPixel and some user-selected fonts omit Unicode gender glyphs.
+  -- Keep the engine's original battle text/typewriter state and replace only
+  -- displayed gender characters with the same vector marks as the Party UI.
+  local function drawMessageGender(cx, cy, size, female)
+    size=math.max(7,tonumber(size) or 10)
+    color(COLORS.text,nil,true)
+    local previousWidth=G.getLineWidth()
+    G.setLineWidth(math.max(1,size*.12))
+    local r=size*.22
+    if female then
+      local ox,oy=cx,cy-size*.12
+      G.circle("line",ox,oy,r)
+      G.line(ox,oy+r,ox,cy+size*.34)
+      G.line(ox-size*.18,cy+size*.16,ox+size*.18,cy+size*.16)
+    else
+      local ox,oy=cx-size*.10,cy+size*.08
+      G.circle("line",ox,oy,r)
+      local ex,ey=cx+size*.34,cy-size*.34
+      G.line(ox+r*.72,oy-r*.72,ex,ey)
+      G.line(ex-size*.18,ey,ex,ey,ex,ey+size*.18)
+    end
+    G.setLineWidth(previousWidth)
+  end
+
+  local function drawMessageWithGender(line,font,x,y,maxW)
+    line=tostring(line or "")
+    if not (line:find("♀",1,true) or line:find("♂",1,true)) then
+      return drawText(line,font,x,y,maxW,"left",COLORS.text)
+    end
+    local remaining=line
+    local cursor=x
+    local symbolSize=math.max(7,font:getHeight()*.70)
+    local glyphAdvance=math.max(symbolSize*.85,font:getHeight()*.56)
+    while #remaining>0 do
+      local fi=remaining:find("♀",1,true)
+      local mi=remaining:find("♂",1,true)
+      local at,female
+      if fi and (not mi or fi<mi) then at=fi;female=true
+      elseif mi then at=mi;female=false end
+      if not at then
+        if cursor<x+maxW then drawText(remaining,font,cursor,y,math.max(1,x+maxW-cursor),"left",COLORS.text) end
+        break
+      end
+      local prefix=remaining:sub(1,at-1)
+      if prefix~="" then
+        drawText(prefix,font,cursor,y,math.max(1,x+maxW-cursor),"left",COLORS.text)
+        cursor=cursor+font:getWidth(prefix)
+      end
+      if cursor+glyphAdvance>x+maxW then break end
+      drawMessageGender(cursor+glyphAdvance*.5,y+font:getHeight()*.52,symbolSize,female)
+      cursor=cursor+glyphAdvance
+      remaining=remaining:sub(at+3) -- UTF-8 gender signs each occupy three bytes
+    end
+  end
+
   local function drawMessage(state, x, y, w, h, bodyFont, captionFont, scale)
     local pad = math.max(4, 4 * scale)
     local lines = stateMessageLines(state)
     local lineH = bodyFont:getHeight()
     local maxLines = math.max(1, math.floor((h - pad * 2) / math.max(1, lineH)))
     for i = 1, math.min(#lines, maxLines) do
-      drawText(lines[i], bodyFont, x + pad, y + pad + (i - 1) * lineH,
-        w - pad * 2, "left", COLORS.text)
+      drawMessageWithGender(lines[i], bodyFont, x + pad,
+        y + pad + (i - 1) * lineH, w - pad * 2)
     end
     if type(state.messageArrowVisible) == "function" then
       local ok, visible = pcall(state.messageArrowVisible, state)
@@ -795,8 +850,10 @@ return function(mod)
             -- Modern panel and allow it to extend into the otherwise-unused
             -- lower desktop playfield. This mirrors the spacing mobile WIDE now
             -- gets without forcing the panel all the way to the window edge.
-            local clearY=gy+gh*0.80
-            y=math.min(clearY,maxY)
+            local clearY=gy+gh*0.86
+            -- Keep the full translucent panel visible on shorter desktops;
+            -- move it down into free space rather than covering EXP / battler.
+            y=math.min(clearY,maxY,winH-panelH-margin*1.5)
           end
         else
           y=gy+gh-panelH-margin

@@ -42,9 +42,82 @@ return function(mod, battleHudGeometry, battleUiViewportRect, battleWorldMetrics
   local shadowMask = nil
   local edgeHudOverworldBattle = nil
   local edgeHudCaptureState = nil
+  local edgeHud3dActive = false
+  local edgeHudCaptureSide = nil
+  local edgeHudCapturedTileHud = nil
+  local edgeHudCaughtWasDrawn = false
+  local edgeHudOriginalCaught = nil
   local edgeHudCaptureCanvases = {}
   local edgeHudCaptureReady = { enemy = false, player = false }
   local edgeHudQuads = nil
+
+  -- QOL 1.3.0 Gen2 replaces the native caught tile with 7x7 RED/GREY
+  -- pixels drawn at absolute (8,8) in battle.overlay.  The native draw is
+  -- already suppressed by QOL's dexCaught wrapper, so the replacement must
+  -- be painted into the exact enemy HUD capture that KIM repositions.
+  local QOL_BALL = {
+    "ooxxxoo", "oxdddxo", "xdldddx", "xdddddx",
+    "xlllllx", "oxlllxo", "ooxxxoo",
+  }
+  local QOL_RED = {
+    {255,255,255}, {255,132,132}, {148,58,58}, {0,0,0},
+  }
+  local QOL_GREY = {
+    {255,255,255}, {170,170,170}, {85,85,85}, {0,0,0},
+  }
+  local function qolCaughtMode(battle)
+    local game = battle and battle.game
+    local options = game and game.save and game.save.options
+    local values = options and options.modOptions
+      and options.modOptions.quality_of_life
+    local mode = values and values.qol_caught_indicator
+    if mode == nil and mod and type(mod.find) == "function" then
+      local ok, handle = pcall(mod.find, mod, "quality_of_life")
+      if not ok or not handle then ok, handle = pcall(mod.find, "quality_of_life") end
+      if ok and handle and handle.options and type(handle.options.get) == "function" then
+        local okMode, fallback = pcall(handle.options.get, handle.options,
+          "qol_caught_indicator")
+        if okMode then mode = fallback end
+      end
+    end
+    return mode == "red" and "red" or mode == "grey" and "grey" or nil
+  end
+  local function needsQolCapturedCaught(battle)
+    local mode = qolCaughtMode(battle)
+    if not mode then return nil end
+    if not (battle and battle.battle and battle.battle.wild
+        and battle.showEnemyHud and not battle:hudCleared("enemy")) then
+      return nil
+    end
+    local okEnemy, enemy = pcall(battle.activeMon, battle, "enemy")
+    if not okEnemy or not enemy then return nil end
+    local okHud, BattleState = pcall(require, "src.ui.gen2.BattleState")
+    local vanillaCaught = okHud and BattleState
+      and rawget(BattleState, "__qolDexCaughtVanilla")
+    if type(vanillaCaught) ~= "function" then return nil end
+    local okCaught, caught = pcall(vanillaCaught, battle, enemy)
+    return okCaught and caught and mode or nil
+  end
+  local function paintQolCapturedCaught(battle)
+    local mode = needsQolCapturedCaught(battle)
+    if not mode then return end
+    local okPal, Palette = pcall(require, "src.render.GbcPalette")
+    if not okPal or type(Palette.color) ~= "function" then return end
+    local source = mode == "red" and QOL_RED or QOL_GREY
+    local colors = { x = Palette.color(source, 4),
+      d = Palette.color(source, 3), l = Palette.color(source, 2) }
+    local g = love.graphics
+    if type(g.setShader) == "function" then g.setShader() end
+    for ry, row in ipairs(QOL_BALL) do
+      for rx = 1, #row do
+        local color = colors[row:sub(rx, rx)]
+        if color then
+          g.setColor(color[1] / 255, color[2] / 255, color[3] / 255, 1)
+          g.rectangle("fill", 8 + rx - 1, 8 + ry - 1, 1, 1)
+        end
+      end
+    end
+  end
 
   -- Gen2 Battle Art does not run the Gen1 drawHUDs/snapHUDs path. Its adapter
   -- replaces BattleState:drawWidescreen() and calls the native Gen2
@@ -88,6 +161,10 @@ return function(mod, battleHudGeometry, battleUiViewportRect, battleWorldMetrics
     end
 
     local previous = g.getCanvas and g.getCanvas() or nil
+    local priorSide = edgeHudCaptureSide
+    edgeHudCaptureSide = side
+    edgeHudCapturedTileHud = nil
+    edgeHudCaughtWasDrawn = false
     local pushed = type(g.push) == "function" and pcall(g.push, "all") or false
     local ok, err = pcall(function()
       g.setCanvas(canvas)
@@ -100,9 +177,39 @@ return function(mod, battleHudGeometry, battleUiViewportRect, battleWorldMetrics
       g.setColor(1, 1, 1, 1)
       g.clear(0, 0, 0, 0)
       drawFn(battle, unpackCompat(args, 1, args.n))
+      if side == "enemy" then
+        -- Battle Art's native HUD compositor can bypass drawCaughtIcon,
+        -- even when Gen2's own unmodified indicator is selected. Recreate
+        -- that tile ON the captured enemy canvas, never on its centered pass.
+        -- The existing native draw takes precedence when it ran normally.
+        if not edgeHudCaughtWasDrawn and edgeHudCapturedTileHud
+            and type(edgeHudOriginalCaught) == "function"
+            and not qolCaughtMode(battle) then
+          local caught = battle.caughtMark == true
+          if not caught and type(battle.dexCaught) == "function"
+              and type(battle.activeMon) == "function" then
+            local okEnemy, mon = pcall(battle.activeMon, battle, "enemy")
+            if okEnemy and mon then
+              local okCaught, known = pcall(battle.dexCaught, battle, mon)
+              caught = okCaught and known == true
+            end
+          end
+          if caught and battle.battle and battle.battle.wild then
+            local mon
+            if type(battle.activeMon) == "function" then
+              local okMon, got = pcall(battle.activeMon, battle, "enemy")
+              if okMon then mon = got end
+            end
+            pcall(edgeHudOriginalCaught, edgeHudCapturedTileHud, 1, 1,
+              mon and mon.hp, mon and (mon.maxHp or mon.maxHP))
+          end
+        end
+        paintQolCapturedCaught(battle)
+      end
     end)
     if previous then g.setCanvas(previous) else g.setCanvas() end
     if pushed and type(g.pop) == "function" then pcall(g.pop) end
+    edgeHudCaptureSide = priorSide
     if not ok then error(err, 0) end
     edgeHudCaptureReady[side] = true
   end
@@ -127,6 +234,14 @@ return function(mod, battleHudGeometry, battleUiViewportRect, battleWorldMetrics
     if not okRects or type(bandX) ~= "table" then return false end
     local quads = hudQuads()
     if not quads then return false end
+    -- Desktop KIM-owned edge HUD: use the same visible-pixel inset as Gen 1
+    -- WIDE, instead of the Battle Art band origin that clips the left edge.
+    local desktopEnemyBandX = tonumber(bandX.enemy) or 0
+    local okGeo, geo = pcall(battleHudGeometry, tonumber(shot.pw) or winW,
+      tonumber(shot.ph) or winH, 0, nil)
+    if okGeo and type(geo) == "table" and tonumber(geo.enemyBandX) then
+      desktopEnemyBandX = tonumber(geo.enemyBandX)
+    end
 
     local pw, ph = tonumber(shot.pw), tonumber(shot.ph)
     if (not pw or not ph) and type(shot.canvas.getDimensions) == "function" then
@@ -151,7 +266,7 @@ return function(mod, battleHudGeometry, battleUiViewportRect, battleWorldMetrics
       g.setColor(1, 1, 1, 1)
       if edgeHudCaptureReady.enemy and edgeHudCaptureCanvases.enemy then
         g.draw(edgeHudCaptureCanvases.enemy, quads.enemy,
-          (tonumber(bandX.enemy) or 0) * outX, ly * outY, 0,
+          desktopEnemyBandX * outX, ly * outY, 0,
           battleScale * outX, battleScale * outY)
       end
       if edgeHudCaptureReady.player and edgeHudCaptureCanvases.player then
@@ -552,15 +667,140 @@ return function(mod, battleHudGeometry, battleUiViewportRect, battleWorldMetrics
       BattleState._kantoInMotionGen2BattleArtEnemyHudV19 = originalDrawEnemyHud
       BattleState._kantoInMotionGen2BattleArtPlayerHudV19 = originalDrawPlayerHud
 
+      -- Suppress QOL's original RED/GREY raster only in its battle.overlay
+      -- pass.  Without this its 7x7 icon remains at the centered 160x144
+      -- battle origin even though our captured copy moves with the enemy HUD.
+      if mod.hooks and type(mod.hooks.wrap) == "function"
+          and not mod._kimGen2QolCaughtOverlayFilter then
+        mod._kimGen2QolCaughtOverlayFilter = true
+        mod.hooks:wrap("battle.overlay", function(next, battle)
+          if not (type(mod._kantoInMotionBattleArt3DBattleEnabled) == "function"
+                  and mod._kantoInMotionBattleArt3DBattleEnabled() == true)
+              or not qolCaughtMode(battle) or not (love and love.graphics) then
+            return next(battle)
+          end
+          local g = love.graphics
+          local originalRectangle = g.rectangle
+          g.rectangle = function(shape, x, y, w, h, ...)
+            local nx, ny, nw, nh = tonumber(x), tonumber(y), tonumber(w), tonumber(h)
+            if shape == "fill" and nx and ny and nw and nh
+                and nw == 1 and nh == 1 and nx >= 8 and nx <= 14
+                and ny >= 8 and ny <= 14 then
+              return
+            end
+            return originalRectangle(shape, x, y, w, h, ...)
+          end
+          local results = { pcall(next, battle) }
+          g.rectangle = originalRectangle
+          if not results[1] then error(results[2], 0) end
+          return unpackCompat(results, 2, #results)
+        end, 1000)
+      end
+
+      -- Gen2 caught icons are native 8x8 tile draws. Battle Art sometimes
+      -- makes a second native HUD pass at the centered viewport while KIM
+      -- replays the main HP bands at the screen edges. Keep the caught mark
+      -- exclusively in the captured enemy band, so it follows the enemy name
+      -- and border rather than floating near the middle of the playfield.
+      local okCaughtHud, CaughtHud = pcall(require, "src.ui.gen2.BattleHud")
+      if okCaughtHud and type(CaughtHud) == "table"
+          and type(CaughtHud.drawCaughtIcon) == "function"
+          and not CaughtHud._kimBattleArtEdgeCaughtInstalled then
+        CaughtHud._kimBattleArtEdgeCaughtInstalled = true
+        local drawCaughtSource = CaughtHud.drawCaughtIcon
+        edgeHudOriginalCaught = drawCaughtSource
+        CaughtHud.drawCaughtIcon = function(hud, tx, ty, hp, maxHp)
+          if edgeHudCaptureState and edgeHudCaptureSide == "enemy" then
+            edgeHudCaughtWasDrawn = true
+            -- Keep the caught mark at its native enemy-HUD-local tile (1,1).
+            -- The entire enemy band is already moved to the widescreen edge
+            -- by drawCapturedEdgeHud; applying another horizontal shift here
+            -- placed the mark far from the name on desktop.
+            return drawCaughtSource(hud, 1, 1, hp, maxHp)
+          end
+          -- Do not emit a detached caught marker into Battle Art's centered
+          -- native battle canvas. Preserve native paths when there is no
+          -- active Battle Art widescreen shot.
+          local stageActive = type(mod._kantoInMotionBattleArt3DBattleEnabled) == "function"
+            and mod._kantoInMotionBattleArt3DBattleEnabled() == true
+          if stageActive and (currentShot() or edgeHud3dActive) then return true end
+          return drawCaughtSource(hud, tx, ty, hp, maxHp)
+        end
+      end
+
+      -- The Gen 2 caught mark is tile $5d of ExpBarGFX. Some desktop
+      -- Battle Art passes call BattleHud:drawTile directly before the native
+      -- HUD reaches drawEnemyHud, bypassing drawCaughtIcon interception.
+      -- Filter only that caught-mark tile during the 3D scene's native pass;
+      -- the offscreen edge HUD capture keeps its copy.
+      if okCaughtHud and type(CaughtHud) == "table"
+          and type(CaughtHud.drawTile) == "function"
+          and not CaughtHud._kimBattleArtEdgeCaughtTileInstalled then
+        CaughtHud._kimBattleArtEdgeCaughtTileInstalled = true
+        local sourceDrawTile = CaughtHud.drawTile
+        CaughtHud.drawTile = function(hud, sheet, first, tile, ...)
+          if edgeHudCaptureSide == "enemy" then
+            edgeHudCapturedTileHud = hud
+          end
+          local stageActive = type(mod._kantoInMotionBattleArt3DBattleEnabled) == "function"
+            and mod._kantoInMotionBattleArt3DBattleEnabled() == true
+          if stageActive and sheet == "expBar" and tonumber(tile) == 0x5d
+              and edgeHudCaptureSide ~= "enemy"
+              and (currentShot() or currentRender or edgeHud3dActive) then
+            return true
+          end
+          return sourceDrawTile(hud, sheet, first, tile, ...)
+        end
+      end
+
       BattleState.drawEnemyHud = function(self, ...)
-        return captureNativeHud("enemy", self, originalDrawEnemyHud, ...)
+        local stageActive = type(mod._kantoInMotionBattleArt3DBattleEnabled) == "function"
+          and mod._kantoInMotionBattleArt3DBattleEnabled() == true
+        if not stageActive then
+          return originalDrawEnemyHud(self, ...)
+        end
+        -- Battle Art calls the native HUD both for the 3D scene and for the
+        -- final screen-edge band. The caught mark belongs ONLY in the latter.
+        -- The old BattleHud.drawCaughtIcon hook could miss the former because
+        -- Battle Art can retain its own renderer references and a screenshot
+        -- is not necessarily available yet during the native pass.
+        if edgeHudCaptureState == self then
+          return captureNativeHud("enemy", self, originalDrawEnemyHud, ...)
+        end
+        -- The native battle pass can run BEFORE OverworldBattle.shot() is
+        -- populated on desktop. A shot-dependent test allowed its caught tile
+        -- to leak into the original 160x144 viewport. The Battle Art Gen2
+        -- widescreen adapter owns this path: only the explicit offscreen
+        -- capture above may draw the caught mark. Its captured 8x8 tile is
+        -- then replayed at the relocated enemy HUD edge.
+        local savedCaught = self.caughtMark
+        if not savedCaught then
+          return originalDrawEnemyHud(self, ...)
+        end
+        -- Suppress only the original caught tile during the centered pass;
+        -- preserve native enemy name, gender, HP and frame drawing.
+        self.caughtMark = false
+        local results = { pcall(originalDrawEnemyHud, self, ...) }
+        self.caughtMark = savedCaught
+        if not results[1] then error(results[2], 0) end
+        return unpackCompat(results, 2, #results)
       end
       BattleState.drawPlayerHud = function(self, ...)
         return captureNativeHud("player", self, originalDrawPlayerHud, ...)
       end
 
       BattleState.drawWidescreen = function(self, winW, winH, ...)
+        -- Native WideBattle owns both HUDs while Gen 2 Battle Art is OFF.
+        -- A stale/staged shot may still exist in the Battle Art module; it
+        -- must not trigger KIM's second edge-HUD compositing pass.
+        local stageActive = type(mod._kantoInMotionBattleArt3DBattleEnabled) == "function"
+          and mod._kantoInMotionBattleArt3DBattleEnabled() == true
+        if not stageActive then
+          edgeHud3dActive = false
+          return originalDrawWidescreen(self, winW, winH, ...)
+        end
         local shot = currentShot()
+        edgeHud3dActive = shot ~= nil
         if not shot then return originalDrawWidescreen(self, winW, winH, ...) end
         edgeHudCaptureReady.enemy, edgeHudCaptureReady.player = false, false
         local previous = edgeHudCaptureState

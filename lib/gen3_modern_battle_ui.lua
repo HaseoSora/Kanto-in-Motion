@@ -257,10 +257,21 @@ return function(mod)
     if type(originalUiDraw) == "function" then
       Ui.draw = function(...)
         healthboxText = {}
-        if not ownsLowerPanel() then return originalUiDraw(...) end
+        if mod._kimGen3LowerPanelFault or not ownsLowerPanel() then return originalUiDraw(...) end
 
         local savedFontDraw = okFrlgFont and FrlgFont and FrlgFont.draw or nil
         local savedCursorPx = okWindow and Window and Window.cursorPx or nil
+        -- Ruby/Sapphire use a segmented native selection frame rather than
+        -- Window.cursorPx.  It is drawn by rs.menu_cursor in both the four-
+        -- command and move-selection menus and is not affected by the font/
+        -- pip suppression above.  Suppress only that native cursor while
+        -- KIM owns the lower battle UI, preserving the Glass alpha entirely.
+        local okRsCursor, rsCursor = pcall(require, "src.ui.game3.rs.menu_cursor")
+        local savedRsCursorDraw = okRsCursor and type(rsCursor) == "table"
+          and type(rsCursor.draw) == "function" and rsCursor.draw or nil
+        if savedRsCursorDraw then
+          rsCursor.draw = function(...) return nil end
+        end
 
         if type(savedFontDraw) == "function" then
           FrlgFont.draw = function(text, x, y, opts)
@@ -280,13 +291,16 @@ return function(mod)
         local packed = { pcall(originalUiDraw, ...) }
         if type(savedFontDraw) == "function" then FrlgFont.draw = savedFontDraw end
         if type(savedCursorPx) == "function" then Window.cursorPx = savedCursorPx end
+        if savedRsCursorDraw then rsCursor.draw = savedRsCursorDraw end
         if not packed[1] then error(packed[2], 0) end
         return unpack(packed, 2)
       end
     end
 
     Healthbox.draw = function(side, battler, opts)
-      if not enabled() then return originalHealthboxDraw(side, battler, opts) end
+      if not enabled() or mod._kimGen3HealthboxFault then
+        return originalHealthboxDraw(side, battler, opts)
+      end
 
       -- 1025Dex keeps expanded-species genderRate in its public dex API rather
       -- than Game3's compact species metadata.  If Game3 cannot resolve a
@@ -552,6 +566,7 @@ return function(mod)
     end
 
     G.push("all")
+    local drawOk, drawErr = xpcall(function()
     G.origin()
     G.setShader()
     G.setBlendMode("alpha")
@@ -617,7 +632,9 @@ return function(mod)
       end
     end
     G.setColor(1,1,1,1)
+    end, function(err) return tostring(err) end)
     G.pop()
+    if not drawOk then error(drawErr, 0) end
   end
 
   local function revealedMessage()
@@ -843,7 +860,16 @@ return function(mod)
     -- final window resolution before any child menu or lower-panel ownership
     -- checks.  This keeps names/levels/HP visible behind KIM's floating Party
     -- and Bag windows while still using the Modern UI font.
-    drawHealthboxModernText(viewport)
+    -- Healthbox and lower-panel presentation are independent.  Failing one
+    -- must never hide the other.  The next native healthbox draw restores
+    -- the original engine font instead of suppressing its labels forever.
+    if not mod._kimGen3HealthboxFault then
+      local hpOk, hpErr = pcall(drawHealthboxModernText, viewport)
+      if not hpOk then
+        mod._kimGen3HealthboxFault = tostring(hpErr)
+        print("KIM Gen 3 healthbox font fallback: " .. mod._kimGen3HealthboxFault)
+      end
+    end
 
     if fullscreenOwnsFrame() then return end
     if Ui._caughtDexScene then return end
@@ -874,8 +900,10 @@ return function(mod)
     -- land instead of presenting misleading standard FIGHT/BAG labels.
     if st.safari or st.oldManTutorial or st.pokedude then return end
 
+    if mod._kimGen3LowerPanelFault then return end
     local c=theme()
     G.push("all")
+    local drawOk, drawErr = xpcall(function()
     G.origin()
     G.setShader()
     G.setBlendMode("alpha")
@@ -897,7 +925,12 @@ return function(mod)
     end
 
     G.setColor(1,1,1,1)
+    end, function(err) return tostring(err) end)
     G.pop()
+    if not drawOk then
+      mod._kimGen3LowerPanelFault = tostring(drawErr)
+      print("KIM Gen 3 lower panel fallback: " .. mod._kimGen3LowerPanelFault)
+    end
   end,9900)
 
   mod.exports=mod.exports or {}

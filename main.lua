@@ -416,8 +416,10 @@ return function(mod)
     { key = "enabled", label = "MENU SPRITES", type = "toggle", default = true },
     { key = "menuIcons", label = "POKEMON ICONS", type = "toggle", default = true,
       description = "Use Kanto in Motion HD-derived Pokemon icons in party and other native icon slots. OFF yields icon presentation back to the game or another icon mod such as HGSS_SPRITES." },
-    { key = "animate", label = "ANIMATION", type = "toggle", default = true },
-    { key = "titleScreen", label = "TITLE SCREEN", type = "toggle", default = true },
+    { key = "animate", label = "ANIMATION", type = "toggle", default = true,
+      description = "Enable Kanto in Motion animated Pokemon presentation where supported." },
+    { key = "titleScreen", label = "TITLE SCREEN", type = "toggle", default = true,
+      description = "Use the custom Gen 1 title screen with cycling Pokemon and KIM branding." },
     { key = "titleTrainer", label = "TITLE TRAINER", type = "choice",
       default = "animated", choices = {
         { "ANIMATED", "animated" }, { "ORIGINAL GEN 1", "original" },
@@ -425,7 +427,7 @@ return function(mod)
     { key = "titleCycleSpeed", label = "TITLE CYCLE SPEED", type = "choice",
       default = "slow", choices = {
         { "NORMAL", "normal" }, { "SLOW", "slow" }, { "SLOWER", "slower" },
-      } },
+      }, description = "Set how quickly the animated Pokemon cycle on the Gen 1 title screen." },
     { key = "titlePokemonSize", label = "TITLE PKMN SIZE", type = "choice",
       default = "75", choices = {
         { "50%", "50" }, { "55%", "55" }, { "60%", "60" }, { "65%", "65" },
@@ -623,6 +625,9 @@ return function(mod)
         description = "Animate supported KIM Pokémon artwork while preserving the selected menu sprite source." },
       { key = "battleUiWip", label = "MODERN BATTLE UI", type = "toggle",
         default = true, description = "Replace only the native Gen 2 lower battle dialogue/command/move surface; the HP/status HUD and battle logic remain native." },
+      { key = "gen2BattleHudColor", label = "HUD COLOR", type = "choice",
+        default = "color", choices = { { "COLOR", "color" }, { "INVERTED", "inverted" } },
+        description = "Change native Gen 2 battle HUD black ink to light ink, including Pokémon names, levels, genders, HP numbers, labels, and both HUD frames. HP gauge fill, menus, and sprites are unaffected." },
       { key = "battleWideUi", label = "BATTLE UI MODE", type = "choice",
         default = "wide", choices = { { "OG", "og" }, { "WIDE", "wide" } },
         description = "Choose the Gen 2 Modern lower battle-menu layout directly. OG uses the classic 160x144 surface; WIDE uses KIM's 304x144 widescreen surface. Portrait layout is unchanged." },
@@ -757,6 +762,10 @@ return function(mod)
         { "60%", "60" }, { "65%", "65" }, { "70%", "70" },
         { "75%", "75" }, { "80%", "80" }, { "85%", "85" },
         { "90%", "90" }, { "95%", "95" }, { "100%", "100" },
+        { "105%", "105" }, { "110%", "110" }, { "115%", "115" },
+        { "120%", "120" }, { "125%", "125" }, { "130%", "130" },
+        { "135%", "135" }, { "140%", "140" }, { "145%", "145" },
+        { "150%", "150" },
       }, description = "Adjust the lower battle command/move/message panel footprint while keeping it bottom-anchored. 100% is KIM's calibrated neutral size (the former 95% footprint). Desktop layouts can grow upward when a large pixel font needs more room." },
     { key = "battleUiOpacity", label = "BATTLE UI OPACITY", type = "choice",
       default = "100", choices = {
@@ -1514,6 +1523,29 @@ return function(mod)
   -- real 3D stage is active.
   local function battleArt3DBattleEnabled()
     if not (mod and type(mod.find) == "function") then return false end
+    -- Gen 2 Battle Art has its own mod ID.  Looking up only the Gen 1 fork
+    -- left desktop Gen 2 caught-icon reconstruction permanently dormant.
+    if IS_GEN2 then
+      local ok2, handle2 = pcall(mod.find, mod, "BATTLE_ART_VOXEL_GEN2")
+      if not ok2 or not handle2 then
+        ok2, handle2 = pcall(mod.find, "BATTLE_ART_VOXEL_GEN2")
+      end
+      if not (ok2 and handle2) then return false end
+      local exports2 = type(handle2.exports) == "table" and handle2.exports or nil
+      local lib2 = exports2 and exports2.lib or nil
+      if type(lib2) ~= "table" or type(lib2.require) ~= "function" then
+        return false
+      end
+      local okStage2, stage2 = pcall(lib2.require, "OverworldBattle")
+      if not (okStage2 and type(stage2) == "table") then return false end
+      if type(stage2.enabled) == "function" then
+        local okEnabled2, enabled2 = pcall(stage2.enabled)
+        return okEnabled2 and enabled2 == true
+      end
+      -- No positive stage signal: never mistake an installed-but-disabled
+      -- Battle Art for an active 3D scene.
+      return false
+    end
     local ok, handle = pcall(mod.find, mod, "BATTLE_ART_VOXEL_FORK")
     if not ok or not handle then
       ok, handle = pcall(mod.find, "BATTLE_ART_VOXEL_FORK")
@@ -5257,11 +5289,52 @@ return function(mod)
     -- Kanto in Motion is the HP/status renderer while its battle HUD is active.
     -- Hide the source copy, but briefly fail open while captureBattleHud redraws
     -- those exact native glyphs into its transparent scratch texture.
+    -- Gen 1 post-battle evolution remains inside BattleState until the native
+    -- evolution/move-learning callbacks finish. Suppress only visual battle HUD
+    -- passes while its EvolutionState is live; never alter the state machine.
+    local function gen1EvolutionVisualActive(game)
+      if IS_GEN2 or tonumber(mod.generation) ~= 1 then return false end
+      local states=game and game.stack and game.stack.states
+      if type(states)~="table" or #states<2 then return false end
+      -- EvolutionState.new is wrapped in patchEvolutionScreen and stamps
+      -- _animatedMenuNewSpecies on the real native state. Do not rely on
+      -- package.loaded or the opaque evoClear screen: both were unreliable
+      -- in the v212 HUD hook even when Modern UI recognized the evolution.
+      -- Completion dialogue is pushed above EvolutionState. Search the live
+      -- stack rather than checking only the top entry; this must agree with
+      -- the Gen 1 overworld renderer's evolution-stack recognition.
+      local evolutionAt
+      for i=#states,1,-1 do
+        local candidate=states[i]
+        if type(candidate)=="table" and (
+            candidate._animatedMenuNewSpecies~=nil
+            or (candidate.mon~=nil and candidate.newSpecies~=nil
+              and (candidate.oldSprite~=nil or candidate.newSprite~=nil))) then
+          evolutionAt=i
+          break
+        end
+      end
+      if not evolutionAt then return false end
+      for i=1,evolutionAt-1 do
+        local st=states[i]
+        if type(st)=="table" and st~=game.overworld then
+          local mt=getmetatable(st)
+          local idx=mt and mt.__index
+          if type(idx)=="table" and idx==package.loaded["src.battle.BattleState"] then
+            return true
+          end
+          if st==currentBattleState(game) then return true end
+        end
+      end
+      return false
+    end
+
     mod.hooks:wrap("battle.status_hud_visible", function(nextFn, state)
       -- KIM is the visible HP/status renderer whenever its battle HUD is
       -- active, including mobile Battle Art stage-only. captureBattleHud sets
       -- this private flag so the native glyphs can be redrawn into KIM's
       -- transparent scratch texture without exposing a second source HUD.
+      if state and gen1EvolutionVisualActive(state.game) then return false end
       if state and state._kantoInMotionHudCapture then return true end
       if battleLiteHudActive() then
         if state then state._kantoInMotionStatusHudSuppressed = true end
@@ -5410,7 +5483,8 @@ return function(mod)
       -- Give the integrated module one final-window chance to draw ONLY its
       -- lower panel. A proof flag prevents duplicates when the normal presenter
       -- already succeeded. Crystal/Gen 2 and FR/LG never enter this branch.
-      if battle and mod._kantoInMotionNativeMobileGen1()
+      if battle and not gen1EvolutionVisualActive(game)
+          and mod._kantoInMotionNativeMobileGen1()
           and (active or mobileExternalKimHudStage) and not childMenuOpen
           and battleModernUiActive(game,battle)
           and battle._kantoInMotionModernLowerDrawn~=true then
@@ -5435,6 +5509,7 @@ return function(mod)
       -- drawBattleHud applies KIM's HUD COLOR shader, so INVERTED comes from
       -- KIM rather than Battle Art's own color option.
       if (active or mobileBattleArtStageOnly or externalKimHudStage)
+          and not gen1EvolutionVisualActive(game)
           and not childMenuOpen and battleLiteHudActive() then
         drawBattleHud(battle, viewport, select(1, battleOffsets(battle)))
       end
@@ -7083,6 +7158,52 @@ return function(mod)
     return items
   end
 
+  -- Give the live ListMenu its own footer instead of relying on a renderer
+  -- guessing whether a custom menu belongs to KIM. The existing presenter
+  -- consumes state.footer directly in rowsFor().
+  local function updateKimSettingsFooter(menu)
+    if type(menu) ~= "table" then return end
+    local index = math.max(1, math.floor(tonumber(menu.index) or 1))
+    local item = type(menu.items) == "table" and menu.items[index] or nil
+    local option = type(item) == "table" and item.option or nil
+    local message = type(option) == "table" and option.description or nil
+    if type(message) ~= "string" or message == "" then
+      if item and item.submenu then
+        message = "Open " .. tostring(item.label or "settings") .. " settings."
+      elseif item and item.assetManager then
+        message = "Download and manage optional HD assets."
+      elseif item and item.cancel then
+        message = "Return to the previous menu."
+      else
+        message = "Left/right adjust   A select   B back"
+      end
+    end
+    -- Keep the on-screen hint concise; option.description remains intact for
+    -- full help elsewhere. This avoids multi-paragraph help crowding the menu.
+    local concise = {
+      menuIcons = "Use KIM HD Pokemon icons in menus. OFF uses native or other mod icons.",
+      animate = "Enable animated Pokemon sprites where supported.",
+      titleScreen = "Use KIM's animated Gen 1 title screen.",
+      titleTrainer = "Choose animated Red or the original trainer sprite.",
+      titleCycleSpeed = "Set the title screen Pokemon cycling speed.",
+      titlePokemonSize = "Resize the title screen Pokemon artwork.",
+      enabled = "Use KIM HD menu sprites instead of the native artwork.",
+    }
+    if type(option) == "table" and concise[option.key] then
+      message = concise[option.key]
+    elseif type(message) == "string" and #message > 118 then
+      -- Take the first short sentence, or a complete phrase at a word break.
+      local first = message:match("^(.-%.)%s")
+      if first and #first <= 118 then
+        message = first
+      else
+        local prefix = message:sub(1, 115)
+        message = (prefix:match("^(.*)%s+%S*$") or prefix):gsub("[,;:%s]+$", "") .. "."
+      end
+    end
+    menu.footer = message
+  end
+
   local function newSettingsMenu(game)
     local menu
     local function refresh(preferredId)
@@ -7095,6 +7216,7 @@ return function(mod)
         for i, item in ipairs(items) do if item.id == preferredId then found = i break end end
       end
       menu.index = found or math.max(1, math.min(oldIndex, #items))
+      updateKimSettingsFooter(menu)
     end
     local function step(item, dir)
       if not (item and item.option) then return end
@@ -7123,7 +7245,9 @@ return function(mod)
         if input and input:wasPressed("left") then step(item, -1); return end
         if input and input:wasPressed("right") then step(item, 1); return end
       end
-      return baseUpdate(self, dt)
+      local result = baseUpdate(self, dt)
+      updateKimSettingsFooter(self)
+      return result
     end
     return menu
   end
@@ -7145,6 +7269,7 @@ return function(mod)
         for i, item in ipairs(items) do if item.id == preferredId then found = i break end end
       end
       menu.index = found or math.max(1, math.min(oldIndex, #items))
+      updateKimSettingsFooter(menu)
     end
     local function step(item, dir)
       if not (item and item.option) then return end
@@ -7173,7 +7298,9 @@ return function(mod)
         if input and input:wasPressed("left") then step(item, -1); return end
         if input and input:wasPressed("right") then step(item, 1); return end
       end
-      return baseUpdate(self, dt)
+      local result = baseUpdate(self, dt)
+      updateKimSettingsFooter(self)
+      return result
     end
     return menu
   end
@@ -7197,6 +7324,7 @@ return function(mod)
         for i, item in ipairs(items) do if item.id == preferredId then found = i break end end
       end
       menu.index = found or math.max(1, math.min(oldIndex, #items))
+      updateKimSettingsFooter(menu)
     end
     local function step(item, dir)
       if not (item and item.option) then return end
@@ -7225,7 +7353,9 @@ return function(mod)
         if input and input:wasPressed("left") then step(item, -1); return end
         if input and input:wasPressed("right") then step(item, 1); return end
       end
-      return baseUpdate(self, dt)
+      local result = baseUpdate(self, dt)
+      updateKimSettingsFooter(self)
+      return result
     end
     return menu
   end
@@ -7304,6 +7434,22 @@ return function(mod)
       else
         mod.log:error("cannot read Gen2 Modern shared UI settings/style bridge: %s",
           tostring(styleReadErr))
+      end
+
+      -- The native G/S/C HP graphics are independent of the lower Modern UI.
+      local hudColorSource = mod:read("lib/gen2_hud_color.lua")
+      if hudColorSource then
+        local hudColorChunk, hudColorErr = load(hudColorSource,
+          "@" .. mod.path .. "/lib/gen2_hud_color.lua")
+        if hudColorChunk then
+          local okHudModule, hudInstaller = pcall(hudColorChunk)
+          if okHudModule and type(hudInstaller) == "function" then
+            local okHudInstall, hudInstallErr = pcall(hudInstaller, mod)
+            if not okHudInstall then mod.log:error("Gen2 HUD color: " .. tostring(hudInstallErr)) end
+          end
+        elseif hudColorErr then
+          mod.log:error("Gen2 HUD color compile: " .. tostring(hudColorErr))
+        end
       end
 
       -- Gen 2 uses a dedicated adapter. It modernizes only the lower battle
@@ -7599,6 +7745,26 @@ return function(mod)
     if okHelper and helper then
       mod._kantoInMotionBattleArtGen2Compat = helper
       mod.exports.battleArtGen2Compatibility = true
+      -- Desktop Gen2 caught overlay: reuse the Gen1 WIDE pixel-to-HUD anchor.
+      -- This is independent of native Gen2 BattleHud tile interception.
+      if not mod._kantoInMotionNativeMobileHost() then
+        local okCaught, installer = pcall(function()
+          local src = assert(mod:read("lib/gen2_desktop_caught_wide_overlay.lua"))
+          local loader = loadstring or load
+          return assert(loader(src, "@" .. mod.path ..
+            "/lib/gen2_desktop_caught_wide_overlay.lua"))()
+        end)
+        if okCaught and type(installer) == "function" then
+          okCaught, installer = pcall(installer, mod,
+            battleArt3DBattleEnabled, mod._kantoInMotionNativeMobileHost,
+            battleHudGeometry, integratedModernUiEnabled)
+        end
+        if not okCaught and mod.log then
+          mod.log:error("Gen2 desktop caught WIDE anchor failed: %s",
+            tostring(installer))
+        end
+      end
+
     elseif not okHelper then
       mod.log:error("Battle Art Gen2 compatibility bridge failed: %s",
         tostring(helper))
@@ -7693,6 +7859,11 @@ return function(mod)
             tostring(desktopInstaller))
         end
 
+        -- Gen 2 already installs a generation-specific caught-icon route
+        -- above. Do not add the generic Gen 1/QOL rectangle router on top:
+        -- its wrapper intercepts the caught pixels before Gen 2 can map them
+        -- to the final Battle Art enemy HUD rectangle.
+        if not IS_GEN2 then
         okDesktop,desktopInstaller=pcall(function()
           local src=assert(mod:read(
             "lib/battle_art_desktop_qol_overlay_alignment.lua"))
@@ -7712,6 +7883,7 @@ return function(mod)
           mod.log:error("Battle Art desktop QOL overlay alignment failed: %s",
             tostring(desktopInstaller))
         end
+        end -- not IS_GEN2
       end
 
       -- Android/iOS: restore the proven top-level graphics-stack handoff used
